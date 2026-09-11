@@ -1,0 +1,152 @@
+{
+  "version": 1,
+  "title": "Pin pipeline revisions to the output-model SNAPSHOT",
+  "summary": "Maps listed on a location model must follow the output-model SNAPSHOT revision, not whatever the workflow last wrote. The pin lives on the read path so list and get stay consistent.",
+  "base": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "head": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "range": "develop...feature/tcd-3343-pin-maps",
+  "repo": "braid-connection-designer",
+  "additions": 14,
+  "deletions": 4,
+  "chapters": [
+    {
+      "id": "core-pin",
+      "kind": "core",
+      "title": "Pin maps to the SNAPSHOT on read",
+      "why": "This is the behavior change. get_location_model now resolves maps through the output-model SNAPSHOT instead of the live workflow pointer. Read this chapter first.",
+      "open": true,
+      "additions": 8,
+      "deletions": 2,
+      "files": [
+        {
+          "path": "app/services/location_model_service.py",
+          "language": "python",
+          "additions": 8,
+          "deletions": 2,
+          "hunks": [
+            {
+              "header": "@@ -40,8 +40,14 @@ class LocationModelService:",
+              "oldStart": 40,
+              "newStart": 40,
+              "lines": [
+                {
+                  "type": "context",
+                  "content": "    def get(self, location_model_id: UUID) -> LocationModel:",
+                  "oldLine": 40,
+                  "newLine": 40
+                },
+                {
+                  "type": "context",
+                  "content": "        model = self.repo.get(location_model_id)",
+                  "oldLine": 41,
+                  "newLine": 41
+                },
+                {
+                  "type": "removed",
+                  "content": "        maps = self.workflows.list_maps(model.workflow_id)",
+                  "oldLine": 42
+                },
+                {
+                  "type": "added",
+                  "content": "        snapshot = self.output_models.snapshot(model.output_model_id)",
+                  "newLine": 42
+                },
+                {
+                  "type": "added",
+                  "content": "        maps = self.workflows.list_maps(",
+                  "newLine": 43
+                },
+                {
+                  "type": "added",
+                  "content": "            snapshot.workflow_id,",
+                  "newLine": 44
+                },
+                {
+                  "type": "added",
+                  "content": "            revision=snapshot.revision,",
+                  "newLine": 45
+                },
+                {
+                  "type": "added",
+                  "content": "        )",
+                  "newLine": 46
+                },
+                {
+                  "type": "context",
+                  "content": "        return LocationModel(model=model, maps=maps)",
+                  "oldLine": 43,
+                  "newLine": 47
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tests-pin",
+      "kind": "tests",
+      "title": "Assert GET lists SNAPSHOT maps",
+      "why": "The contract test pins the public GET payload: id, name, workflowId come from the SNAPSHOT, not the draft workflow.",
+      "additions": 6,
+      "deletions": 0,
+      "files": [
+        {
+          "path": "tests/test_location_models.py",
+          "language": "python",
+          "additions": 6,
+          "deletions": 0,
+          "hunks": [
+            {
+              "header": "@@ -88,6 +88,12 @@ def test_get_location_model_lists_maps(client, snapshot_maps):",
+              "oldStart": 88,
+              "newStart": 88,
+              "lines": [
+                {
+                  "type": "context",
+                  "content": "    payload = client.get(f\"/location-models/{model_id}\").json()",
+                  "oldLine": 88,
+                  "newLine": 88
+                },
+                {
+                  "type": "added",
+                  "content": "    assert payload[\"maps\"][0][\"workflowId\"] == snapshot_maps.workflow_id",
+                  "newLine": 89
+                },
+                {
+                  "type": "context",
+                  "content": "    assert payload[\"maps\"][0][\"id\"] == snapshot_maps.id",
+                  "oldLine": 89,
+                  "newLine": 90
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "noise-lock",
+      "kind": "noise",
+      "title": "Lockfile",
+      "why": "Dependency pin only. Skip unless you are reviewing the upgrade itself.",
+      "additions": 0,
+      "deletions": 2,
+      "files": [
+        {
+          "path": "uv.lock",
+          "stub": true,
+          "reason": "lockfile",
+          "additions": 0,
+          "deletions": 2
+        }
+      ]
+    }
+  ],
+  "omitted": [
+    {
+      "path": "docs/diagram.png",
+      "reason": "binary"
+    }
+  ]
+}

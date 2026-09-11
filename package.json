@@ -1,0 +1,31 @@
+{
+  "name": "guided-pr-review",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev --host localhost --port 8765",
+    "build": "astro build",
+    "start": "HOST=localhost PORT=8765 node dist/server/entry.mjs",
+    "test": "tsx --test src/store.test.ts"
+  },
+  "dependencies": {
+    "@astrojs/node": "^9.4.4",
+    "@modelcontextprotocol/sdk": "^1.18.2",
+    "astro": "^5.13.7",
+    "zod": "^3.24.2",
+    "zod-to-json-schema": "^3.24.6"
+  },
+  "dependencies": {
+    "@astrojs/node": "^9.4.4",
+    "astro": "^5.13.7",
+    "shiki": "^3.12.2",
+    "zod": "^3.24.2",
+    "zod-to-json-schema": "^3.24.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.1",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  }
+}
