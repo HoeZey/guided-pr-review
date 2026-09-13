@@ -87,6 +87,7 @@ export const GuideV1 = z
 export type GuideV1 = z.infer<typeof GuideV1>;
 export type Chapter = z.infer<typeof Chapter>;
 export type FileChange = z.infer<typeof FileChange>;
+export type Hunk = z.infer<typeof Hunk>;
 
 export const ReviewRecord = z
   .object({

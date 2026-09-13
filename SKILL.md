@@ -35,7 +35,7 @@ Skill root is the directory that contains this SKILL.md (this git repo).
    one @@ hunk across chapters. Order kinds, skip empty:
 
    1. core — entrypoint and the new behavior. If the reviewer reads one
-      chapter, this is it. First core chapter is the default view (open: true).
+      chapter, this is it. First core chapter is open: true (scroll lands there).
    2. consequences — types, callers, public contract, schema/API fallout.
    3. glue — registration, imports, config, wiring, adapters.
    4. tests — tests and fixtures.
@@ -70,7 +70,8 @@ Skill root is the directory that contains this SKILL.md (this git repo).
    - tools/call name set_active if you need a different id (add_review already
      sets active)
 
-   Open http://localhost:8765/ for the reviewer. Leave the server running.
+   Open http://localhost:8765/ for the reviewer. Guide and Diff tabs. Leave
+   the server running.
 
 ## Hard no
 

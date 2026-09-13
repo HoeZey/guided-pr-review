@@ -24,6 +24,9 @@ A reviewer can walk a local git diff in reasoning order (core, then consequences
 - As a reviewer, I want to add, remove, and switch the active guide so the list matches what I am actually reviewing.
 - As an agent, I want typed MCP tools (add/list/get/remove/set-active) so I can push a chaptered guide without copying files onto a new static server.
 - As a reviewer, I want syntax-highlighted diffs and a light/dark toggle so the page is readable.
+- As a reviewer, I want a Diff tab next to Guide so I can read the same change in filesystem order, one card per path.
+- As a reviewer, I want files I mark viewed in Guide to stay collapsed when I return to Diff.
+- As a reviewer, I want word-level highlight on paired removed/added lines so a rename is visible inside the line.
 
 ## Implementation notes
 
@@ -33,17 +36,17 @@ A reviewer can walk a local git diff in reasoning order (core, then consequences
 - Store v1 wraps many guides: activeId plus reviews[] of { id, addedAt, guide }. Ids are random UUIDs. Duplicate ranges are allowed (two snapshots). Persistence is a JSON file; a lite DB is a later swap that must keep the same MCP tool names.
 - MCP tools: list_reviews, add_review, remove_review, get_review, set_active. Same shapes as the HTTP API.
 - If MCP is down, the Cursor skill starts the dev server, waits until MCP answers, then add_review. Do not spawn a second listener when the port is taken.
-- UI: Linear-like chapter walk (j/k), review list in the same app, poll the store about every two seconds after an agent add. Shiki highlights per diff line (unified-diff ceiling).
+- UI: Linear Guide plus Diff. Guide is one scroll document: sections stack (explainer then hunks) in reasoning order; TOC jumps to a section or file. Diff is the same files in path order, one card per path, hunks merged across chapters. Tabs sit in the header. j/k jumps sections on Guide and files on Diff. Review list in the same app. Poll the store about every two seconds after an agent add. Shiki colors tokens; paired removed/added lines also get word-level changed spans. Viewed is a per-review checkbox on the file header; viewed paths stay collapsed on Diff after a tab switch. Viewed set lives in localStorage, not the MCP store.
 - Astro + TypeScript. Streamlit was considered and rejected. If the Node adapter cannot mount MCP cleanly, one Hono (or equivalent) process still exposes the same contracts.
 - Chaptering stays in the agent: pin merge-base(default)...HEAD unless the user named a range; local git only; no dirty tree unless asked.
 
 ## Testing / seams
 
-**Seam(s):** Store commands (add_review, remove_review, list_reviews, get_review, set_active) after Zod parse of Guide v1 / Store v1.
+**Seam(s):** Store commands (add_review, remove_review, list_reviews, get_review, set_active) after Zod parse of Guide v1 / Store v1. Guide view helpers: filesForDiff, markViewed / collapsedOnDiff, wordSegments / pairWordDiff.
 
-**Why this seam:** Every UI click and every MCP tool is a mutation or read of that store. If parse or those commands are wrong, both clients are wrong.
+**Why this seam:** Store mutations are shared by HTTP and MCP. Diff-tab merge, viewed collapse, and word-level pairing are the Linear UI contract and must not live only in DOM code.
 
-**What a good test is here:** Reject an invalid guide; add two guides; set_active; list shows both and the active id; remove drops one; get returns the payload. Do not test Astro internals.
+**What a good test is here:** Reject an invalid guide; add two guides; set_active; list shows both and the active id; remove drops one; get returns the payload. filesForDiff is path-sorted, one row per path, hunks concatenated then ordered by oldStart. markViewed puts a Guide-viewed path into the Diff collapsed set. wordSegments marks the renamed token on a worked example; pairWordDiff pairs a deleted line with the following added line. Do not test Astro internals.
 
 **Prior art:** Python check.py on a sample guide (replaced by Zod + these commands).
 
@@ -69,7 +72,7 @@ A reviewer can walk a local git diff in reasoning order (core, then consequences
 
 ## Success criteria
 
-- Sample guide loads as a seeded review; chapters walk in order; hunks show; theme toggle works; Shiki colors a Python hunk.
+- Sample guide loads as a seeded review; Guide walks in order; Diff lists each path once; hunks show; theme toggle works; Shiki colors a Python hunk; a paired replace shows word-level spans.
 - add_review then list_reviews then set_active then remove_review succeed through the store seam (tests) and through HTTP.
 - A second guide can be added without restarting the process; the UI can switch and remove it.
 - MCP tools accept the same payloads as HTTP and reject invalid Guide v1.
@@ -80,7 +83,8 @@ A reviewer can walk a local git diff in reasoning order (core, then consequences
 - Publishing to skills.sh or making the GitHub repo public
 - Tracking this app inside braid-connection-designer as product code
 - Commenting back to a git host
-- Structural/word-diff highlighting beyond per-line Shiki
+- Syntax-aware structural highlighting (Linear's tree-sitter mode). Word-level token LCS is in scope; parse-tree moves are not.
+- Unified/split toggle, hide-unchanged rows, implementation [*] line counts, GitHub/Linear deep links into blobs
 
 ## References
 
