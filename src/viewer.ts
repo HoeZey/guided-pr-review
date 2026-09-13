@@ -1,4 +1,15 @@
 import { createHighlighter, type Highlighter } from "shiki";
+import {
+  collapsedOnDiff,
+  filesForDiff,
+  markViewed,
+  overlaySegments,
+  pairWordDiff,
+  parseViewed,
+  serializeViewed,
+  unmarkViewed,
+  type Lined,
+} from "./guide-view.ts";
 
 const KIND_LABEL: Record<string, string> = {
   core: "Core",
@@ -9,6 +20,8 @@ const KIND_LABEL: Record<string, string> = {
 };
 
 const THEME_KEY = "guided-pr-review-theme";
+const TAB_KEY = "guided-pr-review-tab";
+const VIEWED_PREFIX = "guided-pr-review-viewed:";
 const LANGS = [
   "python",
   "javascript",
@@ -25,7 +38,7 @@ const LANGS = [
   "rust",
   "java",
   "toml",
-];
+] as const;
 
 type Guide = {
   title: string;
@@ -82,6 +95,12 @@ let activeId: string | null = null;
 let guide: Guide | null = null;
 let selectedChapterId: string | null = null;
 let pasteOpen = false;
+let observer: IntersectionObserver | null = null;
+let lastPayloadKey = "";
+let tab: "guide" | "diff" = "guide";
+let viewed = new Set<string>();
+let collapsed = new Set<string>();
+let selectedDiffPath: string | null = null;
 
 function esc(value: unknown): string {
   return String(value)
@@ -133,7 +152,7 @@ async function getHighlighter(): Promise<Highlighter> {
   if (highlighter) return highlighter;
   highlighter = await createHighlighter({
     themes: ["github-light", "github-dark"],
-    langs: LANGS,
+    langs: [...LANGS],
   });
   return highlighter;
 }
@@ -146,15 +165,40 @@ async function paintCode(): Promise<void> {
   for (const el of nodes) {
     const lang = el.dataset.lang || "";
     const text = el.dataset.raw ?? el.textContent ?? "";
-    if (!lang || !LANGS.includes(lang)) continue;
+    const segs = el.dataset.segments ? (JSON.parse(el.dataset.segments) as Lined["segments"]) : undefined;
+    if (!(LANGS as readonly string[]).includes(lang)) {
+      if (segs?.length) {
+        const wordClass = el.closest(".line.added")
+          ? "word-add"
+          : el.closest(".line.removed")
+            ? "word-del"
+            : "";
+        el.innerHTML = overlaySegments([{ content: text }], segs)
+          .map((tok) => {
+            const cls = tok.changed && wordClass ? ` class="${wordClass}"` : "";
+            return `<span${cls}>${esc(tok.content)}</span>`;
+          })
+          .join("");
+      }
+      continue;
+    }
     try {
-      const result = hl.codeToTokens(text, { lang, theme });
+      const result = hl.codeToTokens(text, { lang: lang as (typeof LANGS)[number], theme });
       const line = result.tokens[0] || [];
-      el.innerHTML = line
-        .map(
-          (tok) =>
-            `<span style="color:${tok.color || "inherit"}">${esc(tok.content)}</span>`,
-        )
+      const painted = overlaySegments(
+        line.map((tok) => ({ content: tok.content, color: tok.color })),
+        segs,
+      );
+      const wordClass = el.closest(".line.added")
+        ? "word-add"
+        : el.closest(".line.removed")
+          ? "word-del"
+          : "";
+      el.innerHTML = painted
+        .map((tok) => {
+          const cls = tok.changed && wordClass ? ` class="${wordClass}"` : "";
+          return `<span${cls} style="color:${tok.color || "inherit"}">${esc(tok.content)}</span>`;
+        })
         .join("");
     } catch {
       /* leave escaped text */
@@ -215,31 +259,35 @@ function statsHtml(s: { additions: number; deletions: number }) {
   return `<span class="stats"><span class="add">+${s.additions}</span> <span class="del">−${s.deletions}</span></span>`;
 }
 
-function renderLine(line: DiffLine, lang: string) {
+function renderLine(line: Lined, lang: string) {
   const oldN = line.oldLine != null ? esc(line.oldLine) : "";
   const newN = line.newLine != null ? esc(line.newLine) : "";
   const mark = line.type === "added" ? "+" : line.type === "removed" ? "−" : "";
   const langAttr = lang ? ` data-lang="${esc(lang)}" data-raw="${esc(line.content)}"` : "";
-  return `<div class="line ${esc(line.type)}"><span class="gutter">${oldN}</span><span class="gutter">${newN}</span><span class="mark">${mark}</span><span class="code"${langAttr}>${esc(line.content)}</span></div>`;
+  const segAttr = line.segments ? ` data-segments="${esc(JSON.stringify(line.segments))}"` : "";
+  return `<div class="line ${esc(line.type)}"><span class="gutter">${oldN}</span><span class="gutter">${newN}</span><span class="mark">${mark}</span><span class="code"${langAttr}${segAttr}>${esc(line.content)}</span></div>`;
 }
 
-function renderFile(file: FileChange) {
+function renderFile(file: FileChange, id: string) {
   const s = fileStats(file);
   const lang = langFor(file);
+  const isCollapsed = collapsed.has(file.path);
+  const viewedOn = viewed.has(file.path);
+  const head = `<div class="file-head"><button type="button" class="chevron" data-toggle-path="${esc(file.path)}" aria-expanded="${isCollapsed ? "false" : "true"}" aria-label="Toggle file">${isCollapsed ? "▸" : "▾"}</button><span class="path">${esc(file.path)}</span><label class="viewed"><input type="checkbox" data-viewed-path="${esc(file.path)}"${viewedOn ? " checked" : ""}> Viewed</label>${statsHtml(s)}</div>`;
   if (file.stub) {
     const reason = file.reason ? ` · ${esc(file.reason)}` : "";
-    return `<section class="file"><div class="file-head"><span class="path">${esc(file.path)}</span>${statsHtml(s)}</div><div class="stub">Body omitted${reason}.</div></section>`;
+    return `<section class="file" id="${esc(id)}" data-path="${esc(file.path)}" data-collapsed="${isCollapsed}">${head}<div class="file-body"><div class="stub">Body omitted${reason}.</div></div></section>`;
   }
   const hunks = (file.hunks || [])
     .map((hunk) => {
       const header = hunk.header
         ? `<div class="hunk-header">${esc(hunk.header)}</div>`
         : "";
-      const lines = (hunk.lines || []).map((line) => renderLine(line, lang)).join("");
+      const lines = pairWordDiff(hunk.lines || []).map((line) => renderLine(line, lang)).join("");
       return `${header}<div class="diff">${lines}</div>`;
     })
     .join("");
-  return `<section class="file"><div class="file-head"><span class="path">${esc(file.path)}</span>${statsHtml(s)}</div>${hunks}</section>`;
+  return `<section class="file" id="${esc(id)}" data-path="${esc(file.path)}" data-collapsed="${isCollapsed}">${head}<div class="file-body">${hunks}</div></section>`;
 }
 
 function chaptersForNav(data: Guide): Chapter[] {
@@ -272,9 +320,121 @@ function pasteModal(): string {
   return `<div class="modal" id="paste-modal"><div class="modal-card"><p>Paste a Guide v1 JSON object.</p><textarea id="paste-json"></textarea><div class="modal-actions"><button type="button" class="ghost" data-paste-cancel>Cancel</button><button type="button" class="ghost" data-paste-save>Add</button></div></div></div>`;
 }
 
-function render() {
+function sectionId(chapterId: string) {
+  return `section-${chapterId}`;
+}
+
+function fileId(chapterId: string, index: number) {
+  return `file-${chapterId}-${index}`;
+}
+
+function renderSection(chapter: Chapter, index: number, total: number) {
+  const sid = sectionId(chapter.id);
+  if (chapter._omitted) {
+    return `<section class="guide-section" id="${esc(sid)}">${renderOmitted(guide?.omitted || [])}</section>`;
+  }
+  const files = (chapter.files || [])
+    .map((file, i) => renderFile(file, fileId(chapter.id, i)))
+    .join("");
+  return `<section class="guide-section" id="${esc(sid)}"><div class="guide-section-head"><p class="meta">Section ${index + 1} of ${total}</p><h2>${esc(chapter.title)}</h2><p>${esc(chapter.why)}</p></div>${files}</section>`;
+}
+
+function persistViewed() {
+  if (!activeId) return;
+  try {
+    localStorage.setItem(VIEWED_PREFIX + activeId, serializeViewed(viewed));
+  } catch {
+    /* private mode */
+  }
+}
+
+function hydrateViewed(id: string | null) {
+  try {
+    viewed = parseViewed(id ? localStorage.getItem(VIEWED_PREFIX + id) : null);
+  } catch {
+    viewed = new Set();
+  }
+  collapsed = new Set();
+}
+
+function setTab(next: "guide" | "diff") {
+  tab = next;
+  try {
+    localStorage.setItem(TAB_KEY, tab);
+  } catch {
+    /* private mode */
+  }
+  if (tab === "diff") collapsed = collapsedOnDiff(viewed, collapsed);
+  render();
+}
+
+function diffRows() {
+  if (!guide) return [];
+  return filesForDiff(guide as Parameters<typeof filesForDiff>[0]);
+}
+
+function diffFileId(index: number) {
+  return `diff-file-${index}`;
+}
+
+function markCurrent() {
+  if (tab === "guide") {
+    document.querySelectorAll(".chapter-btn[data-jump]").forEach((btn) => {
+      const jump = btn.getAttribute("data-jump");
+      const on = jump === sectionId(selectedChapterId || "");
+      btn.setAttribute("aria-current", on ? "true" : "false");
+    });
+    return;
+  }
+  document.querySelectorAll(".file-link[data-path]").forEach((btn) => {
+    const on = btn.getAttribute("data-path") === selectedDiffPath;
+    btn.setAttribute("aria-current", on ? "true" : "false");
+  });
+}
+
+function jumpTo(id: string) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const section = el.closest(".guide-section");
+  if (section?.id.startsWith("section-")) {
+    selectedChapterId = section.id.slice("section-".length);
+  }
+  const file = el.closest(".file") as HTMLElement | null;
+  if (file?.dataset.path) selectedDiffPath = file.dataset.path;
+  markCurrent();
+  el.scrollIntoView({ behavior: "auto", block: "start" });
+}
+
+function observeMain() {
+  observer?.disconnect();
+  const main = document.querySelector("main");
+  if (!main) return;
+  const selector = tab === "guide" ? ".guide-section" : ".file[id]";
+  observer = new IntersectionObserver(
+    (entries) => {
+      const hit = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+      if (!hit) return;
+      const target = hit.target as HTMLElement;
+      if (tab === "guide" && target.id.startsWith("section-")) {
+        selectedChapterId = target.id.slice("section-".length);
+      }
+      if (tab === "diff" && target.dataset.path) {
+        selectedDiffPath = target.dataset.path;
+      }
+      markCurrent();
+    },
+    { root: main, rootMargin: "0px 0px -70% 0px", threshold: 0 },
+  );
+  main.querySelectorAll(selector).forEach((el) => observer?.observe(el));
+}
+
+function render(opts?: { restoreScroll?: boolean }) {
   const app = document.getElementById("app");
   if (!app) return;
+  const prevMain = document.querySelector("main");
+  const top = prevMain?.scrollTop ?? 0;
   if (!guide) {
     app.innerHTML = `<p class="boot">No reviews yet. Add one from MCP or paste JSON.</p>${pasteModal()}`;
     bindChrome(app);
@@ -284,7 +444,10 @@ function render() {
   const selected =
     chapters.find((ch) => ch.id === selectedChapterId) || chapters[0];
   selectedChapterId = selected.id;
-  const selectedIndex = chapters.findIndex((ch) => ch.id === selectedChapterId);
+  const rows = diffRows();
+  if (!selectedDiffPath || !rows.some((row) => row.path === selectedDiffPath)) {
+    selectedDiffPath = rows[0]?.path ?? null;
+  }
   const gs = guideStats(guide);
   const range = guide.range || `${guide.base.slice(0, 7)}…${guide.head.slice(0, 7)}`;
   const repo = guide.repo ? `${esc(guide.repo)} · ` : "";
@@ -302,26 +465,90 @@ function render() {
     .map((ch, i) => {
       const s = ch._omitted ? { additions: 0, deletions: 0 } : chapterStats(ch);
       const current = ch.id === selectedChapterId ? "true" : "false";
-      return `<button type="button" class="chapter-btn" data-chapter-id="${esc(ch.id)}" aria-current="${current}"><span class="idx">${String(i + 1).padStart(2, "0")}</span><span><span class="ch-kind ${esc(ch.kind)}">${esc(KIND_LABEL[ch.kind] || ch.kind)}</span><span class="ch-title">${esc(ch.title)}</span><div class="ch-why">${esc(ch.why)}</div>${ch._omitted ? "" : `<div class="ch-stats">${statsHtml(s)}</div>`}</span></button>`;
+      const files = ch._omitted
+        ? ""
+        : (ch.files || [])
+            .map(
+              (file, fi) =>
+                `<button type="button" class="file-link" data-jump="${esc(fileId(ch.id, fi))}">${esc(file.path)}</button>`,
+            )
+            .join("");
+      return `<div class="toc-block"><button type="button" class="chapter-btn" data-jump="${esc(sectionId(ch.id))}" aria-current="${current}"><span class="idx">${String(i + 1).padStart(2, "0")}</span><span><span class="ch-kind ${esc(ch.kind)}">${esc(KIND_LABEL[ch.kind] || ch.kind)}</span><span class="ch-title">${esc(ch.title)}</span>${ch._omitted ? "" : `<div class="ch-stats">${statsHtml(s)}</div>`}</span></button>${files}</div>`;
     })
     .join("");
 
-  const mainInner = selected._omitted
-    ? renderOmitted(guide.omitted || [])
-    : `<div class="prose"><p class="meta">Chapter ${selectedIndex + 1} of ${chapters.length}</p><h2>${esc(selected.title)}</h2><p>${esc(selected.why)}</p></div>${(selected.files || []).map(renderFile).join("")}`;
+  const fileNav = rows
+    .map((file, i) => {
+      const current = file.path === selectedDiffPath ? "true" : "false";
+      const dim = viewed.has(file.path) ? " viewed-link" : "";
+      return `<button type="button" class="file-link${dim}" data-jump="${esc(diffFileId(i))}" data-path="${esc(file.path)}" aria-current="${current}">${esc(file.path)}</button>`;
+    })
+    .join("");
+
+  const intro = guide.summary
+    ? `<div class="guide-intro prose"><p>${esc(guide.summary)}</p></div>`
+    : "";
+  const guideBody = chapters.map((ch, i) => renderSection(ch, i, chapters.length)).join("");
+  const diffBody = rows.map((file, i) => renderFile(file, diffFileId(i))).join("");
+  const sideLabel = tab === "guide" ? "Guide" : "Files";
+  const sideNav = tab === "guide" ? chapterNav : fileNav;
+  const mainInner =
+    tab === "guide"
+      ? `${intro}${guideBody}<p class="hint">j / k jump sections · TOC jumps · MCP at /mcp</p>`
+      : `${diffBody}<p class="hint">j / k jump files · viewed stays collapsed on Diff · MCP at /mcp</p>`;
+  const tabs = `<div class="view-tabs" role="tablist"><button type="button" role="tab" data-tab="guide" aria-selected="${tab === "guide" ? "true" : "false"}">Guide</button><button type="button" role="tab" data-tab="diff" aria-selected="${tab === "diff" ? "true" : "false"}">Diff</button></div>`;
 
   document.title = `${guide.title} · Guided review`;
-  app.innerHTML = `<header><h1>${esc(guide.title)}</h1><span class="meta">${repo}${esc(range)}</span><div class="header-actions">${statsHtml(gs)}<button type="button" class="theme-toggle" data-theme-next="${nextTheme}" aria-label="Switch to ${themeLabel} theme">${themeLabel}</button></div></header><nav aria-label="Reviews"><div class="nav-label">Reviews <button type="button" class="ghost" data-open-paste>Add</button></div>${reviewNav}</nav><nav aria-label="Chapters"><div class="nav-label">Guide</div>${chapterNav}</nav><main>${mainInner}<p class="hint">j / k or arrows to walk chapters · MCP at /mcp</p></main>${pasteModal()}`;
+  app.innerHTML = `<header><h1>${esc(guide.title)}</h1>${tabs}<span class="meta">${repo}${esc(range)}</span><div class="header-actions">${statsHtml(gs)}<button type="button" class="theme-toggle" data-theme-next="${nextTheme}" aria-label="Switch to ${themeLabel} theme">${themeLabel}</button></div></header><nav aria-label="Reviews"><div class="nav-label">Reviews <button type="button" class="ghost" data-open-paste>Add</button></div>${reviewNav}</nav><nav aria-label="${sideLabel}"><div class="nav-label">${sideLabel}</div>${sideNav}</nav><main>${mainInner}</main>${pasteModal()}`;
   bindChrome(app);
+  observeMain();
+  if (opts?.restoreScroll) {
+    document.querySelector("main")?.scrollTo(0, top);
+  }
   void paintCode();
 }
 
 function bindChrome(app: HTMLElement) {
-  app.querySelectorAll("[data-chapter-id]").forEach((btn) => {
+  app.querySelectorAll("[data-jump]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      selectedChapterId = btn.getAttribute("data-chapter-id");
-      render();
-      app.querySelector("main")?.scrollTo(0, 0);
+      const id = btn.getAttribute("data-jump");
+      if (id) jumpTo(id);
+    });
+  });
+  app.querySelectorAll("[data-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const next = btn.getAttribute("data-tab");
+      if (next === "guide" || next === "diff") setTab(next);
+    });
+  });
+  app.querySelectorAll("[data-viewed-path]").forEach((input) => {
+    input.addEventListener("click", (event) => event.stopPropagation());
+    input.addEventListener("change", () => {
+      const path = input.getAttribute("data-viewed-path");
+      if (!path) return;
+      const on = (input as HTMLInputElement).checked;
+      if (on) {
+        viewed = markViewed(viewed, collapsed, path).viewed;
+        if (tab === "diff") collapsed = new Set([...collapsed, path]);
+      } else {
+        const next = unmarkViewed(viewed, collapsed, path);
+        viewed = next.viewed;
+        collapsed = next.collapsed;
+      }
+      persistViewed();
+      render({ restoreScroll: true });
+    });
+  });
+  app.querySelectorAll("[data-toggle-path]").forEach((btn) => {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const path = btn.getAttribute("data-toggle-path");
+      if (!path) return;
+      const next = new Set(collapsed);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      collapsed = next;
+      render({ restoreScroll: true });
     });
   });
   app.querySelectorAll("[data-review-id]").forEach((el) => {
@@ -342,16 +569,16 @@ function bindChrome(app: HTMLElement) {
   if (themeBtn) {
     themeBtn.addEventListener("click", () => {
       setTheme(themeBtn.getAttribute("data-theme-next") || "light");
-      render();
+      render({ restoreScroll: true });
     });
   }
   app.querySelector("[data-open-paste]")?.addEventListener("click", () => {
     pasteOpen = true;
-    render();
+    render({ restoreScroll: true });
   });
   app.querySelector("[data-paste-cancel]")?.addEventListener("click", () => {
     pasteOpen = false;
-    render();
+    render({ restoreScroll: true });
   });
   app.querySelector("[data-paste-save]")?.addEventListener("click", () => {
     const text = (app.querySelector("#paste-json") as HTMLTextAreaElement | null)
@@ -367,25 +594,36 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-async function loadActive(): Promise<void> {
+async function loadActive(force = false): Promise<void> {
   const listed = await fetchJson<{ reviews: ReviewSummary[]; activeId: string | null }>(
     "/api/reviews",
   );
   reviews = listed.reviews;
   activeId = listed.activeId;
+  if (pasteOpen && !force) return;
   if (!activeId) {
     guide = null;
+    lastPayloadKey = "";
+    viewed = new Set();
+    collapsed = new Set();
     render();
     return;
   }
   const payload = await fetchJson<{ guide: Guide }>(`/api/reviews/${activeId}`);
-  const same = guide && activeId === listed.activeId && guide.title === payload.guide.title;
+  const key = JSON.stringify({ listed, guide: payload.guide });
+  const switched = !guide || selectedChapterId === null;
   guide = payload.guide;
-  if (!same || !selectedChapterId) {
+  if (!force && key === lastPayloadKey) return;
+  lastPayloadKey = key;
+  if (switched) {
+    hydrateViewed(activeId);
+    if (tab === "diff") collapsed = collapsedOnDiff(viewed, collapsed);
+  }
+  if (switched || !guide.chapters.some((ch) => ch.id === selectedChapterId)) {
     const opened = guide.chapters.find((ch) => ch.open);
     selectedChapterId = opened ? opened.id : guide.chapters[0]?.id ?? null;
   }
-  render();
+  render({ restoreScroll: !switched });
 }
 
 async function activate(id: string): Promise<void> {
@@ -421,25 +659,33 @@ async function pasteGuide(text: string): Promise<void> {
 
 function move(delta: number) {
   if (!guide) return;
+  if (tab === "diff") {
+    const rows = diffRows();
+    const i = rows.findIndex((row) => row.path === selectedDiffPath);
+    const next = rows[i + delta];
+    if (!next) return;
+    jumpTo(diffFileId(i + delta));
+    return;
+  }
   const chapters = chaptersForNav(guide);
   const i = chapters.findIndex((ch) => ch.id === selectedChapterId);
   const next = chapters[i + delta];
   if (!next) return;
-  selectedChapterId = next.id;
-  render();
-  document.querySelector("main")?.scrollTo(0, 0);
+  jumpTo(sectionId(next.id));
 }
 
 export function boot(): void {
   const saved = localStorage.getItem(THEME_KEY);
   if (saved) document.documentElement.dataset.theme = saved;
+  const savedTab = localStorage.getItem(TAB_KEY);
+  if (savedTab === "guide" || savedTab === "diff") tab = savedTab;
   document.addEventListener("keydown", (event) => {
     const tag = (event.target as HTMLElement | null)?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA") return;
-    if (event.key === "j" || event.key === "ArrowDown") {
+    if (event.key === "j") {
       event.preventDefault();
       move(1);
-    } else if (event.key === "k" || event.key === "ArrowUp") {
+    } else if (event.key === "k") {
       event.preventDefault();
       move(-1);
     }
