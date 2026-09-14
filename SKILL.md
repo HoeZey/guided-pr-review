@@ -45,9 +45,10 @@ Skill root is the directory that contains this SKILL.md (this git repo).
 
    Title: short and specific ("Pin pipeline revisions to SNAPSHOT"), not
    "Core changes". why: 2–5 sentences on why this part exists and what to
-   look at — not a review finding.
+   look at — not a review finding. Blank lines start paragraphs. Markdown
+   bold and code spans render in the Guide aside.
 4. **Build a Guide v1 object** matching the Zod GuideV1 contract (see
-   src/contracts.ts and docs/prds/guided-pr-review.md). Line content has no
+   src/contracts.ts and docs/prds/guided-pr-review/). Line content has no
    leading + / - / space. Chapter ids unique kebab-case.
 5. **Ensure the instance is up** on http://localhost:8765
 

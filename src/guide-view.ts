@@ -36,7 +36,118 @@ export function filesForDiff(guide: GuideFiles): FileChange[] {
     if (map.has(item.path)) continue;
     map.set(item.path, { path: item.path, stub: true, reason: item.reason });
   }
-  return [...map.values()].sort((a, b) => a.path.localeCompare(b.path));
+  return [...map.values()].sort((a, b) => compareDirPaths(a.path, b.path));
+}
+
+export function compareDirPaths(a: string, b: string): number {
+  const left = a.split("/");
+  const right = b.split("/");
+  const n = Math.min(left.length, right.length);
+  for (let i = 0; i < n; i++) {
+    const leftLast = i === left.length - 1;
+    const rightLast = i === right.length - 1;
+    if (leftLast !== rightLast) return leftLast ? 1 : -1;
+    const cmp = left[i].localeCompare(right[i]);
+    if (cmp) return cmp;
+  }
+  return left.length - right.length;
+}
+
+type DirBucket = {
+  dirs: Map<string, DirBucket>;
+  files: { name: string; path: string }[];
+};
+
+export type FileTreeFile = { kind: "file"; name: string; path: string };
+export type FileTreeDir = {
+  kind: "dir";
+  name: string;
+  path: string;
+  children: FileTreeNode[];
+};
+export type FileTreeNode = FileTreeFile | FileTreeDir;
+
+function emptyBucket(): DirBucket {
+  return { dirs: new Map(), files: [] };
+}
+
+function insertPath(bucket: DirBucket, parts: string[], full: string): void {
+  if (parts.length === 1) {
+    bucket.files.push({ name: parts[0], path: full });
+    return;
+  }
+  const head = parts[0];
+  let next = bucket.dirs.get(head);
+  if (!next) {
+    next = emptyBucket();
+    bucket.dirs.set(head, next);
+  }
+  insertPath(next, parts.slice(1), full);
+}
+
+function nodesFrom(bucket: DirBucket, prefix: string): FileTreeNode[] {
+  const dirs: FileTreeNode[] = [...bucket.dirs.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([name, child]) => {
+      const path = prefix ? `${prefix}/${name}` : name;
+      return { kind: "dir", name, path, children: nodesFrom(child, path) };
+    });
+  const files: FileTreeNode[] = bucket.files
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((file) => ({ kind: "file", name: file.name, path: file.path }));
+  return [...dirs, ...files];
+}
+
+function compactNodes(nodes: FileTreeNode[]): FileTreeNode[] {
+  return nodes.map((node) => {
+    if (node.kind !== "dir") return node;
+    let name = node.name;
+    let path = node.path;
+    let children = compactNodes(node.children);
+    while (children.length === 1 && children[0].kind === "dir") {
+      const only = children[0];
+      name = `${name} / ${only.name}`;
+      path = only.path;
+      children = only.children;
+    }
+    return { kind: "dir", name, path, children };
+  });
+}
+
+export function fileTree(paths: string[]): FileTreeNode[] {
+  const root = emptyBucket();
+  for (const path of paths) {
+    const parts = path.split("/").filter(Boolean);
+    if (!parts.length) continue;
+    insertPath(root, parts, path);
+  }
+  return compactNodes(nodesFrom(root, ""));
+}
+
+export type GuideStop = { chapterId: string; path: string };
+
+export function guideStops(
+  chapters: { id: string; files: { path: string }[] }[],
+): GuideStop[] {
+  return chapters.flatMap((ch) =>
+    (ch.files || [])
+      .filter((file) => file.path)
+      .map((file) => ({ chapterId: ch.id, path: file.path })),
+  );
+}
+
+export function stepGuide(
+  stops: GuideStop[],
+  chapterId: string,
+  path: string,
+  delta: number,
+): GuideStop | null {
+  if (!stops.length) return null;
+  const i = stops.findIndex((stop) => stop.chapterId === chapterId && stop.path === path);
+  const from = i < 0 ? 0 : i;
+  const j = Math.min(stops.length - 1, Math.max(0, from + delta));
+  return stops[j];
 }
 
 export function markViewed(
@@ -177,6 +288,69 @@ export function pairWordDiff(lines: DiffLine[]): Lined[] {
   return out;
 }
 
+export type SplitRow = { left: Lined | null; right: Lined | null };
+
+export function splitRows(lines: Lined[]): SplitRow[] {
+  const rows: SplitRow[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.type === "context") {
+      rows.push({ left: line, right: line });
+      i += 1;
+      continue;
+    }
+    if (line.type === "removed") {
+      let delEnd = i;
+      while (delEnd < lines.length && lines[delEnd].type === "removed") delEnd += 1;
+      let addEnd = delEnd;
+      while (addEnd < lines.length && lines[addEnd].type === "added") addEnd += 1;
+      const nDel = delEnd - i;
+      const nAdd = addEnd - delEnd;
+      const n = Math.max(nDel, nAdd);
+      for (let p = 0; p < n; p++) {
+        rows.push({
+          left: p < nDel ? lines[i + p] : null,
+          right: p < nAdd ? lines[delEnd + p] : null,
+        });
+      }
+      i = addEnd;
+      continue;
+    }
+    rows.push({ left: null, right: line });
+    i += 1;
+  }
+  return rows;
+}
+
+export type UnchangedGap = { type: "gap"; count: number };
+
+export function isUnchangedGap(item: unknown): item is UnchangedGap {
+  return typeof item === "object" && item !== null && (item as UnchangedGap).type === "gap";
+}
+
+export function withUnchangedGaps<T>(
+  items: T[],
+  hide: boolean,
+  unchanged: (item: T) => boolean,
+): (T | UnchangedGap)[] {
+  if (!hide) return items;
+  const out: (T | UnchangedGap)[] = [];
+  let i = 0;
+  while (i < items.length) {
+    if (!unchanged(items[i])) {
+      out.push(items[i]);
+      i += 1;
+      continue;
+    }
+    let j = i;
+    while (j < items.length && unchanged(items[j])) j += 1;
+    out.push({ type: "gap", count: j - i });
+    i = j;
+  }
+  return out;
+}
+
 export type Painted = { content: string; color?: string; changed: boolean };
 
 export function overlaySegments(
@@ -216,4 +390,46 @@ export function overlaySegments(
     }
   }
   return out;
+}
+
+export type TabName = "guide" | "diff";
+export type DiffLayout = "unified" | "split";
+export type RailState = "open" | "collapsed";
+
+export function parseDiffLayout(raw: string | null, fallback: DiffLayout): DiffLayout {
+  return raw === "unified" || raw === "split" ? raw : fallback;
+}
+
+export function parseReviewsRails(raw: string | null): Record<TabName, RailState> {
+  if (raw === "collapsed" || raw === "open") {
+    return { guide: "collapsed", diff: raw };
+  }
+  if (!raw) return { guide: "collapsed", diff: "open" };
+  try {
+    const parsed = JSON.parse(raw) as { guide?: unknown; diff?: unknown };
+    return {
+      guide: parsed.guide === "open" ? "open" : "collapsed",
+      diff: parsed.diff === "collapsed" ? "collapsed" : "open",
+    };
+  } catch {
+    return { guide: "collapsed", diff: "open" };
+  }
+}
+
+export function serializeReviewsRails(rails: Record<TabName, RailState>): string {
+  return JSON.stringify(rails);
+}
+
+export function formatCopy(raw: string): string {
+  const escaped = String(raw)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  const inline = escaped
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  return inline
+    .split(/\n{2,}/)
+    .map((block) => `<p>${block.replace(/\n/g, "<br>")}</p>`)
+    .join("");
 }

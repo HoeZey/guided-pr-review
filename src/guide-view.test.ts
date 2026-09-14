@@ -11,6 +11,16 @@ import {
   wordSegments,
   pairWordDiff,
   overlaySegments,
+  splitRows,
+  withUnchangedGaps,
+  compareDirPaths,
+  fileTree,
+  guideStops,
+  stepGuide,
+  parseDiffLayout,
+  parseReviewsRails,
+  serializeReviewsRails,
+  formatCopy,
 } from "./guide-view.ts";
 
 function guide(chapters: GuideV1["chapters"], omitted?: GuideV1["omitted"]): GuideV1 {
@@ -31,7 +41,7 @@ function file(
   return { path, language: "python", hunks };
 }
 
-test("filesForDiff is path-sorted and one row per path", () => {
+test("filesForDiff is directory-tree-sorted and one row per path", () => {
   const data = guide([
     {
       id: "core",
@@ -105,9 +115,9 @@ test("filesForDiff adds omitted paths as stubs", () => {
   const rows = filesForDiff(data);
   assert.deepEqual(
     rows.map((row) => row.path),
-    ["a.py", "docs/diagram.png"],
+    ["docs/diagram.png", "a.py"],
   );
-  const stub = rows[1];
+  const stub = rows[0];
   assert.equal(stub.stub, true);
   assert.equal(stub.reason, "binary");
 });
@@ -182,5 +192,138 @@ test("overlaySegments marks changed ranges on highlighter tokens", () => {
   assert.deepEqual(
     painted.filter((tok) => tok.changed).map((tok) => tok.content),
     ["model"],
+  );
+});
+
+test("splitRows puts a replace on one row and leftover adds on the right", () => {
+  const rows = splitRows(
+    pairWordDiff([
+      { type: "context", content: "keep", oldLine: 1, newLine: 1 },
+      { type: "removed", content: "old", oldLine: 2 },
+      { type: "added", content: "new", newLine: 2 },
+      { type: "added", content: "extra", newLine: 3 },
+    ]),
+  );
+  assert.equal(rows.length, 3);
+  assert.equal(rows[0].left?.content, "keep");
+  assert.equal(rows[0].right?.content, "keep");
+  assert.equal(rows[1].left?.type, "removed");
+  assert.equal(rows[1].right?.type, "added");
+  assert.equal(rows[1].right?.content, "new");
+  assert.equal(rows[2].left, null);
+  assert.equal(rows[2].right?.content, "extra");
+});
+
+test("splitRows puts leftover removes on the left", () => {
+  const rows = splitRows(
+    pairWordDiff([
+      { type: "removed", content: "gone", oldLine: 1 },
+      { type: "removed", content: "also", oldLine: 2 },
+      { type: "added", content: "kept", newLine: 1 },
+    ]),
+  );
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].left?.content, "gone");
+  assert.equal(rows[0].right?.content, "kept");
+  assert.equal(rows[1].left?.content, "also");
+  assert.equal(rows[1].right, null);
+});
+
+test("withUnchangedGaps collapses a context run and keeps the add", () => {
+  const out = withUnchangedGaps(
+    [
+      { type: "context", content: "a" },
+      { type: "context", content: "b" },
+      { type: "added", content: "c" },
+      { type: "context", content: "d" },
+    ],
+    true,
+    (line) => line.type === "context",
+  );
+  assert.equal(out.length, 3);
+  assert.deepEqual(out[0], { type: "gap", count: 2 });
+  assert.equal(out[1].type, "added");
+  assert.deepEqual(out[2], { type: "gap", count: 1 });
+});
+
+test("compareDirPaths puts directories before files at each level", () => {
+  const paths = ["README.md", "app/a.py", "app/routers/x.py", "tests/b.py"];
+  assert.deepEqual(paths.slice().sort(compareDirPaths), [
+    "app/routers/x.py",
+    "app/a.py",
+    "tests/b.py",
+    "README.md",
+  ]);
+});
+
+test("fileTree compact-folds single-child dirs and lists root files", () => {
+  const tree = fileTree([
+    ".gitignore",
+    ".cursor/rules/personal/caveman.mdc",
+    ".cursor/rules/personal/backticks.mdc",
+    "app/a.py",
+    "app/routers/x.py",
+  ]);
+  assert.deepEqual(tree, [
+    {
+      kind: "dir",
+      name: ".cursor / rules / personal",
+      path: ".cursor/rules/personal",
+      children: [
+        { kind: "file", name: "backticks.mdc", path: ".cursor/rules/personal/backticks.mdc" },
+        { kind: "file", name: "caveman.mdc", path: ".cursor/rules/personal/caveman.mdc" },
+      ],
+    },
+    {
+      kind: "dir",
+      name: "app",
+      path: "app",
+      children: [
+        {
+          kind: "dir",
+          name: "routers",
+          path: "app/routers",
+          children: [{ kind: "file", name: "x.py", path: "app/routers/x.py" }],
+        },
+        { kind: "file", name: "a.py", path: "app/a.py" },
+      ],
+    },
+    { kind: "file", name: ".gitignore", path: ".gitignore" },
+  ]);
+});
+
+test("stepGuide walks to the next file then the next chapter", () => {
+  const stops = guideStops([
+    { id: "a", files: [{ path: "1.ts" }, { path: "2.ts" }] },
+    { id: "b", files: [{ path: "3.ts" }] },
+  ]);
+  assert.deepEqual(stepGuide(stops, "a", "1.ts", 1), { chapterId: "a", path: "2.ts" });
+  assert.deepEqual(stepGuide(stops, "a", "2.ts", 1), { chapterId: "b", path: "3.ts" });
+  assert.deepEqual(stepGuide(stops, "b", "3.ts", 1), { chapterId: "b", path: "3.ts" });
+  assert.deepEqual(stepGuide(stops, "a", "2.ts", -1), { chapterId: "a", path: "1.ts" });
+});
+
+test("parseDiffLayout keeps a saved Diff mode and falls back per tab", () => {
+  assert.equal(parseDiffLayout("split", "unified"), "split");
+  assert.equal(parseDiffLayout("unified", "split"), "unified");
+  assert.equal(parseDiffLayout(null, "unified"), "unified");
+  assert.equal(parseDiffLayout("nope", "split"), "split");
+});
+
+test("parseReviewsRails migrates a legacy string and defaults Guide collapsed", () => {
+  assert.deepEqual(parseReviewsRails(null), { guide: "collapsed", diff: "open" });
+  assert.deepEqual(parseReviewsRails("collapsed"), { guide: "collapsed", diff: "collapsed" });
+  assert.deepEqual(parseReviewsRails("open"), { guide: "collapsed", diff: "open" });
+  assert.deepEqual(parseReviewsRails(serializeReviewsRails({ guide: "open", diff: "collapsed" })), {
+    guide: "open",
+    diff: "collapsed",
+  });
+});
+
+test("formatCopy renders paragraphs, code, and bold without raw HTML", () => {
+  const html = formatCopy("Pin `SNAPSHOT`.\n\nThen **rebuild**.\nKeep <script>.");
+  assert.equal(
+    html,
+    "<p>Pin <code>SNAPSHOT</code>.</p><p>Then <strong>rebuild</strong>.<br>Keep &lt;script&gt;.</p>",
   );
 });
