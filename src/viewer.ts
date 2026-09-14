@@ -15,8 +15,6 @@ import {
   guideStops,
   stepGuide,
   parseDiffLayout,
-  parseReviewsRails,
-  serializeReviewsRails,
   formatCopy,
   type Lined,
   type SplitRow,
@@ -40,6 +38,7 @@ import {
 } from "./overview.ts";
 
 const BRAND_MARK = `<a class="brand-link" href="${HOME_PATH}" data-home><img class="brand" src="/logo.svg" width="28" height="28" alt=""></a>`;
+const BACK_HOME = `<a class="back-link icon-btn" href="${HOME_PATH}" data-home aria-label="Back to Home" title="Back to Home"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg></a>`;
 const ADO_MARK = `<svg class="ado-mark" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="#0078D4" d="M0 8.877L2.247 5.91l8.405-3.416V.022l7.37 5.393L2.966 8.338v8.225L0 15.707zm24-4.45v14.651l-5.753 4.9-9.303-3.057v3.056l-5.978-7.416 15.057 1.798V5.415z"/></svg>`;
 const ICON_SUN = `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>`;
 const ICON_GEAR = `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`;
@@ -53,7 +52,6 @@ const SPLIT_KEY = "guided-pr-review-split";
 const HIDE_KEY = "guided-pr-review-hide-unchanged";
 const RAILS_KEY = "guided-pr-review-rails";
 const VIEWED_PREFIX = "guided-pr-review-viewed:";
-const REVIEWS_KEY = "guided-pr-review-reviews";
 const LANGS = [
   "python",
   "javascript",
@@ -143,7 +141,6 @@ let guideLayout: DiffLayout = "unified";
 let diffLayout: DiffLayout = "split";
 let splitPct = 0.5;
 let hideUnchanged = false;
-let reviewsPx = 220;
 let sidebarPx = 280;
 let viewed = new Set<string>();
 let collapsed = new Set<string>();
@@ -151,8 +148,6 @@ let collapsedDirs = new Set<string>();
 let selectedDiffPath: string | null = null;
 let selectedGuidePath: string | null = null;
 let selectedOutcomeSection: string | null = null;
-let guideReviewsCollapsed = true;
-let diffReviewsCollapsed = false;
 let tocOpen = false;
 let displayOpen = false;
 
@@ -364,24 +359,6 @@ function currentDiffLayout(): DiffLayout {
   return tab === "guide" ? guideLayout : diffLayout;
 }
 
-function reviewsCollapsed(): boolean {
-  return tab === "guide" ? guideReviewsCollapsed : diffReviewsCollapsed;
-}
-
-function persistReviewsRails() {
-  try {
-    localStorage.setItem(
-      REVIEWS_KEY,
-      serializeReviewsRails({
-        guide: guideReviewsCollapsed ? "collapsed" : "open",
-        diff: diffReviewsCollapsed ? "collapsed" : "open",
-      }),
-    );
-  } catch {
-    /* private mode */
-  }
-}
-
 function persistSplitPct() {
   try {
     localStorage.setItem(SPLIT_KEY, String(splitPct));
@@ -391,13 +368,12 @@ function persistSplitPct() {
 }
 
 function applyRails() {
-  document.documentElement.style.setProperty("--reviews", `${reviewsPx}px`);
   document.documentElement.style.setProperty("--sidebar", `${sidebarPx}px`);
 }
 
 function persistRails() {
   try {
-    localStorage.setItem(RAILS_KEY, JSON.stringify({ reviews: reviewsPx, sidebar: sidebarPx }));
+    localStorage.setItem(RAILS_KEY, JSON.stringify({ sidebar: sidebarPx }));
   } catch {
     /* private mode */
   }
@@ -413,11 +389,8 @@ function bindRailHandles(root: HTMLElement) {
       if (!app) return;
       const move = (ev: PointerEvent) => {
         const left = app.getBoundingClientRect().left;
-        if (which === "reviews") {
-          reviewsPx = Math.min(420, Math.max(140, ev.clientX - left));
-        } else if (which === "sidebar") {
-          const reviewsW = reviewsCollapsed() ? 40 : reviewsPx;
-          sidebarPx = Math.min(520, Math.max(160, ev.clientX - left - reviewsW));
+        if (which === "sidebar") {
+          sidebarPx = Math.min(520, Math.max(160, ev.clientX - left));
         }
         applyRails();
       };
@@ -693,21 +666,6 @@ function setTab(next: Tab) {
   render();
 }
 
-function setReviewsCollapsed(next: boolean) {
-  if (tab === "guide") guideReviewsCollapsed = next;
-  else diffReviewsCollapsed = next;
-  persistReviewsRails();
-  const app = document.getElementById("app");
-  if (!app) return;
-  app.dataset.reviews = next ? "collapsed" : "open";
-  const btn = app.querySelector("[data-toggle-reviews]");
-  if (!btn) return;
-  btn.setAttribute("aria-expanded", next ? "false" : "true");
-  btn.setAttribute("aria-label", next ? "Show reviews" : "Hide reviews");
-  btn.setAttribute("title", next ? "Show reviews ([)" : "Hide reviews ([)");
-  btn.textContent = next ? "›" : "‹";
-}
-
 function diffRows() {
   if (!guide) return [];
   return filesForDiff(guide as Parameters<typeof filesForDiff>[0]);
@@ -870,13 +828,6 @@ function render(opts?: { restoreScroll?: boolean }) {
   const nextTheme = currentTheme() === "dark" ? "light" : "dark";
   const themeLabel = nextTheme === "dark" ? "Dark" : "Light";
 
-  const reviewNav = reviews
-    .map((r) => {
-      const current = r.id === activeId ? "true" : "false";
-      return `<div class="review-btn" role="button" tabindex="0" data-review-id="${esc(r.id)}" aria-current="${current}" title="${esc(r.title)}"><span><span class="review-title">${esc(r.title)}</span><div class="review-range">${esc(r.range || "")}</div></span><button type="button" class="remove-btn" data-remove-id="${esc(r.id)}" aria-label="Remove">×</button></div>`;
-    })
-    .join("");
-
   const chapterNav = chapters
     .map((ch, i) => {
       const current = ch.id === selectedChapterId ? "true" : "false";
@@ -914,23 +865,19 @@ function render(opts?: { restoreScroll?: boolean }) {
     tab === "guide"
       ? `<div class="guide-doc">${guideBody}</div>${tocFlyout}`
       : tab === "diff"
-        ? `${diffBody}<p class="hint">j / k jump files · [ hide reviews · drag rail edges · ⌘B split · viewed stays collapsed on Diff</p>`
+        ? `${diffBody}<p class="hint">j / k jump files · drag rail edges · ⌘B split · viewed stays collapsed on Diff</p>`
         : reviewBody;
   const layout = currentDiffLayout();
-  const railsHidden = reviewsCollapsed();
   const tabs = `<div class="view-tabs main-tabs" role="tablist"><button type="button" role="tab" data-tab="guide" aria-selected="${tab === "guide" ? "true" : "false"}">Guide</button><button type="button" role="tab" data-tab="diff" aria-selected="${tab === "diff" ? "true" : "false"}">Diff</button><button type="button" role="tab" data-tab="review" aria-selected="${tab === "review" ? "true" : "false"}">Code Review</button></div>`;
   const modes = `<div class="display-modes" role="radiogroup" aria-label="Diff layout"><button type="button" class="display-mode" data-diff-mode="unified" aria-selected="${layout === "unified" ? "true" : "false"}">${ICON_UNIFIED} Unified</button><button type="button" class="display-mode" data-diff-mode="split" aria-selected="${layout === "split" ? "true" : "false"}">${ICON_SPLIT} Split</button></div>`;
   const hideBtn = `<button type="button" class="ghost" data-hide-unchanged aria-pressed="${hideUnchanged ? "true" : "false"}">${hideUnchanged ? "Show unchanged" : "Hide unchanged"}</button>`;
   const themeBtn = `<button type="button" class="icon-btn square-toggle theme-toggle" data-theme-next="${nextTheme}" aria-pressed="${currentTheme() === "light" ? "true" : "false"}" aria-label="Switch to ${themeLabel} theme" title="Switch to ${themeLabel} theme">${ICON_SUN}</button>`;
   const display = `<details class="display-menu"${displayOpen ? " open" : ""} data-display-menu><summary class="icon-btn" aria-label="Display">${ICON_GEAR}</summary><div class="display-panel">${modes}<div class="display-toggles">${hideBtn}${themeBtn}</div></div></details>`;
-  const reviewsToggle = `<button type="button" class="rail-toggle" data-toggle-reviews aria-expanded="${railsHidden ? "false" : "true"}" aria-label="${railsHidden ? "Show reviews" : "Hide reviews"}" title="Hide reviews ([)">${railsHidden ? "›" : "‹"}</button>`;
-  const reviewsHandle = `<button type="button" class="col-handle" data-rail="reviews" aria-label="Resize reviews"></button>`;
   const sideHandle = `<button type="button" class="col-handle" data-rail="sidebar" aria-label="Resize file list"></button>`;
-
 
   document.title = `${guide.title} · Guided review`;
   app.dataset.view = "review";
-  app.dataset.reviews = railsHidden ? "collapsed" : "open";
+  delete app.dataset.reviews;
   app.dataset.tab = tab;
   const filesRail =
     tab === "diff"
@@ -938,7 +885,7 @@ function render(opts?: { restoreScroll?: boolean }) {
       : tab === "review"
         ? `<nav aria-label="Code Review">${sideHandle}<div class="nav-label">Code Review</div>${reviewNavSide}</nav>`
         : "";
-  app.innerHTML = `<header><div class="header-left">${BRAND_MARK}<a class="home-link" href="${HOME_PATH}" data-home>Home</a><h1 title="${esc(guide.title)}">${esc(guide.title)}</h1>${tabs}</div>${sourceHeader(guide)}<div class="header-actions">${statsHtml(gs)}${display}</div></header><nav aria-label="Reviews">${reviewsHandle}${reviewsToggle}<div class="reviews-pane"><div class="nav-label"><span>Reviews</span><button type="button" class="ghost" data-open-paste>Add</button></div><div class="review-list">${reviewNav}</div></div></nav>${filesRail}<main><div class="main-inner${tab === "guide" ? " is-guide" : ""}">${mainInner}</div></main>${pasteModal()}`;
+  app.innerHTML = `<header><div class="header-left">${BRAND_MARK}${BACK_HOME}<h1 title="${esc(guide.title)}">${esc(guide.title)}</h1>${tabs}</div>${sourceHeader(guide)}<div class="header-actions">${statsHtml(gs)}${display}</div></header>${filesRail}<main><div class="main-inner${tab === "guide" ? " is-guide" : ""}">${mainInner}</div></main>${pasteModal()}`;
   bindChrome(app);
   observeMain();
   requestAnimationFrame(() => app.classList.add("rails-ready"));
@@ -1028,9 +975,6 @@ function bindChrome(app: HTMLElement) {
       render({ restoreScroll: true });
     });
   });
-  app.querySelector("[data-toggle-reviews]")?.addEventListener("click", () => {
-    setReviewsCollapsed(!reviewsCollapsed());
-  });
   app.querySelectorAll("[data-tree-dir]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const path = btn.getAttribute("data-tree-dir");
@@ -1074,20 +1018,6 @@ function bindChrome(app: HTMLElement) {
       else next.add(path);
       collapsed = next;
       render({ restoreScroll: true });
-    });
-  });
-  app.querySelectorAll("[data-review-id]").forEach((el) => {
-    el.addEventListener("click", (event) => {
-      if ((event.target as HTMLElement).closest("[data-remove-id]")) return;
-      const id = el.getAttribute("data-review-id");
-      if (id) void activate(id);
-    });
-  });
-  app.querySelectorAll("[data-remove-id]").forEach((btn) => {
-    btn.addEventListener("click", (event) => {
-      event.stopPropagation();
-      const id = btn.getAttribute("data-remove-id");
-      if (id) void remove(id);
     });
   });
   const themeBtn = app.querySelector(".theme-toggle");
@@ -1188,21 +1118,6 @@ async function loadActive(force = false): Promise<void> {
     selectedChapterId = opened ? opened.id : guide.chapters[0]?.id ?? null;
   }
   render({ restoreScroll: !switched });
-}
-
-async function activate(id: string): Promise<void> {
-  selectedChapterId = null;
-  await navigate(reviewPath(id));
-}
-
-async function remove(id: string): Promise<void> {
-  await fetchJson(`/api/reviews/${id}`, { method: "DELETE" });
-  selectedChapterId = null;
-  if (view.kind === "review" && view.reviewId === id) {
-    await navigate(HOME_PATH);
-    return;
-  }
-  await loadActive(true);
 }
 
 async function pasteGuide(text: string): Promise<void> {
@@ -1308,18 +1223,13 @@ export function boot(): void {
   hideUnchanged = localStorage.getItem(HIDE_KEY) === "1";
   try {
     const rails = JSON.parse(localStorage.getItem(RAILS_KEY) || "null") as {
-      reviews?: number;
       sidebar?: number;
     } | null;
-    if (rails?.reviews) reviewsPx = rails.reviews;
     if (rails?.sidebar) sidebarPx = rails.sidebar;
   } catch {
     /* ignore */
   }
   applyRails();
-  const reviewRails = parseReviewsRails(localStorage.getItem(REVIEWS_KEY));
-  guideReviewsCollapsed = reviewRails.guide === "collapsed";
-  diffReviewsCollapsed = reviewRails.diff === "collapsed";
   document.addEventListener("keydown", (event) => {
     const tag = (event.target as HTMLElement | null)?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA") return;
@@ -1329,9 +1239,6 @@ export function boot(): void {
     } else if (event.key === "k") {
       event.preventDefault();
       move(-1);
-    } else if (event.key === "[") {
-      event.preventDefault();
-      setReviewsCollapsed(!reviewsCollapsed());
     } else if (event.key === "Escape" && tocOpen) {
       event.preventDefault();
       tocOpen = false;

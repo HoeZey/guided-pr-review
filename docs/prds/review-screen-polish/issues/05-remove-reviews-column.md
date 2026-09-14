@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 blocked_by: []
 blocks: []
 ---
@@ -37,11 +37,11 @@ Home is the PR switcher. Files and chapter rails stay.
 
 **Acceptance criteria:**
 
-- [ ] Guide, Diff, and Code Review have no saved-PR column on a manual pass.
-- [ ] Brand and the back control return to Home without losing saved
+- [x] Guide, Diff, and Code Review have no saved-PR column on a manual pass.
+- [x] Brand and the back control return to Home without losing saved
   reviews.
-- [ ] Reloading a review URL still opens that review.
-- [ ] Helper tests still cover Home vs review URLs. No Astro DOM
+- [x] Reloading a review URL still opens that review.
+- [x] Helper tests still cover Home vs review URLs. No Astro DOM
   assertions.
 
 **Blocked by:** none

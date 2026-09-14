@@ -392,32 +392,10 @@ export function overlaySegments(
   return out;
 }
 
-export type TabName = "guide" | "diff";
 export type DiffLayout = "unified" | "split";
-export type RailState = "open" | "collapsed";
 
 export function parseDiffLayout(raw: string | null, fallback: DiffLayout): DiffLayout {
   return raw === "unified" || raw === "split" ? raw : fallback;
-}
-
-export function parseReviewsRails(raw: string | null): Record<TabName, RailState> {
-  if (raw === "collapsed" || raw === "open") {
-    return { guide: "collapsed", diff: raw };
-  }
-  if (!raw) return { guide: "collapsed", diff: "open" };
-  try {
-    const parsed = JSON.parse(raw) as { guide?: unknown; diff?: unknown };
-    return {
-      guide: parsed.guide === "open" ? "open" : "collapsed",
-      diff: parsed.diff === "collapsed" ? "collapsed" : "open",
-    };
-  } catch {
-    return { guide: "collapsed", diff: "open" };
-  }
-}
-
-export function serializeReviewsRails(rails: Record<TabName, RailState>): string {
-  return JSON.stringify(rails);
 }
 
 export function formatCopy(raw: string): string {

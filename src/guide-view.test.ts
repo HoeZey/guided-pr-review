@@ -18,8 +18,6 @@ import {
   guideStops,
   stepGuide,
   parseDiffLayout,
-  parseReviewsRails,
-  serializeReviewsRails,
   formatCopy,
 } from "./guide-view.ts";
 
@@ -308,16 +306,6 @@ test("parseDiffLayout keeps a saved Diff mode and falls back per tab", () => {
   assert.equal(parseDiffLayout("unified", "split"), "unified");
   assert.equal(parseDiffLayout(null, "unified"), "unified");
   assert.equal(parseDiffLayout("nope", "split"), "split");
-});
-
-test("parseReviewsRails migrates a legacy string and defaults Guide collapsed", () => {
-  assert.deepEqual(parseReviewsRails(null), { guide: "collapsed", diff: "open" });
-  assert.deepEqual(parseReviewsRails("collapsed"), { guide: "collapsed", diff: "collapsed" });
-  assert.deepEqual(parseReviewsRails("open"), { guide: "collapsed", diff: "open" });
-  assert.deepEqual(parseReviewsRails(serializeReviewsRails({ guide: "open", diff: "collapsed" })), {
-    guide: "open",
-    diff: "collapsed",
-  });
 });
 
 test("formatCopy renders paragraphs, code, and bold without raw HTML", () => {
