@@ -46,6 +46,7 @@ const ICON_SUN = `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="t
 const ICON_GEAR = `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`;
 const ICON_SPLIT = `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="2.5" width="5.5" height="11" rx="1.5"/><rect x="9" y="2.5" width="5.5" height="11" rx="1.5"/></svg>`;
 const ICON_UNIFIED = `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M5 6h6M5 8h6M5 10h6"/></svg>`;
+const ICON_TOC = `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 4.5h10M3 8h10M3 11.5h6"/></svg>`;
 const THEME_KEY = "guided-pr-review-theme";
 const TAB_KEY = "guided-pr-review-tab";
 const DIFF_KEY = "guided-pr-review-diff";
@@ -152,6 +153,8 @@ let selectedGuidePath: string | null = null;
 let selectedOutcomeSection: string | null = null;
 let tocOpen = false;
 let displayOpen = false;
+let spyMain: Element | null = null;
+let spyRaf = 0;
 
 function applyTocOpen(next: boolean): void {
   tocOpen = next;
@@ -162,6 +165,27 @@ function applyTocOpen(next: boolean): void {
   app.querySelectorAll("[data-toggle-toc]").forEach((btn) => {
     btn.setAttribute("aria-expanded", next ? "true" : "false");
   });
+  if (next) requestAnimationFrame(() => revealCurrentToc());
+}
+
+function revealCurrentToc(): void {
+  const panel = document.querySelector(".toc-panel");
+  if (!(panel instanceof HTMLElement)) return;
+  const current =
+    panel.querySelector(".toc-file[aria-current='true']") ||
+    panel.querySelector(".chapter-btn[aria-current='true']");
+  if (current instanceof HTMLElement) current.scrollIntoView({ block: "nearest" });
+}
+
+function pointerHoldsToc(target: EventTarget | null): boolean {
+  return target instanceof Element && Boolean(target.closest("[data-toc-anchor], [data-toggle-toc]"));
+}
+
+function dismissTocOnPointerAway(event: PointerEvent): void {
+  if (!tocOpen) return;
+  if (event.pointerType !== "mouse" && event.pointerType !== "pen") return;
+  if (pointerHoldsToc(event.target)) return;
+  applyTocOpen(false);
 }
 
 function suppressHoverToc(): void {
@@ -619,7 +643,32 @@ function fileId(chapterId: string, index: number) {
 function progressToc(index: number, total: number) {
   const idx = String(index + 1).padStart(2, "0");
   const tot = String(total).padStart(2, "0");
-  return `<button type="button" class="progress-toc" data-toggle-toc aria-expanded="${tocOpen ? "true" : "false"}" aria-controls="guide-toc">${idx} / ${tot}</button>`;
+  return `<button type="button" class="progress-toc" data-toggle-toc aria-expanded="${tocOpen ? "true" : "false"}" aria-controls="guide-toc" title="Sections" aria-label="Sections ${idx} of ${tot}">${ICON_TOC}<span>${idx} / ${tot}</span></button>`;
+}
+
+function renderGuideToc(chapters: Chapter[]): { nav: string; rail: string } {
+  const groups: string[] = [];
+  const ticks: string[] = [];
+  chapters.forEach((ch, i) => {
+    const currentCh = ch.id === selectedChapterId;
+    const files = ch.files || [];
+    const fileBtns = files
+      .map((file, fi) => {
+        const id = fileId(ch.id, fi);
+        const current = currentCh && file.path === selectedGuidePath;
+        const reviewed = viewed.has(file.path);
+        const { name } = pathParts(file.path);
+        ticks.push(
+          `<button type="button" class="toc-tick${reviewed ? " is-reviewed" : ""}" data-jump="${esc(id)}" data-chapter="${esc(ch.id)}" data-path="${esc(file.path)}" title="${esc(file.path)}" aria-label="${esc(name)}" aria-current="${current ? "true" : "false"}"></button>`,
+        );
+        return `<button type="button" class="toc-file${reviewed ? " viewed-link" : ""}" data-jump="${esc(id)}" data-chapter="${esc(ch.id)}" data-path="${esc(file.path)}" title="${esc(file.path)}" aria-current="${current ? "true" : "false"}"><span class="toc-file-name">${esc(name)}</span></button>`;
+      })
+      .join("");
+    groups.push(
+      `<div class="toc-group"><button type="button" class="chapter-btn" data-jump="${esc(sectionId(ch.id))}" data-chapter="${esc(ch.id)}" aria-current="${currentCh ? "true" : "false"}"><span class="idx">${String(i + 1).padStart(2, "0")}</span><span class="ch-title">${esc(ch.title)}</span></button>${fileBtns}</div>`,
+    );
+  });
+  return { nav: groups.join(""), rail: ticks.join("") };
 }
 
 function renderFilePill(file: FileChange, id: string, chapterId: string, current: boolean) {
@@ -731,6 +780,12 @@ function markCurrent() {
       const on = btn.getAttribute("data-path") === selectedGuidePath;
       btn.setAttribute("aria-current", on ? "true" : "false");
     });
+    document.querySelectorAll(".toc-file[data-path], .toc-tick[data-path]").forEach((btn) => {
+      const on =
+        btn.getAttribute("data-chapter") === selectedChapterId &&
+        btn.getAttribute("data-path") === selectedGuidePath;
+      btn.setAttribute("aria-current", on ? "true" : "false");
+    });
     return;
   }
   if (tab === "review") {
@@ -763,18 +818,69 @@ function jumpTo(id: string) {
   }
   markCurrent();
   el.scrollIntoView({ behavior: "auto", block: "start" });
+  if (tab === "guide") requestAnimationFrame(() => syncGuideSpy());
+}
+
+function stopGuideSpy(): void {
+  spyMain?.removeEventListener("scroll", onMainSpyScroll);
+  spyMain = null;
+  if (spyRaf) {
+    cancelAnimationFrame(spyRaf);
+    spyRaf = 0;
+  }
+}
+
+function onMainSpyScroll(): void {
+  if (spyRaf) return;
+  spyRaf = requestAnimationFrame(() => {
+    spyRaf = 0;
+    syncGuideSpy();
+  });
+}
+
+function syncGuideSpy(): void {
+  if (tab !== "guide") return;
+  const main = document.querySelector("main");
+  if (!main) return;
+  const probe = main.getBoundingClientRect().top + 16;
+  const files = main.querySelectorAll<HTMLElement>(".file.stage");
+  let file: HTMLElement | null = null;
+  for (const el of files) {
+    if (el.getBoundingClientRect().top <= probe) file = el;
+  }
+  if (!file) file = files[0] ?? null;
+  if (file) {
+    const section = file.closest(".guide-section");
+    if (section?.id.startsWith("section-")) {
+      selectedChapterId = section.id.slice("section-".length);
+    }
+    if (file.dataset.path) selectedGuidePath = file.dataset.path;
+    markCurrent();
+    return;
+  }
+  const sections = main.querySelectorAll<HTMLElement>(".guide-section");
+  let section: HTMLElement | null = null;
+  for (const el of sections) {
+    if (el.getBoundingClientRect().top <= probe) section = el;
+  }
+  if (section?.id.startsWith("section-")) {
+    selectedChapterId = section.id.slice("section-".length);
+    markCurrent();
+  }
 }
 
 function observeMain() {
   observer?.disconnect();
+  stopGuideSpy();
   const main = document.querySelector("main");
   if (!main) return;
-  const selector =
-    tab === "guide"
-      ? ".guide-section, .file.stage"
-      : tab === "diff"
-        ? ".file[id]"
-        : ".outcome-section";
+  if (tab === "guide") {
+    spyMain = main;
+    main.addEventListener("scroll", onMainSpyScroll, { passive: true });
+    syncGuideSpy();
+    return;
+  }
+  const selector = tab === "diff" ? ".file[id]" : ".outcome-section";
   observer = new IntersectionObserver(
     (entries) => {
       const hit = entries
@@ -782,12 +888,6 @@ function observeMain() {
         .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
       if (!hit) return;
       const target = hit.target as HTMLElement;
-      if (tab === "guide" && target.id.startsWith("section-")) {
-        selectedChapterId = target.id.slice("section-".length);
-      }
-      if (tab === "guide" && target.classList.contains("stage") && target.dataset.path) {
-        selectedGuidePath = target.dataset.path;
-      }
       if (tab === "diff" && target.dataset.path) {
         selectedDiffPath = target.dataset.path;
       }
@@ -816,6 +916,7 @@ function homeCardHtml(card: HomeCard): string {
 
 function renderHome(app: HTMLElement): void {
   observer?.disconnect();
+  stopGuideSpy();
   const cards = projectHomeCards(reviews);
   const nextTheme = currentTheme() === "dark" ? "light" : "dark";
   const themeLabel = nextTheme === "dark" ? "Dark" : "Light";
@@ -859,12 +960,7 @@ function render(opts?: { restoreScroll?: boolean }) {
   const nextTheme = currentTheme() === "dark" ? "light" : "dark";
   const themeLabel = nextTheme === "dark" ? "Dark" : "Light";
 
-  const chapterNav = chapters
-    .map((ch, i) => {
-      const current = ch.id === selectedChapterId ? "true" : "false";
-      return `<button type="button" class="chapter-btn" data-jump="${esc(sectionId(ch.id))}" data-chapter="${esc(ch.id)}" aria-current="${current}"><span class="idx">${String(i + 1).padStart(2, "0")}</span><span class="ch-title">${esc(ch.title)}</span></button>`;
-    })
-    .join("");
+  const toc = renderGuideToc(chapters);
 
   const fileNav = renderFileTree(
     fileTree(rows.map((row) => row.path)),
@@ -915,7 +1011,7 @@ function render(opts?: { restoreScroll?: boolean }) {
         : "";
   const tocAnchor =
     tab === "guide"
-      ? `<aside class="toc-anchor" data-toc-anchor><div class="toc-hotzone" aria-hidden="true"></div><nav class="toc-panel" id="guide-toc" aria-label="Guide sections"><div class="nav-label">Sections</div>${chapterNav}</nav></aside>`
+      ? `<aside class="toc-anchor" data-toc-anchor><div class="toc-hotzone"><div class="toc-rail" aria-label="Guide files">${toc.rail}</div></div><nav class="toc-panel" id="guide-toc" aria-label="Guide sections"><div class="nav-label">Sections</div>${toc.nav}</nav></aside>`
       : "";
   app.innerHTML = `<header><div class="header-bar"><div class="header-left">${BRAND_MARK}${BACK_HOME}<h1 title="${esc(guide.title)}">${esc(guide.title)}</h1>${statsHtml(gs)}</div>${sourceHeader(guide)}<div class="header-actions">${display}</div></div>${tabs}</header>${filesRail}<main><div class="main-inner${tab === "guide" ? " is-guide" : ""}">${mainInner}</div></main>${tocAnchor}${pasteModal()}`;
   if (tab === "guide") applyTocOpen(tocOpen);
@@ -947,6 +1043,7 @@ function bindChrome(app: HTMLElement) {
       }
       applyTocOpen(false);
       suppressHoverToc();
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
       if (id) jumpTo(id);
       markCurrent();
     });
@@ -979,6 +1076,13 @@ function bindChrome(app: HTMLElement) {
     btn.addEventListener("click", () => {
       applyTocOpen(!tocOpen);
     });
+  });
+  const tocAnchorEl = app.querySelector("[data-toc-anchor]");
+  tocAnchorEl?.addEventListener("pointerenter", () => revealCurrentToc());
+  tocAnchorEl?.addEventListener("pointerleave", (event) => {
+    if (!(event instanceof PointerEvent)) return;
+    if (event.pointerType !== "mouse" && event.pointerType !== "pen") return;
+    applyTocOpen(false);
   });
   app.querySelectorAll("[data-reviewed-chapter]").forEach((input) => {
     input.addEventListener("click", (event) => event.stopPropagation());
@@ -1276,6 +1380,9 @@ export function boot(): void {
     },
     true,
   );
+  document.addEventListener("pointerover", (event) => {
+    if (event instanceof PointerEvent) dismissTocOnPointerAway(event);
+  });
   document.addEventListener("keydown", (event) => {
     const tag = (event.target as HTMLElement | null)?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA") return;

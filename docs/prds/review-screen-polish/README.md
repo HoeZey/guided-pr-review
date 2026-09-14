@@ -35,7 +35,7 @@ chapter contracts.
 - As a reviewer, I want a file header to stick while I scroll that file.
 - As a reviewer, I want Guide chrome collapsed by default, Unified on Guide and
   Split on Diff, underline tabs, and layout controls in Display.
-- As a reviewer, I want compact file chips, a left-edge hover Sections list, quieter hunk
+- As a reviewer, I want compact file chips, a left-edge file-tick Sections list, quieter hunk
   headers, and filename-first truncation so the stage matches Linear density.
 - As a reviewer, I want the brand mark and existing Inter / IBM Plex Mono type
   to remain; chapter title and why copy should keep editorial scale.
@@ -56,7 +56,7 @@ chapter contracts.
   git-host identity, and outcomes stay in their PRDs.
 - Keep and verify uncommitted Linear chrome already in the nested working tree:
   per-tab layout prefs, Guide Reviews rail collapsed by default, underline
-  Guide/Diff tabs, Display menu, compact Guide aside, hover TOC, IBM Plex
+  Guide/Diff tabs, Display menu, compact Guide aside, TOC tick rail, IBM Plex
   Mono, Reviewed/chevron, rail width animation, Diff folder tree, brand mark.
   Commit that behavior on a review-screen branch rather than rewriting it.
 - Guide collapse (chevron, not Reviewed) is per file on Guide and must not
@@ -69,7 +69,8 @@ chapter contracts.
   that.
 - Remaining density polish from the Linear gap pass: file chips are one-row
   (name and path left, +/- right, current file filled); the Guide Sections
-  list peeks from the left edge on hover (01/04 still toggles it); unified hunk headers are muted
+  list shows a file-tick rail, nested chapter files (titles ellipsize), fills the Guide viewport and scrolls, opens on hover or 01/04;
+  unified hunk headers are muted
   separators; Diff Files rail ellipsizes directories, not filenames; chapter
   title about 26px / -0.04em; why copy 13px / 1.55 muted; code 12px /
   20px line-height; gutters faint. Do not auto-collapse a file solely because
@@ -163,7 +164,7 @@ landed later. Board: [issues](issues/).
   Diff files stay collapsed on Diff.
 - Collapsed file bodies are not Shiki-painted; expanding them paints once.
 - File heads stay visible while scrolling that file on Guide and on Diff.
-- File chips, hover Sections list, hunk headers, Files-rail truncation, and type scale
+- File chips, file-tick Sections list, hunk headers, Files-rail truncation, and type scale
   match the density notes above on a manual pass of the seeded sample guide.
 - Guide / Diff / Code Review sit in a tab row under the identity header,
   with an accent underline on the selected tab, matching Linear Overview /
