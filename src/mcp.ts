@@ -6,6 +6,7 @@ import {
   listReviews,
   publishReviewOutcome,
   removeReview,
+  replaceCatalog,
   setActive,
   upsertReviewFromTool,
 } from "./store.ts";
@@ -23,8 +24,14 @@ const TOOL_DEFS = [
   {
     name: "list_reviews",
     description:
-      "List saved guided reviews, the active id, pull-request provenance when present, and guide base/head.",
+      "List saved guided reviews, the active id, configured repositories, catalog snapshots, pull-request provenance when present, and guide base/head.",
     inputSchema: schema(tools.list_reviews.input),
+  },
+  {
+    name: "replace_catalog",
+    description:
+      "Replace the pull-request catalog snapshot for one repository. Includes the current origin repository in configuration. Never deletes saved reviews.",
+    inputSchema: schema(tools.replace_catalog.input),
   },
   {
     name: "add_review",
@@ -75,6 +82,10 @@ async function callTool(
     case "list_reviews":
       tools.list_reviews.input.parse(args ?? {});
       return listReviews();
+    case "replace_catalog": {
+      const input = tools.replace_catalog.input.parse(args);
+      return replaceCatalog(input);
+    }
     case "add_review": {
       const input = tools.add_review.input.parse(args);
       return addReviewFromTool(input);

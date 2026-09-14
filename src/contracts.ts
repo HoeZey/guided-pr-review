@@ -144,7 +144,12 @@ export type Hunk = z.infer<typeof Hunk>;
 export type PullRequestSource = z.infer<typeof PullRequestSource>;
 export type AzureDevOpsProviderContext = z.infer<typeof AzureDevOpsProviderContext>;
 
-export function pullRequestSyncKey(source: PullRequestSource): string {
+export function pullRequestSyncKey(source: {
+  provider: string;
+  host: string;
+  repository: { id: string };
+  number: number;
+}): string {
   return `${source.provider}:${source.host}:${source.repository.id}:${source.number}`;
 }
 
@@ -223,11 +228,75 @@ export const ReviewRecord = z
   })
   .strict();
 
+const CatalogRepositoryIdentity = z
+  .object({
+    id: z.string().min(1),
+    owner: z.string().min(1),
+    name: z.string().min(1),
+    webUrl: z.string().url(),
+  })
+  .strict();
+
+export const ConfiguredRepository = z
+  .object({
+    provider: z.literal("azure-devops"),
+    host: z
+      .string()
+      .min(1)
+      .refine(isAzureDevOpsHost, { message: "unsupported git host" }),
+    id: z.string().min(1),
+    owner: z.string().min(1),
+    name: z.string().min(1),
+    webUrl: z.string().url(),
+    origin: z.boolean(),
+  })
+  .strict();
+
+export const CatalogPullRequest = z
+  .object({
+    provider: z.literal("azure-devops"),
+    host: z
+      .string()
+      .min(1)
+      .refine(isAzureDevOpsHost, { message: "unsupported git host" }),
+    repository: CatalogRepositoryIdentity,
+    number: z.number().int().positive(),
+    title: z.string().min(1),
+    webUrl: z.string().url(),
+    sourceRef: z.string().min(1),
+    targetRef: z.string().min(1),
+    sourceCommit: Sha,
+    targetCommit: Sha,
+    isDraft: z.boolean(),
+    status: z.enum(["active", "completed", "abandoned"]),
+    author: z.string().min(1),
+    isReviewer: z.boolean(),
+    isAuthor: z.boolean(),
+    updatedAt: z.string().min(1),
+  })
+  .strict();
+
+export const CatalogSnapshot = z
+  .object({
+    provider: z.literal("azure-devops"),
+    host: z
+      .string()
+      .min(1)
+      .refine(isAzureDevOpsHost, { message: "unsupported git host" }),
+    repository: CatalogRepositoryIdentity,
+    syncedAt: z.string().min(1).optional(),
+    error: z.string().min(1).optional(),
+    pullRequests: z.array(CatalogPullRequest),
+  })
+  .strict();
+
 export const StoreV1 = z
   .object({
     version: z.literal(1),
     activeId: z.string().nullable(),
     reviews: z.array(ReviewRecord),
+    repositories: z.array(ConfiguredRepository).default([]),
+    catalog: z.array(CatalogSnapshot).default([]),
   })
   .strict();
 
@@ -274,8 +343,43 @@ export const tools = {
       .object({
         reviews: z.array(ReviewSummary),
         activeId: z.string().nullable(),
+        repositories: z.array(ConfiguredRepository),
+        catalog: z.array(CatalogSnapshot),
       })
       .strict(),
+  },
+  replace_catalog: {
+    input: z
+      .object({
+        origin: z.boolean(),
+        repository: z
+          .object({
+            provider: z.literal("azure-devops"),
+            host: z
+              .string()
+              .min(1)
+              .refine(isAzureDevOpsHost, { message: "unsupported git host" }),
+            id: z.string().min(1),
+            owner: z.string().min(1),
+            name: z.string().min(1),
+            webUrl: z.string().url(),
+          })
+          .strict(),
+        syncedAt: z.string().min(1).optional(),
+        error: z.string().min(1).optional(),
+        pullRequests: z.array(CatalogPullRequest).default([]),
+      })
+      .strict()
+      .superRefine((value, ctx) => {
+        if (!value.error && !value.syncedAt) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "syncedAt required when catalog replacement succeeds",
+            path: ["syncedAt"],
+          });
+        }
+      }),
+    output: z.object({ ok: z.literal(true) }).strict(),
   },
   add_review: {
     input: z.object({ guide: GuideV1 }).strict(),
@@ -314,8 +418,13 @@ export const tools = {
 } as const;
 
 export type ListReviewsOutput = z.infer<typeof tools.list_reviews.output>;
+export type ConfiguredRepository = z.infer<typeof ConfiguredRepository>;
+export type CatalogPullRequest = z.infer<typeof CatalogPullRequest>;
+export type CatalogSnapshot = z.infer<typeof CatalogSnapshot>;
 export const emptyStore = (): StoreV1 => ({
   version: 1,
   activeId: null,
   reviews: [],
+  repositories: [],
+  catalog: [],
 });

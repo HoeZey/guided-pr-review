@@ -1,4 +1,9 @@
-import type { ReviewSummary } from "./contracts.ts";
+import {
+  pullRequestSyncKey,
+  type CatalogPullRequest,
+  type CatalogSnapshot,
+  type ReviewSummary,
+} from "./contracts.ts";
 
 export type HomeCard = {
   id: string;
@@ -6,6 +11,25 @@ export type HomeCard = {
   range: string | undefined;
   repository: { owner: string; name: string } | undefined;
   webUrl: string | undefined;
+  reviewId: string | undefined;
+};
+
+export type HomeGroupId =
+  | "review-requests"
+  | "authored-by-me"
+  | "other-saved-prs"
+  | "local-ranges";
+
+export type HomeGroup = {
+  id: HomeGroupId;
+  title: string;
+  cards: HomeCard[];
+};
+
+export type HomeOverview = {
+  lastSynced: string | undefined;
+  catalogErrors: { owner: string; name: string; message: string }[];
+  groups: HomeGroup[];
 };
 
 export type OverviewView = { kind: "home" } | { kind: "review"; reviewId: string };
@@ -41,7 +65,97 @@ export function projectHomeCards(reviews: readonly ReviewSummary[]): HomeCard[] 
         }
       : undefined,
     webUrl: review.pullRequest?.webUrl,
+    reviewId: review.id,
   }));
+}
+
+const GROUP_TITLE: Record<HomeGroupId, string> = {
+  "review-requests": "Review requests",
+  "authored-by-me": "Authored by me",
+  "other-saved-prs": "Other saved PRs",
+  "local-ranges": "Local ranges",
+};
+
+function catalogCard(
+  item: CatalogPullRequest,
+  reviews: readonly ReviewSummary[],
+): HomeCard {
+  const syncKey = pullRequestSyncKey(item);
+  const review = reviews.find((row) => row.syncKey === syncKey);
+  return {
+    id: review?.id ?? syncKey,
+    title: item.title,
+    range: `${stripHeads(item.targetRef)} ← ${stripHeads(item.sourceRef)}`,
+    repository: {
+      owner: item.repository.owner,
+      name: item.repository.name,
+    },
+    webUrl: item.webUrl,
+    reviewId: review?.id,
+  };
+}
+
+function isReviewRequest(item: CatalogPullRequest): boolean {
+  return item.status === "active" && item.isReviewer && !item.isDraft;
+}
+
+function isAuthoredByMe(item: CatalogPullRequest): boolean {
+  return item.status === "active" && item.isAuthor;
+}
+
+export function projectHomeOverview(
+  reviews: readonly ReviewSummary[],
+  catalog: readonly CatalogSnapshot[],
+): HomeOverview {
+  const reviewRequests: HomeCard[] = [];
+  const authored: HomeCard[] = [];
+  const placed = new Set<string>();
+  for (const snapshot of catalog) {
+    for (const item of snapshot.pullRequests) {
+      const key = pullRequestSyncKey(item);
+      if (isReviewRequest(item)) {
+        reviewRequests.push(catalogCard(item, reviews));
+        placed.add(key);
+      } else if (isAuthoredByMe(item)) {
+        authored.push(catalogCard(item, reviews));
+        placed.add(key);
+      }
+    }
+  }
+  const otherSaved: HomeCard[] = [];
+  const localRanges: HomeCard[] = [];
+  for (const review of reviews) {
+    if (review.syncKey && placed.has(review.syncKey)) continue;
+    const [card] = projectHomeCards([review]);
+    if (review.pullRequest) otherSaved.push(card);
+    else localRanges.push(card);
+  }
+  const groups: HomeGroup[] = [];
+  const push = (id: HomeGroupId, cards: HomeCard[]) => {
+    if (!cards.length) return;
+    groups.push({ id, title: GROUP_TITLE[id], cards });
+  };
+  push("review-requests", reviewRequests);
+  push("authored-by-me", authored);
+  push("other-saved-prs", otherSaved);
+  push("local-ranges", localRanges);
+  const lastSynced = catalog
+    .map((snapshot) => snapshot.syncedAt)
+    .filter((value): value is string => Boolean(value))
+    .sort()
+    .at(-1);
+  const catalogErrors = catalog.flatMap((snapshot) =>
+    snapshot.error
+      ? [
+          {
+            owner: snapshot.repository.owner,
+            name: snapshot.repository.name,
+            message: snapshot.error,
+          },
+        ]
+      : [],
+  );
+  return { lastSynced, catalogErrors, groups };
 }
 
 function homeRange(review: ReviewSummary): string | undefined {

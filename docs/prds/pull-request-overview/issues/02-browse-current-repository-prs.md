@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 blocked_by:
   - 01-open-saved-reviews-from-home
 blocks:
@@ -41,17 +41,17 @@ projection helper, tests
 
 **Acceptance criteria:**
 
-- [ ] A bare skill trigger syncs current-origin PR metadata and opens Home.
-- [ ] No guide is generated before the reviewer selects one.
-- [ ] Each live catalog item appears once under Review requests or Authored by
+- [x] A bare skill trigger syncs current-origin PR metadata and opens Home.
+- [x] No guide is generated before the reviewer selects one.
+- [x] Each live catalog item appears once under Review requests or Authored by
   me according to reviewer versus author precedence, including the user's
   active drafts in Authored by me.
-- [ ] Every host PR shows a compact owner and repository badge.
-- [ ] Last synced is visible after a successful catalog replacement.
-- [ ] A failed catalog sync reports an isolated error and leaves saved reviews
+- [x] Every host PR shows a compact owner and repository badge.
+- [x] Last synced is visible after a successful catalog replacement.
+- [x] A failed catalog sync reports an isolated error and leaves saved reviews
   visible.
-- [ ] Catalog replacement never deletes a saved guide.
-- [ ] Projection and catalog command tests use fake host metadata, not live
+- [x] Catalog replacement never deletes a saved guide.
+- [x] Projection and catalog command tests use fake host metadata, not live
   ADO.
 
 **Blocked by:** 01 Open saved reviews from Home
