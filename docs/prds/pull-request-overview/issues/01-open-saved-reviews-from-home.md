@@ -32,7 +32,7 @@ using the narrow Reviews rail as the primary selector.
 - Live host catalog entries
 - Relationship grouping
 - Host refresh and lifecycle state
-- Generating a guide from a Home card
+- Generating a reading-order Guide from a Home card
 
 **Touches:** review summaries, navigation, Home UI, review header, skill launch,
 pure projection helper, tests

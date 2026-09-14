@@ -263,3 +263,110 @@ test("unsupported host is rejected and does not alter the store", async () => {
     assert.equal(listed.reviews[0].id, local.id);
   });
 });
+
+test("upsert adopts an unsourced local review when the range head matches the PR branch", async () => {
+  await withStore(async () => {
+    const local = await addReview(
+      GuideV1.parse({ ...sample, range: "develop...feature/example" }),
+    );
+    const other = await addReview(
+      GuideV1.parse({ ...sample, title: "Other", range: "develop...feature/other" }),
+    );
+    const adopted = await upsertReview(
+      GuideV1.parse({
+        ...sample,
+        title: "PR 1027",
+        range: "develop...feature/example",
+        source: prSource(),
+      }),
+    );
+    assert.equal(adopted.id, local.id);
+    const listed = await listReviews();
+    assert.equal(listed.reviews.length, 2);
+    assert.equal(listed.reviews.find((row) => row.id === local.id)?.pullRequest?.number, 1027);
+    assert.equal(listed.reviews.find((row) => row.id === other.id)?.pullRequest, undefined);
+    const got = await getReview(local.id);
+    assert.equal(got.guide.source?.number, 1027);
+  });
+});
+
+test("upsert adopts a renamed branch when exactly one local range shares the ticket key", async () => {
+  await withStore(async () => {
+    const local = await addReview(
+      GuideV1.parse({
+        ...sample,
+        range: "develop...feature/tcd-3343-pin-maps",
+        repo: "braid-connection-designer",
+      }),
+    );
+    const adopted = await upsertReview(
+      GuideV1.parse({
+        ...sample,
+        title: "[TCD-3343] Pin maps to SNAPSHOT",
+        source: prSource({
+          sourceRef: "refs/heads/feature/TCD-3343-pin-output-model-snapshot",
+        }),
+      }),
+    );
+    assert.equal(adopted.id, local.id);
+    const got = await getReview(local.id);
+    assert.equal(got.guide.source?.sourceRef, "refs/heads/feature/TCD-3343-pin-output-model-snapshot");
+  });
+});
+
+test("upsert does not adopt when two unsourced locals share the ticket key", async () => {
+  await withStore(async () => {
+    await addReview(
+      GuideV1.parse({ ...sample, title: "A", range: "develop...feature/tcd-3343-pin-maps" }),
+    );
+    await addReview(
+      GuideV1.parse({
+        ...sample,
+        title: "B",
+        range: "develop...feature/tcd-3343-follow-up",
+      }),
+    );
+    const created = await upsertReview(
+      GuideV1.parse({
+        ...sample,
+        title: "PR 1029",
+        source: prSource({
+          number: 1029,
+          webUrl:
+            "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1029",
+          sourceRef: "refs/heads/feature/TCD-3343-pin-output-model-snapshot",
+        }),
+      }),
+    );
+    const listed = await listReviews();
+    assert.equal(listed.reviews.length, 3);
+    assert.equal(listed.reviews.filter((row) => !row.pullRequest).length, 2);
+    assert.equal(
+      listed.reviews.find((row) => row.id === created.id)?.pullRequest?.number,
+      1029,
+    );
+  });
+});
+
+test("upsert does not adopt a local review from a different repository name", async () => {
+  await withStore(async () => {
+    const local = await addReview(
+      GuideV1.parse({
+        ...sample,
+        range: "develop...feature/example",
+        repo: "other-repo",
+      }),
+    );
+    const created = await upsertReview(
+      GuideV1.parse({
+        ...sample,
+        title: "PR 1027",
+        source: prSource(),
+      }),
+    );
+    assert.notEqual(created.id, local.id);
+    const listed = await listReviews();
+    assert.equal(listed.reviews.length, 2);
+    assert.equal(listed.reviews.find((row) => row.id === local.id)?.pullRequest, undefined);
+  });
+});

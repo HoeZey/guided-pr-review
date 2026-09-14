@@ -25,6 +25,11 @@ import {
 } from "./guide-view.ts";
 
 const BRAND_MARK = `<img class="brand" src="/logo.svg" width="28" height="28" alt="">`;
+const ADO_MARK = `<svg class="ado-mark" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="#0078D4" d="M0 8.877L2.247 5.91l8.405-3.416V.022l7.37 5.393L2.966 8.338v8.225L0 15.707zm24-4.45v14.651l-5.753 4.9-9.303-3.057v3.056l-5.978-7.416 15.057 1.798V5.415z"/></svg>`;
+const ICON_SUN = `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>`;
+const ICON_GEAR = `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`;
+const ICON_SPLIT = `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="2.5" width="5.5" height="11" rx="1.5"/><rect x="9" y="2.5" width="5.5" height="11" rx="1.5"/></svg>`;
+const ICON_UNIFIED = `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M5 6h6M5 8h6M5 10h6"/></svg>`;
 const THEME_KEY = "guided-pr-review-theme";
 const TAB_KEY = "guided-pr-review-tab";
 const DIFF_KEY = "guided-pr-review-diff";
@@ -246,11 +251,12 @@ function sourceHeader(data: Guide): string {
   const src = data.source;
   if (src?.kind === "pull-request") {
     const identity = `${esc(src.repository.owner)} / ${esc(src.repository.name)} · PR ${esc(String(src.number))}`;
-    return `<span class="meta">${identity}</span><a class="ado-link" href="${esc(src.webUrl)}" target="_blank" rel="noreferrer">Open in ADO</a>`;
+    return `<div class="header-source"><span class="meta" title="${identity}">${identity}</span><a class="icon-btn ado-link" href="${esc(src.webUrl)}" target="_blank" rel="noreferrer" aria-label="Open in Azure DevOps" title="Open in Azure DevOps">${ADO_MARK}</a></div>`;
   }
   const range = data.range || `${data.base.slice(0, 7)}…${data.head.slice(0, 7)}`;
   const repo = data.repo ? `${esc(data.repo)} · ` : "";
-  return `<span class="meta">${repo}${esc(range)}</span>`;
+  const label = `${repo}${esc(range)}`;
+  return `<div class="header-source"><span class="meta" title="${label}">${label}</span></div>`;
 }
 
 function countLines(lines: DiffLine[] | undefined) {
@@ -741,7 +747,7 @@ function render(opts?: { restoreScroll?: boolean }) {
   const prevMain = document.querySelector("main");
   const top = prevMain?.scrollTop ?? 0;
   if (!guide) {
-    app.innerHTML = `<header>${BRAND_MARK}<h1>Guided review</h1></header><p class="boot">No reviews yet. Add one from MCP or paste JSON.</p>${pasteModal()}`;
+    app.innerHTML = `<header><div class="header-left">${BRAND_MARK}<h1>Guided review</h1></div></header><p class="boot">No reviews yet. Add one from MCP or paste JSON.</p>${pasteModal()}`;
     bindChrome(app);
     return;
   }
@@ -789,10 +795,10 @@ function render(opts?: { restoreScroll?: boolean }) {
   const layout = currentDiffLayout();
   const railsHidden = reviewsCollapsed();
   const tabs = `<div class="view-tabs main-tabs" role="tablist"><button type="button" role="tab" data-tab="guide" aria-selected="${tab === "guide" ? "true" : "false"}">Guide</button><button type="button" role="tab" data-tab="diff" aria-selected="${tab === "diff" ? "true" : "false"}">Diff</button></div>`;
-  const modes = `<div class="view-tabs" role="radiogroup" aria-label="Diff layout"><button type="button" data-diff-mode="unified" aria-selected="${layout === "unified" ? "true" : "false"}">Unified</button><button type="button" data-diff-mode="split" aria-selected="${layout === "split" ? "true" : "false"}">Split</button></div>`;
+  const modes = `<div class="display-modes" role="radiogroup" aria-label="Diff layout"><button type="button" class="display-mode" data-diff-mode="unified" aria-selected="${layout === "unified" ? "true" : "false"}">${ICON_UNIFIED} Unified</button><button type="button" class="display-mode" data-diff-mode="split" aria-selected="${layout === "split" ? "true" : "false"}">${ICON_SPLIT} Split</button></div>`;
   const hideBtn = `<button type="button" class="ghost" data-hide-unchanged aria-pressed="${hideUnchanged ? "true" : "false"}">${hideUnchanged ? "Show unchanged" : "Hide unchanged"}</button>`;
-  const themeBtn = `<button type="button" class="ghost theme-toggle" data-theme-next="${nextTheme}" aria-label="Switch to ${themeLabel} theme">${themeLabel}</button>`;
-  const display = `<details class="display-menu"${displayOpen ? " open" : ""} data-display-menu><summary>Display</summary><div class="display-panel">${modes}${hideBtn}${themeBtn}</div></details>`;
+  const themeBtn = `<button type="button" class="icon-btn square-toggle theme-toggle" data-theme-next="${nextTheme}" aria-pressed="${currentTheme() === "light" ? "true" : "false"}" aria-label="Switch to ${themeLabel} theme" title="Switch to ${themeLabel} theme">${ICON_SUN}</button>`;
+  const display = `<details class="display-menu"${displayOpen ? " open" : ""} data-display-menu><summary class="icon-btn" aria-label="Display">${ICON_GEAR}</summary><div class="display-panel">${modes}<div class="display-toggles">${hideBtn}${themeBtn}</div></div></details>`;
   const reviewsToggle = `<button type="button" class="rail-toggle" data-toggle-reviews aria-expanded="${railsHidden ? "false" : "true"}" aria-label="${railsHidden ? "Show reviews" : "Hide reviews"}" title="Hide reviews ([)">${railsHidden ? "›" : "‹"}</button>`;
   const reviewsHandle = `<button type="button" class="col-handle" data-rail="reviews" aria-label="Resize reviews"></button>`;
   const sideHandle = `<button type="button" class="col-handle" data-rail="sidebar" aria-label="Resize file list"></button>`;
@@ -804,7 +810,7 @@ function render(opts?: { restoreScroll?: boolean }) {
     tab === "diff"
       ? `<nav aria-label="Files">${sideHandle}<div class="nav-label">Files</div>${fileNav}</nav>`
       : "";
-  app.innerHTML = `<header>${BRAND_MARK}<h1>${esc(guide.title)}</h1>${tabs}${sourceHeader(guide)}<div class="header-actions">${statsHtml(gs)}${display}</div></header><nav aria-label="Reviews">${reviewsHandle}${reviewsToggle}<div class="reviews-pane"><div class="nav-label"><span>Reviews</span><button type="button" class="ghost" data-open-paste>Add</button></div><div class="review-list">${reviewNav}</div></div></nav>${filesRail}<main><div class="main-inner${tab === "guide" ? " is-guide" : ""}">${mainInner}</div></main>${pasteModal()}`;
+  app.innerHTML = `<header><div class="header-left">${BRAND_MARK}<h1 title="${esc(guide.title)}">${esc(guide.title)}</h1>${tabs}</div>${sourceHeader(guide)}<div class="header-actions">${statsHtml(gs)}${display}</div></header><nav aria-label="Reviews">${reviewsHandle}${reviewsToggle}<div class="reviews-pane"><div class="nav-label"><span>Reviews</span><button type="button" class="ghost" data-open-paste>Add</button></div><div class="review-list">${reviewNav}</div></div></nav>${filesRail}<main><div class="main-inner${tab === "guide" ? " is-guide" : ""}">${mainInner}</div></main>${pasteModal()}`;
   bindChrome(app);
   observeMain();
   requestAnimationFrame(() => app.classList.add("rails-ready"));

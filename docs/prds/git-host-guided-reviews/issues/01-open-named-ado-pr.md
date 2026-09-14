@@ -3,7 +3,7 @@ status: todo
 blocked_by: []
 blocks:
   - 02-post-ado-comments
-  - pull-request-overview/03-generate-selected-pr
+  - pull-request-overview/03-open-selected-pr-as-diff
 ---
 
 # Open a named Azure DevOps PR as a guided review
@@ -29,6 +29,8 @@ switching the working tree.
   header.
 - Keep local SHA, branch, and range inputs working as new snapshots.
 - Keep ADO-only fields inside providerContext.
+- Adopt a matching unsourced local-range review (exact source branch, else
+  unique ticket key) instead of adding a duplicate row.
 
 **Scope (out):**
 
@@ -54,11 +56,14 @@ tests
   providerContext variant.
 - [ ] Unsupported hosts return a clear error and do not alter the store.
 - [ ] The review header identifies the repository and PR and links to ADO.
+- [ ] Upserting a PR whose source branch matches an unsourced local range
+  (or uniquely shares a ticket key after a rename) keeps that local review
+  id and attaches provenance; two locals with the same ticket stay separate.
 - [ ] Store and contract checks run without live comment writes.
 
 **Blocked by:** none
 
-**Blocks:** 02 Post ADO comments; Pull request overview 03 Generate the
-selected PR while the agent waits
+**Blocks:** 02 Post ADO comments; Pull request overview 03 Open the selected PR
+as Diff
 
 **Parallel-eligible:** yes

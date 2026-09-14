@@ -7,6 +7,7 @@ import {
   pullRequestSyncKey,
   StoreV1,
   type ListReviewsOutput,
+  type PullRequestSource,
   type ReviewRecord,
 } from "./contracts.ts";
 
@@ -48,6 +49,54 @@ async function writeStore(next: StoreV1): Promise<void> {
   await writeFile(tmp, `${JSON.stringify(parsed, null, 2)}\n`, "utf8");
   await rename(tmp, file);
   cache = parsed;
+}
+
+const TICKET_RE = /\b[A-Z][A-Z0-9]+-\d+\b/i;
+
+function normalizeGitRef(ref: string): string {
+  return ref.replace(/^refs\/heads\//i, "").toLowerCase();
+}
+
+function rangeHead(range: string | undefined): string | undefined {
+  if (!range) return undefined;
+  const idx = range.lastIndexOf("...");
+  if (idx === -1) return undefined;
+  return range.slice(idx + 3).trim() || undefined;
+}
+
+function ticketKey(value: string): string | undefined {
+  const match = value.match(TICKET_RE);
+  return match ? match[0].toUpperCase() : undefined;
+}
+
+function sameRepository(review: ReviewRecord, source: PullRequestSource): boolean {
+  const repo = review.guide.repo;
+  return !repo || repo === source.repository.name;
+}
+
+function findLocalReviewToAdopt(
+  reviews: ReviewRecord[],
+  source: PullRequestSource,
+): ReviewRecord | undefined {
+  const unsourced = reviews.filter(
+    (review) => !review.guide.source && sameRepository(review, source),
+  );
+  const sourceHead = normalizeGitRef(source.sourceRef);
+  const exact = unsourced.filter((review) => {
+    const head = rangeHead(review.guide.range);
+    return head !== undefined && normalizeGitRef(head) === sourceHead;
+  });
+  if (exact.length === 1) return exact[0];
+  if (exact.length > 1) return undefined;
+
+  const ticket = ticketKey(source.sourceRef);
+  if (!ticket) return undefined;
+  const byTicket = unsourced.filter((review) => {
+    const head = rangeHead(review.guide.range);
+    return head !== undefined && ticketKey(head) === ticket;
+  });
+  if (byTicket.length === 1) return byTicket[0];
+  return undefined;
 }
 
 function unwrapGuide(body: unknown): GuideV1 {
@@ -129,10 +178,11 @@ export async function upsertReview(input: unknown): Promise<{ id: string }> {
   }
   const key = pullRequestSyncKey(guide.source);
   const store = await readStore();
-  const found = store.reviews.find(
-    (review) =>
-      review.guide.source && pullRequestSyncKey(review.guide.source) === key,
-  );
+  const found =
+    store.reviews.find(
+      (review) =>
+        review.guide.source && pullRequestSyncKey(review.guide.source) === key,
+    ) ?? findLocalReviewToAdopt(store.reviews, guide.source);
   if (found) {
     found.guide = guide;
     store.activeId = found.id;

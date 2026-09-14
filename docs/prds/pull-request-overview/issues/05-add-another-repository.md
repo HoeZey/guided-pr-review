@@ -1,7 +1,7 @@
 ---
 status: todo
 blocked_by:
-  - 03-generate-selected-pr
+  - 03-open-selected-pr-as-diff
 blocks:
   - 06-generate-without-local-clone
 ---
@@ -46,8 +46,8 @@ without deleting saved guides.
 - [ ] Removing a repository stops future syncs and keeps saved guides.
 - [ ] Repository registration tests use fake host validation, not live ADO.
 
-**Blocked by:** 03 Generate the selected PR while the agent waits
+**Blocked by:** 03 Open the selected PR as Diff
 
-**Blocks:** 06 Generate a guide without a local clone
+**Blocks:** 06 Open a PR without a local clone
 
 **Parallel-eligible:** no

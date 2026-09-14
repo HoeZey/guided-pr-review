@@ -81,6 +81,8 @@ git switch, git reset, or git worktree add unless the user asked.
    Sync key is azure-devops:{host}:{repository.id}:{number}. If a listed
    review has that syncKey and the same sourceCommit, tools/call set_active
    for that id, open http://localhost:8765/, and stop. Do not upsert.
+   A listed review with no syncKey is not a skip: continue so upsert can
+   attach this PR to a matching local-range row.
 
 7. **Iterations and change tracking.** Needed on the stored guide for later
    comment posting. Prefer az rest with the Azure CLI session:
@@ -136,8 +138,12 @@ git switch, git reset, or git worktree add unless the user asked.
     tools/call name upsert_review arguments { "guide": <Guide v1> }
 
     Same id is kept for the same provider + host + repository id + PR
-    number. A new source commit replaces the stored guide. Open
-    http://localhost:8765/. Leave the server running.
+    number. A new source commit replaces the stored guide. Upsert also
+    adopts exactly one unsourced local-range review when the range head
+    matches the PR source branch, or when that branch was renamed but
+    exactly one local range shares the ticket key (TCD-n). Ambiguous
+    ticket matches create a new row. Open http://localhost:8765/. Leave
+    the server running.
 
 ## Local range
 
