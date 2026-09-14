@@ -1,5 +1,5 @@
 ---
-status: signed
+status: in_progress
 ---
 
 # PRD: Pull request overview

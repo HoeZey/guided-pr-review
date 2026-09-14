@@ -263,6 +263,8 @@ export const ReviewSummary = z
   })
   .strict();
 
+export type ReviewSummary = z.infer<typeof ReviewSummary>;
+
 export const tools = {
   list_reviews: {
     input: z.object({}).strict(),
