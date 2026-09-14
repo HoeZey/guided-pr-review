@@ -9,6 +9,7 @@ import {
   dataFile,
   getReview,
   listReviews,
+  publishReviewOutcome,
   removeReview,
   resetStoreCache,
   setActive,
@@ -142,6 +143,85 @@ test("add list set_active remove", async () => {
   });
 });
 
+function sampleOutcome() {
+  return {
+    version: 1 as const,
+    base: sample.base,
+    head: sample.head,
+    standards: {
+      findings: [
+        {
+          severity: "major" as const,
+          title: "Guide expansion is lost after visiting Diff",
+          explanation: "Diff state is written back into Guide collapse state.",
+        },
+      ],
+    },
+    spec: { findings: [] },
+  };
+}
+
+test("publish appends an immutable run to the requested review", async () => {
+  await withStore(async () => {
+    const { id } = await addReview(sample);
+    const other = await addReview(GuideV1.parse({ ...sample, title: "Two" }));
+    const published = await publishReviewOutcome(id, sampleOutcome());
+    const got = await getReview(id);
+    assert.equal(got.outcomes.length, 1);
+    assert.equal(got.outcomes[0].id, published.id);
+    assert.equal(got.outcomes[0].outcome.standards.findings[0].title, "Guide expansion is lost after visiting Diff");
+    assert.match(got.outcomes[0].addedAt, /^\d{4}-\d{2}-\d{2}T/);
+    const untouched = await getReview(other.id);
+    assert.equal(untouched.outcomes.length, 0);
+  });
+});
+
+test("repeat runs at one head remain distinct", async () => {
+  await withStore(async () => {
+    const { id } = await addReview(sample);
+    const first = await publishReviewOutcome(id, sampleOutcome());
+    const second = await publishReviewOutcome(id, sampleOutcome());
+    const got = await getReview(id);
+    assert.equal(got.outcomes.length, 2);
+    assert.notEqual(first.id, second.id);
+    assert.deepEqual(
+      got.outcomes.map((row) => row.id),
+      [first.id, second.id],
+    );
+  });
+});
+
+test("unknown review id or invalid outcome is rejected", async () => {
+  await withStore(async () => {
+    const { id } = await addReview(sample);
+    await assert.rejects(
+      () => publishReviewOutcome("missing", sampleOutcome()),
+      /unknown review missing/,
+    );
+    await assert.rejects(() =>
+      publishReviewOutcome(id, { ...sampleOutcome(), extra: true }),
+    );
+    await assert.rejects(() =>
+      publishReviewOutcome(id, {
+        ...sampleOutcome(),
+        spec: {
+          findings: [
+            { severity: "minor", title: "T", explanation: "E" },
+          ],
+        },
+      }),
+    );
+    await assert.rejects(() =>
+      publishReviewOutcome(id, {
+        ...sampleOutcome(),
+        standards: { findings: [], count: 0 },
+      }),
+    );
+    const got = await getReview(id);
+    assert.equal(got.outcomes.length, 0);
+  });
+});
+
 test("old Store v1 JSON without source still loads", async () => {
   await withStore(async () => {
     await writeFile(
@@ -163,8 +243,11 @@ test("old Store v1 JSON without source still loads", async () => {
     assert.equal(listed.reviews.length, 1);
     assert.equal(listed.reviews[0].id, "r1");
     assert.equal(listed.reviews[0].title, "One");
+    assert.equal(listed.reviews[0].base, sample.base);
+    assert.equal(listed.reviews[0].head, sample.head);
     const got = await getReview("r1");
     assert.equal(got.guide.source, undefined);
+    assert.deepEqual(got.outcomes, []);
   });
 });
 
@@ -368,5 +451,14 @@ test("upsert does not adopt a local review from a different repository name", as
     const listed = await listReviews();
     assert.equal(listed.reviews.length, 2);
     assert.equal(listed.reviews.find((row) => row.id === local.id)?.pullRequest, undefined);
+  });
+});
+
+test("list_reviews exposes guide base and head", async () => {
+  await withStore(async () => {
+    await addReview(sample);
+    const listed = await listReviews();
+    assert.equal(listed.reviews[0].base, sample.base);
+    assert.equal(listed.reviews[0].head, sample.head);
   });
 });

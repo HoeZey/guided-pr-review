@@ -197,8 +197,8 @@ git switch, git reset, or git worktree add unless the user asked.
    - tools/call name set_active if you need a different id (add_review already
      sets active)
 
-   Open http://localhost:8765/ for the reviewer. Guide and Diff tabs. Leave
-   the server running.
+   Open http://localhost:8765/ for the reviewer. Guide, Diff, and Code Review
+   tabs. Leave the server running.
 
 ## Hard no
 
@@ -213,10 +213,12 @@ git switch, git reset, or git worktree add unless the user asked.
 
 ## MCP tools
 
-- list_reviews → { reviews, activeId }. Review rows may include syncKey,
-  sourceCommit, and pullRequest (provider, host, repository, number, webUrl).
+- list_reviews → { reviews, activeId }. Review rows include base and head,
+  and may include syncKey, sourceCommit, and pullRequest (provider, host,
+  repository, number, webUrl).
 - add_review { guide } → { id } — new snapshot (local ranges).
 - upsert_review { guide } → { id } — stable id for a named ADO PR.
+- publish_review_outcome { reviewId, outcome } → { id }
 - remove_review { id } → { ok: true }
-- get_review { id } → { guide }
+- get_review { id } → { guide, outcomes }
 - set_active { id } → { activeId }

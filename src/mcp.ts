@@ -4,6 +4,7 @@ import {
   addReviewFromTool,
   getReview,
   listReviews,
+  publishReviewOutcome,
   removeReview,
   setActive,
   upsertReviewFromTool,
@@ -22,7 +23,7 @@ const TOOL_DEFS = [
   {
     name: "list_reviews",
     description:
-      "List saved guided reviews, the active id, and pull-request provenance when present.",
+      "List saved guided reviews, the active id, pull-request provenance when present, and guide base/head.",
     inputSchema: schema(tools.list_reviews.input),
   },
   {
@@ -37,13 +38,19 @@ const TOOL_DEFS = [
     inputSchema: schema(tools.upsert_review.input),
   },
   {
+    name: "publish_review_outcome",
+    description:
+      "Append a CodeReviewOutcome v1 run to a review. Never overwrites an older run.",
+    inputSchema: schema(tools.publish_review_outcome.input),
+  },
+  {
     name: "remove_review",
     description: "Remove a review by id.",
     inputSchema: schema(tools.remove_review.input),
   },
   {
     name: "get_review",
-    description: "Get the Guide v1 payload for a review id.",
+    description: "Get the Guide v1 payload and outcome history for a review id.",
     inputSchema: schema(tools.get_review.input),
   },
   {
@@ -75,6 +82,10 @@ async function callTool(
     case "upsert_review": {
       const input = tools.upsert_review.input.parse(args);
       return upsertReviewFromTool(input);
+    }
+    case "publish_review_outcome": {
+      const input = tools.publish_review_outcome.input.parse(args);
+      return publishReviewOutcome(input.reviewId, input.outcome);
     }
     case "remove_review": {
       const input = tools.remove_review.input.parse(args);
