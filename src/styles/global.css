@@ -137,18 +137,26 @@ body {
 
 .home-card {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: flex-start;
+  gap: 8px;
   padding: 14px 16px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--bg-elevated);
-  color: inherit;
-  text-decoration: none;
 }
 
 .home-card:hover {
   background: var(--bg-hover);
+}
+
+.home-card-open {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  color: inherit;
+  text-decoration: none;
 }
 
 .home-card-title {

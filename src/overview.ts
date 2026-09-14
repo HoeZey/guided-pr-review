@@ -5,6 +5,7 @@ export type HomeCard = {
   title: string;
   range: string | undefined;
   repository: { owner: string; name: string } | undefined;
+  webUrl: string | undefined;
 };
 
 export type OverviewView = { kind: "home" } | { kind: "review"; reviewId: string };
@@ -39,5 +40,6 @@ export function projectHomeCards(reviews: readonly ReviewSummary[]): HomeCard[] 
           name: review.pullRequest.repository.name,
         }
       : undefined,
+    webUrl: review.pullRequest?.webUrl,
   }));
 }
