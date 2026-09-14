@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 blocked_by: []
 blocks: []
 ---
@@ -34,11 +34,11 @@ width and have that width survive reload.
 
 **Acceptance criteria:**
 
-- [ ] Dragging the chapter column changes its width.
-- [ ] Reload restores the last chapter-column width.
-- [ ] Helper tests cover parse/serialize of the persisted width, including
+- [x] Dragging the chapter column changes its width.
+- [x] Reload restores the last chapter-column width.
+- [x] Helper tests cover parse/serialize of the persisted width, including
   a missing or invalid value falling back to the current default.
-- [ ] No Astro DOM assertions.
+- [x] No Astro DOM assertions.
 
 **Blocked by:** none
 

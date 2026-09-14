@@ -398,6 +398,16 @@ export function parseDiffLayout(raw: string | null, fallback: DiffLayout): DiffL
   return raw === "unified" || raw === "split" ? raw : fallback;
 }
 
+export function parseChapterWidth(raw: unknown): number {
+  const n = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
+  if (!Number.isFinite(n)) return 300;
+  return Math.min(520, Math.max(240, Math.round(n)));
+}
+
+export function serializeChapterWidth(px: number): number {
+  return parseChapterWidth(px);
+}
+
 export function formatCopy(raw: string): string {
   const escaped = String(raw)
     .replace(/&/g, "&amp;")
