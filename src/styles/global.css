@@ -175,6 +175,18 @@ header h1 {
   flex: 0 1 18ch;
 }
 
+.ado-link {
+  flex-shrink: 0;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.ado-link:hover {
+  text-decoration: underline;
+}
+
 .header-actions {
   margin-left: auto;
   display: flex;
