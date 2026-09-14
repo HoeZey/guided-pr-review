@@ -28,6 +28,7 @@ A reviewer can turn one selected or named ADO PR into a guide and post a comment
 
 - As a reviewer, I want a named or overview-selected PR to produce one guide for its exact source and target commits so the reviewed range is deterministic.
 - As a reviewer, I want an already-ingested PR to refresh only when its source commit changed so I do not lose my place on an unchanged review.
+- As a reviewer, I want a local-range review of the same branch to become that PR once the PR exists so I do not keep a truncated local row beside the real pull request.
 - As a reviewer, I want an explicit SHA, branch, or range to still produce one guide so local targets remain deterministic.
 - As a reviewer, I want first-run authentication to be Azure CLI / Cursor MCP sign-in, not a PAT pasted into the app.
 - As a reviewer, I want Send on a current-side line or range to create an ADO thread immediately so I do not batch comments in a second step.
@@ -37,6 +38,7 @@ A reviewer can turn one selected or named ADO PR into a guide and post a comment
 ## Implementation notes
 
 - Agent owns provider resolution, git fetch, and chaptering. The app stores and renders. The ADO adapter handles the first provider. A named PR or a validated PR identity from the overview resolves source and target SHAs plus iteration and per-path change-tracking ids, fetches those commits without checkout, diffs target...source, and upserts one guide. Explicit SHA, branch, and range inputs keep the local single-review path. The pull request overview owns repository configuration, queue discovery, cross-repository cache materialization, and bare-trigger selection.
+- upsert_review adopts an unsourced local-range review instead of inserting a second row when the match is unique. Exact match: the range head equals the PR source branch after stripping refs/heads/ (case-insensitive), and the stored repo name is absent or equals the PR repository name. Rename match: the local range head and the PR sourceRef share a ticket key such as TCD-3343, and exactly one unsourced local review in that repository has that ticket. Two locals with the same ticket, or two range heads equal to the PR branch, stay unsourced and the PR gets a new id. A later upsert of the same provider/host/repository/PR still wins by sync key. Catalog refresh in the pull request overview uses the same adoption rule so Open and Refresh do not leave a Local ranges leftover.
 - Auth lives in Azure CLI and Cursor's ADO MCP. The review process never stores a PAT. Browser payloads never include tokens. First-run: native MCP auth or one az login. Expiry: structured auth error, keep the draft, Retry after login.
 - Guide v1 grows optional pull-request provenance with common identity and a discriminated providerContext. ADO data stays inside the ADO variant:
 
@@ -86,7 +88,7 @@ A reviewer can turn one selected or named ADO PR into a guide and post a comment
 
 **Why this seam:** Upsert identity is shared by HTTP and MCP. Anchor rules (right-side range vs file-level) must not live only in DOM code. Provider dispatch belongs at the relay boundary; injecting the adapter keeps auth and host APIs off the assertion.
 
-**What a good test is here:** Same provider/host/repository/PR upserts to one stable id; a new source commit replaces the guide; an unchanged source commit is detectable from list_reviews; a second PR is a second review; old Store v1 JSON without source still loads; ADO-only data outside providerContext and invalid provenance are rejected. commentAnchorForLines maps an added/context line or range to right-side coordinates and a removed-only selection to file-level. createThread dispatches the ADO source to the ADO adapter, sends right-line fields for current-side anchors, omits them for file-level, and refuses a path or PR id that is not on the stored guide. An unsupported provider returns a structured error. Do not test Astro internals. Do not post a live PR comment in CI.
+**What a good test is here:** Same provider/host/repository/PR upserts to one stable id; a new source commit replaces the guide; an unchanged source commit is detectable from list_reviews; a second PR is a second review; old Store v1 JSON without source still loads; ADO-only data outside providerContext and invalid provenance are rejected. upsert_review adopts exactly one unsourced local-range review on exact source-branch match or unique ticket-key rename; it does not adopt when two locals share the ticket or the stored repo name differs. commentAnchorForLines maps an added/context line or range to right-side coordinates and a removed-only selection to file-level. createThread dispatches the ADO source to the ADO adapter, sends right-line fields for current-side anchors, omits them for file-level, and refuses a path or PR id that is not on the stored guide. An unsupported provider returns a structured error. Do not test Astro internals. Do not post a live PR comment in CI.
 
 **Prior art:** store.test.ts and guide-view.test.ts on the existing store and Diff helpers.
 
@@ -113,6 +115,7 @@ A reviewer can turn one selected or named ADO PR into a guide and post a comment
 ## Success criteria
 
 - A named or overview-selected ADO PR authenticates without a PAT in the app, resolves exact source and target commits, and upserts exactly one guide.
+- Upserting a PR adopts a matching unsourced local-range review (exact source branch, else unique ticket key) and keeps that id; ambiguous matches do not steal a local row.
 - Named SHA, branch, and range inputs still produce exactly one local guide.
 - Send on a current-side line creates an ADO thread on that file and line; Shift-click range uses the right-side start and end; a deleted-only line creates a file-level thread.
 - Auth failure returns a structured error, keeps the composer text, and succeeds after az login plus Retry. No token appears in the store, logs, or JSON responses.

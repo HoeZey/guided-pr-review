@@ -7,10 +7,10 @@ From [Git-host guided reviews](../).
 ```text
 01 Open a named ADO PR
 ├── 02 Post ADO comments
-└── Pull request overview 03 Generate selected PR
+└── Pull request overview 03 Open selected PR as Diff
 ```
 
-Issue 02 and the overview generation path can start in parallel after 01 is
+Issue 02 and the overview Open-Diff path can start in parallel after 01 is
 done. Pull request discovery and selection live in the
 [Pull request overview](../../pull-request-overview/) board.
 

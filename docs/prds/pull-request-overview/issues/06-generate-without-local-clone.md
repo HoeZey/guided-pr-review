@@ -5,7 +5,7 @@ blocked_by:
 blocks: []
 ---
 
-# Generate a guide without a local clone
+# Open a PR without a local clone
 
 **Type:** Story
 
@@ -14,18 +14,20 @@ blocks: []
 **Seam(s):** action claim and completion; injected git-cache adapter;
 upsert_review
 
-**What it delivers:** A reviewer can generate a guide for a configured
-repository that is not cloned locally, using a managed bare git cache that
-never changes a user working tree.
+**What it delivers:** A reviewer can Open a configured repository that is not
+cloned locally into Diff, using a managed bare git cache that never changes a
+user working tree.
 
 **Scope (in):**
 
 - Keep a managed bare git cache per configured repository under local app
   data.
 - Fetch exact target and source commits into that cache without checkout.
-- Diff those commits and upsert one guide with structured repository identity.
+- Upsert one unchaptered review with structured repository identity and land
+  on Diff.
 - Leave every user working tree and branch unchanged.
-- Reuse the same Generate and Update actions as the current-repository path.
+- Reuse the same Open and Update Diff actions as the current-repository path.
+- Generate guide on that review still uses the cache (covered with 07).
 
 **Scope (out):**
 
@@ -37,8 +39,8 @@ never changes a user working tree.
 
 **Acceptance criteria:**
 
-- [ ] Selecting an unguided PR from a configured foreign repository produces
-  one guide from exact source and target commits.
+- [ ] Selecting an unopened PR from a configured foreign repository opens Diff
+  from exact source and target commits.
 - [ ] The agent uses a managed bare cache and does not checkout or change a
   user working tree.
 - [ ] Repeating the same repository and PR upserts the same review id when the

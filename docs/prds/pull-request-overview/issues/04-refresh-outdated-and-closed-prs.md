@@ -1,7 +1,7 @@
 ---
 status: todo
 blocked_by:
-  - 03-generate-selected-pr
+  - 03-open-selected-pr-as-diff
 blocks: []
 ---
 
@@ -21,10 +21,12 @@ guide is current, outdated, merged, or abandoned without losing that guide.
 - Queue a manual Refresh action to the waiting agent.
 - Replace catalog snapshots for configured repositories.
 - Mark a saved PR outdated when the catalog source commit changed.
-- Offer Update and review as the main outdated action and Open saved as the
+- Offer Update Diff as the main outdated action and Open saved as the
   secondary action.
-- Keep a persistent Outdated warning when opening the saved guide.
+- Keep a persistent Outdated warning when opening the saved review.
 - Move saved merged or abandoned PRs into a collapsed Archived group.
+- Adopt matching unsourced local-range reviews onto catalog PRs (exact source
+  branch, else unique ticket key) so they leave Local ranges.
 - Drop closed catalog items that have no saved guide.
 - Never auto-delete a saved guide.
 
@@ -40,19 +42,22 @@ outdated banner, tests
 **Acceptance criteria:**
 
 - [ ] Manual Refresh updates Last synced and replaces catalog snapshots.
-- [ ] A changed source commit shows Outdated with Update and review plus Open
-  saved.
-- [ ] Update and review regenerates the matching guide through upsert.
-- [ ] Open saved preserves the old guide and shows a persistent Outdated
+- [ ] A changed source commit shows Outdated with Update Diff plus Open saved.
+- [ ] Update Diff refreshes the snapshot through upsert without requiring
+  chaptering.
+- [ ] Open saved preserves the old review and shows a persistent Outdated
   warning.
 - [ ] A saved merged or abandoned PR moves to collapsed Archived and remains
   openable as read-only.
 - [ ] A closed unguided catalog item disappears after refresh.
 - [ ] Refresh never deletes a saved guide.
+- [ ] An unsourced local-range review whose range head matches a catalog PR
+  (or uniquely shares a ticket key) is adopted onto that PR and leaves Local
+  ranges; two locals with the same ticket stay local.
 - [ ] Projection tests cover current, outdated, archived, and removed-unguided
   cases with fake catalog data.
 
-**Blocked by:** 03 Generate the selected PR while the agent waits
+**Blocked by:** 03 Open the selected PR as Diff
 
 **Blocks:** none
 

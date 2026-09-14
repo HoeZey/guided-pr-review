@@ -3,7 +3,7 @@ status: todo
 blocked_by:
   - 01-open-saved-reviews-from-home
 blocks:
-  - 03-generate-selected-pr
+  - 03-open-selected-pr-as-diff
 ---
 
 # Browse current-repository PRs by relationship
@@ -30,7 +30,8 @@ and Last synced, before any guide is generated.
 
 **Scope (out):**
 
-- Generating a guide from a catalog card
+- Opening a Diff from a catalog card
+- Generating a reading-order Guide
 - Manual Refresh and lifecycle archive behavior
 - Adding a second repository
 - Bare git caches
@@ -55,6 +56,6 @@ projection helper, tests
 
 **Blocked by:** 01 Open saved reviews from Home
 
-**Blocks:** 03 Generate the selected PR while the agent waits
+**Blocks:** 03 Open the selected PR as Diff
 
 **Parallel-eligible:** no
