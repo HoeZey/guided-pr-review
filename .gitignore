@@ -4,3 +4,9 @@ data/
 .astro/
 .DS_Store
 *.log
+
+# graft's local graph cache — regenerable, not committed (run graft build).
+graft/
+
+# Local worktrees. Do not commit checkouts.
+.cursor/worktrees/

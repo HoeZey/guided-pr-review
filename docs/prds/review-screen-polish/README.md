@@ -44,10 +44,8 @@ chapter contracts.
   text, selected accent underline. Not options jammed into the top bar.
 - As a reviewer, I want the Diff (and Guide stage file) to sit in a rounded
   card with its own border, not flush to the pane edge.
-- As a reviewer, I want to drag the Guide chapter column width and have it
-  persist.
-- As a reviewer, I want UI chrome at Display-menu size, formatted why copy,
-  and a larger chapter title.
+- As a reviewer, I want UI chrome, header source, and why copy at the same
+  13px size, with a larger chapter title.
 - As a reviewer, I want to leave a review with brand or a compact back
   control, without a saved-PR column on the review screen.
 
@@ -73,16 +71,15 @@ chapter contracts.
   (name and path left, +/- right, current file filled); TOC overlay is an
   opaque drawer with a Sections heading; unified hunk headers are muted
   separators; Diff Files rail ellipsizes directories, not filenames; chapter
-  title about 26px / -0.04em; why copy about 15px / 1.55 muted; code 12px /
+  title about 26px / -0.04em; why copy 13px / 1.55 muted; code 12px /
   20px line-height; gutters faint. Do not auto-collapse a file solely because
   Reviewed was checked; the checkbox still marks viewed and may advance.
-- Type: the default size for UI chrome (header tabs, Display menu items,
-  buttons, chips, rails, Home meta) is the Display menu item size (13px).
-  Chapter title stays the editorial 26px scale. Why / description stays
-  formatted body at about 15px / 1.55 and goes through the existing copy
-  formatter (paragraphs, inline code, bold; no raw HTML). Do not flatten
-  why to chrome size. Linear-style phrase-to-diff underlines in why copy
-  are not in this PRD.
+- Type: the default size for UI chrome (header tabs, header source,
+  Display menu items, buttons, chips, rails, Home meta, Guide why) is the
+  Display menu item size (13px). Chapter title stays the editorial 26px
+  scale. Why / description uses the same 13px chrome size and the existing
+  copy formatter (paragraphs, inline code, bold; no raw HTML).
+  Linear-style phrase-to-diff underlines in why copy are not in this PRD.
 - Mode tabs: Guide, Diff, and Code Review match Linear Overview / Files /
   Commits. They are a tab row under the identity header (brand, back,
   title, source, actions stay on the first row). Plain muted text,
@@ -93,8 +90,9 @@ chapter contracts.
   bordered code pane (file head plus body). Per-file rounded cards that
   are inset from the pane match that when several files exist. Do not
   leave the code wall full-bleed.
-- The Guide chapter column (aside) is user-resizable, with the same kind
-  of drag handle as the Files rail, and the width persists.
+- The Guide chapter column is a fixed width. It is not user-resizable.
+  The Files rail on Diff and Code Review still resizes. The Guide aside
+  has no vertical rule between copy and the stage; top padding stays.
 - The saved-PR Reviews column is gone from the review screen. Brand and a
   compact back control return to Home. Home is the PR switcher. Files /
   chapters rails stay. This supersedes persisting that Reviews rail per
@@ -132,10 +130,10 @@ chip layout, and type scale are one manual browser check on Guide and Diff.
 | Collapse model | Independent Guide collapse and Diff viewed | One shared collapsed set | Shared set is the Guide-expand bug |
 | Highlight | Skip collapsed bodies | Always Shiki every file | Collapsed paint is wasted work |
 | Extra themes | Keep current Shiki themes | Ship a new token theme in this PRD | Density and bugs first; theme is deferred |
-| Type defaults | UI chrome 13px (Display menu); title 26px; why formatted 15px | One size for everything; shrink why to chrome | Screenshot: title editorial, body readable, chrome quiet |
+| Type defaults | UI chrome 13px including why and header source; title 26px | Why at 15px; source at 11px mono | Same chrome size across header, tabs, and description |
 | Saved-PR rail on review | Remove; Home or back to switch | Keep and persist per Guide/Diff/Code Review | Home is the inbox; the rail duplicates it |
 | Diff card | Rounded, own border, inset | Full-bleed pane | Match Linear Files panel |
-| Guide aside width | User-resizable, persisted | Fixed aside | Files rail already resizes; chapter column should too |
+| Guide aside width | Fixed | User-resizable persisted handle | Guide is editorial; Files rail still resizes |
 
 ## Open questions (intentionally deferred)
 
@@ -152,7 +150,7 @@ landed later. Board: [issues](issues/).
 
 - 01 Align chrome type and Linear mode tabs
 - 03 Round and border Diff and Guide stage cards
-- 04 Resize and persist the Guide chapter column
+- 04 Resize and persist the Guide chapter column is cancelled (fixed width)
 - 05 Remove the saved-PR column and return via back
 - 06 Place mode tabs in a Linear tab row (01 put them in the title bar)
 - 02 Persist Reviews rail per tab is cancelled.
@@ -171,10 +169,12 @@ landed later. Board: [issues](issues/).
   with an accent underline on the selected tab, matching Linear Overview /
   Files / Commits. They are not options in the title bar.
 - Diff and Guide stage files read as rounded bordered cards.
-- The Guide chapter column can be resized and the width survives reload.
+- The Guide chapter column is a fixed width. Diff and Code Review Files
+  rails still resize.
 - The review screen has no saved-PR column; brand or back returns to Home
   without deleting store state.
-- Why copy still renders formatted paragraphs, inline code, and bold.
+- Why copy is 13px chrome size and still renders formatted paragraphs,
+  inline code, and bold. Header source uses the same 13px.
 - Store, MCP, and Guide v1 contracts are unchanged.
 - Helper tests cover collapse isolation, highlight skip, and filename-first
   truncation without Astro DOM assertions.

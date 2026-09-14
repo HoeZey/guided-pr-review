@@ -150,6 +150,25 @@ export function stepGuide(
   return stops[j];
 }
 
+export function selectGuidePath(
+  files: { path: string }[],
+  selected: string | null,
+  viewed: ReadonlySet<string>,
+): string | null {
+  if (selected && files.some((file) => file.path === selected)) return selected;
+  return files.find((file) => !viewed.has(file.path))?.path || files[0]?.path || null;
+}
+
+export function shownDiffCounts(s: { additions: number; deletions: number }): {
+  additions?: number;
+  deletions?: number;
+} {
+  const out: { additions?: number; deletions?: number } = {};
+  if (s.additions > 0) out.additions = s.additions;
+  if (s.deletions > 0) out.deletions = s.deletions;
+  return out;
+}
+
 export function markViewed(
   viewed: ReadonlySet<string>,
   collapsed: ReadonlySet<string>,
@@ -396,16 +415,6 @@ export type DiffLayout = "unified" | "split";
 
 export function parseDiffLayout(raw: string | null, fallback: DiffLayout): DiffLayout {
   return raw === "unified" || raw === "split" ? raw : fallback;
-}
-
-export function parseChapterWidth(raw: unknown): number {
-  const n = typeof raw === "number" ? raw : typeof raw === "string" ? Number(raw) : NaN;
-  if (!Number.isFinite(n)) return 300;
-  return Math.min(520, Math.max(240, Math.round(n)));
-}
-
-export function serializeChapterWidth(px: number): number {
-  return parseChapterWidth(px);
 }
 
 export function formatCopy(raw: string): string {
