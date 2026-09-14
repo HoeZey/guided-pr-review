@@ -37,7 +37,7 @@ chapter contracts.
   Split on Diff, underline tabs, and layout controls in Display.
 - As a reviewer, I want compact file chips, a left-edge file-tick Sections list, quieter hunk
   headers, and filename-first truncation so the stage matches Linear density.
-- As a reviewer, I want the brand mark and existing Inter / IBM Plex Mono type
+- As a reviewer, I want the brand mark and IBM Plex Sans / IBM Plex Mono type
   to remain; chapter title and why copy should keep editorial scale.
 - As a reviewer, I want Guide / Diff / Code Review to read as Linear
   Overview / Files / Commits: a tab row under the identity header, plain
@@ -57,7 +57,7 @@ chapter contracts.
 - Keep and verify uncommitted Linear chrome already in the nested working tree:
   per-tab layout prefs, Guide Reviews rail collapsed by default, underline
   Guide/Diff tabs, Display menu, compact Guide aside, TOC tick rail, IBM Plex
-  Mono, Reviewed/chevron, rail width animation, Diff folder tree, brand mark.
+  Sans and Mono, Reviewed/chevron, rail width animation, Diff folder tree, brand mark.
   Commit that behavior on a review-screen branch rather than rewriting it.
 - Guide collapse (chevron, not Reviewed) is per file on Guide and must not
   write into the Diff viewed set. Diff viewed may collapse Diff cards after a
