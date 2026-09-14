@@ -902,20 +902,50 @@ main {
   margin-left: 0;
 }
 
-.toc-overlay {
+.toc-anchor {
   position: fixed;
-  inset: var(--header) 0 0 0;
-  z-index: 15;
-  background: rgba(0, 0, 0, 0.55);
+  left: 0;
+  top: var(--header);
+  bottom: 0;
+  z-index: 14;
+  width: 12px;
+}
+
+.toc-hotzone {
+  position: absolute;
+  inset: 0;
 }
 
 .toc-panel {
-  width: min(320px, 92vw);
-  height: 100%;
+  position: absolute;
+  left: 8px;
+  top: 12px;
+  width: min(280px, calc(100vw - 24px));
+  max-height: calc(100vh - var(--header) - 24px);
   overflow: auto;
-  padding: 12px 0 24px;
+  padding: 12px 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
   background: var(--bg-elevated);
-  border-right: 1px solid var(--border);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-6px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.toc-anchor:hover .toc-panel,
+.toc-anchor:focus-within .toc-panel,
+#app[data-toc="open"] .toc-panel {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
+.toc-anchor[data-suppress] .toc-panel {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-6px);
 }
 
 .guide-why {
@@ -934,7 +964,8 @@ main {
   margin-bottom: 0;
 }
 
-.guide-why code {
+.guide-why code,
+.finding code {
   font-family: var(--mono);
   font-size: 0.86em;
   padding: 0 4px;
@@ -943,9 +974,20 @@ main {
   color: var(--text);
 }
 
-.guide-why strong {
+.guide-why strong,
+.finding strong {
   color: var(--text);
   font-weight: 600;
+}
+
+.finding .explanation p,
+.finding .recommendation p {
+  margin: 0 0 8px;
+}
+
+.finding .explanation p:last-child,
+.finding .recommendation p:last-child {
+  margin-bottom: 0;
 }
 
 .file-pills {
@@ -1405,10 +1447,25 @@ main {
   .col-handle {
     display: none;
   }
+
+  .toc-hotzone {
+    display: none;
+  }
+}
+
+@media (hover: none) {
+  .toc-hotzone {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   #app.rails-ready {
     transition: none;
+  }
+
+  .toc-panel {
+    transition: none;
+    transform: none;
   }
 }

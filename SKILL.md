@@ -172,8 +172,24 @@ git switch, git reset, or git worktree add unless the user asked.
 
    Title: short and specific ("Pin pipeline revisions to SNAPSHOT"), not
    "Core changes". why: 2–5 sentences on why this part exists and what to
-   look at — not a review finding. Blank lines start paragraphs. Markdown
-   bold and code spans render in the Guide aside.
+   look at — not a review finding.
+
+   Format why for the Guide aside (same idea for any other agent-written
+   copy this skill emits). Blank lines start paragraphs. Wrap identifiers,
+   paths, routes, flags, and symbols in Markdown code spans. Use Markdown
+   bold only for a true stress. Those render as mono and strong. No raw
+   HTML. Plain identifiers with no markup stay body text.
+
+   Example why:
+
+   ```
+   This is the behavior change. `POST .../output-model` retargets the
+   pipeline shell to a different finished OUTPUT model and pins that
+   model's latest `SNAPSHOT` on the draft.
+
+   Read `switch_output_model` guards first: under review, building,
+   same model, not OUTPUT.
+   ```
 4. **Build a Guide v1 object** matching the Zod GuideV1 contract (see
    src/contracts.ts and docs/prds/guided-pr-review/). Line content has no
    leading + / - / space. Chapter ids unique kebab-case. Omit source.
