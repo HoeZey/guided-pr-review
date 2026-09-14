@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 blocked_by: []
 blocks: []
 ---
@@ -35,12 +35,12 @@ obvious.
 
 **Acceptance criteria:**
 
-- [ ] A host-backed card with target develop and source feature/foo
+- [x] A host-backed card with target develop and source feature/foo
   projects develop ← feature/foo.
-- [ ] A local card whose saved range is main...feature/one projects
+- [x] A local card whose saved range is main...feature/one projects
   main ← feature/one.
-- [ ] A card without refs or a parseable range omits the range line.
-- [ ] Projection tests do not assert Astro DOM internals.
+- [x] A card without refs or a parseable range omits the range line.
+- [x] Projection tests do not assert Astro DOM internals.
 
 **Blocked by:** none
 

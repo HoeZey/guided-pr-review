@@ -32,6 +32,8 @@ test("projectHomeCards lists every saved review once", () => {
       number: 1027,
       webUrl:
         "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1027",
+      targetRef: "develop",
+      sourceRef: "feature/example",
     },
   });
   const cards = projectHomeCards([local, hosted]);
@@ -57,6 +59,8 @@ test("host-backed Home cards expose owner and repository; local cards do not", (
       number: 1027,
       webUrl:
         "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1027",
+      targetRef: "develop",
+      sourceRef: "feature/example",
     },
   });
   const cards = projectHomeCards([local, hosted]);
@@ -83,6 +87,8 @@ test("host-backed Home cards expose the pull-request web URL; local cards do not
       number: 1027,
       webUrl:
         "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1027",
+      targetRef: "develop",
+      sourceRef: "feature/example",
     },
   });
   const cards = projectHomeCards([local, hosted]);
@@ -93,17 +99,82 @@ test("host-backed Home cards expose the pull-request web URL; local cards do not
   );
 });
 
-test("Home cards keep title and saved range", () => {
+test("host-backed Home cards strip refs/heads from structured refs", () => {
+  const cards = projectHomeCards([
+    summary({
+      id: "pr-1027",
+      title: "Named PR",
+      pullRequest: {
+        provider: "azure-devops",
+        host: "dev.azure.com",
+        repository: {
+          id: "repo-1",
+          owner: "braidteam/BRAID",
+          name: "braid-connection-designer",
+        },
+        number: 1027,
+        webUrl:
+          "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1027",
+        targetRef: "Refs/Heads/develop",
+        sourceRef: "refs/heads/feature/foo",
+      },
+    }),
+  ]);
+  assert.equal(cards[0].range, "develop ← feature/foo");
+});
+
+test("host-backed Home cards show target into source", () => {
+  const cards = projectHomeCards([
+    summary({
+      id: "pr-1027",
+      title: "Named PR",
+      range: "abc...def",
+      pullRequest: {
+        provider: "azure-devops",
+        host: "dev.azure.com",
+        repository: {
+          id: "repo-1",
+          owner: "braidteam/BRAID",
+          name: "braid-connection-designer",
+        },
+        number: 1027,
+        webUrl:
+          "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1027",
+        targetRef: "develop",
+        sourceRef: "feature/foo",
+      },
+    }),
+  ]);
+  assert.equal(cards[0].range, "develop ← feature/foo");
+});
+
+test("local Home cards parse the three-dot range as target into source", () => {
+  const cards = projectHomeCards([
+    summary({ id: "local-1", title: "Local", range: "main...feature/one" }),
+  ]);
+  assert.equal(cards[0].range, "main ← feature/one");
+});
+
+test("Home cards omit the range line without refs or a parseable three-dot range", () => {
+  const cards = projectHomeCards([
+    summary({ id: "a", range: undefined }),
+    summary({ id: "b", range: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }),
+    summary({ id: "c", range: "..." }),
+  ]);
+  assert.deepEqual(
+    cards.map((card) => card.range),
+    [undefined, undefined, undefined],
+  );
+});
+
+test("Home cards keep title", () => {
   const cards = projectHomeCards([
     summary({ id: "local-1", title: "Local", range: "main...feature/one" }),
     summary({ id: "pr-1027", title: "Named PR", range: undefined }),
   ]);
   assert.deepEqual(
-    cards.map((card) => ({ title: card.title, range: card.range })),
-    [
-      { title: "Local", range: "main...feature/one" },
-      { title: "Named PR", range: undefined },
-    ],
+    cards.map((card) => card.title),
+    ["Local", "Named PR"],
   );
 });
 

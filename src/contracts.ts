@@ -257,6 +257,8 @@ export const ReviewSummary = z
           .strict(),
         number: z.number().int(),
         webUrl: z.string(),
+        targetRef: z.string().min(1),
+        sourceRef: z.string().min(1),
       })
       .strict()
       .optional(),
