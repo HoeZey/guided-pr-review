@@ -18,8 +18,8 @@ import {
   guideStops,
   stepGuide,
   parseDiffLayout,
-  parseChapterWidth,
-  serializeChapterWidth,
+  selectGuidePath,
+  shownDiffCounts,
   formatCopy,
 } from "./guide-view.ts";
 
@@ -310,29 +310,31 @@ test("parseDiffLayout keeps a saved Diff mode and falls back per tab", () => {
   assert.equal(parseDiffLayout("nope", "split"), "split");
 });
 
-test("parseChapterWidth restores a saved Guide aside width", () => {
-  assert.equal(parseChapterWidth(360), 360);
+test("selectGuidePath keeps a path that is still in the chapter", () => {
+  const files = [{ path: "a.ts" }, { path: "b.ts" }];
+  assert.equal(selectGuidePath(files, "b.ts", new Set(["a.ts"])), "b.ts");
 });
 
-test("parseChapterWidth uses the Guide aside default when the value is missing", () => {
-  assert.equal(parseChapterWidth(null), 300);
-  assert.equal(parseChapterWidth(undefined), 300);
+test("selectGuidePath uses the first unviewed path when the selection is missing", () => {
+  const files = [{ path: "a.ts" }, { path: "b.ts" }];
+  assert.equal(selectGuidePath(files, null, new Set()), "a.ts");
+  assert.equal(selectGuidePath(files, "gone.ts", new Set(["a.ts"])), "b.ts");
 });
 
-test("parseChapterWidth uses the Guide aside default when the value is invalid", () => {
-  assert.equal(parseChapterWidth("nope"), 300);
-  assert.equal(parseChapterWidth({}), 300);
-  assert.equal(parseChapterWidth(Number.NaN), 300);
+test("selectGuidePath uses the first file when every path is viewed", () => {
+  const files = [{ path: "a.ts" }, { path: "b.ts" }];
+  assert.equal(selectGuidePath(files, null, new Set(["a.ts", "b.ts"])), "a.ts");
+  assert.equal(selectGuidePath([], null, new Set()), null);
 });
 
-test("parseChapterWidth clamps a saved width to the Guide aside min and max", () => {
-  assert.equal(parseChapterWidth(10), 240);
-  assert.equal(parseChapterWidth(9999), 520);
-});
-
-test("serializeChapterWidth round-trips a clamped width", () => {
-  assert.equal(parseChapterWidth(serializeChapterWidth(360)), 360);
-  assert.equal(parseChapterWidth(serializeChapterWidth(10)), 240);
+test("shownDiffCounts omits a side when its count is zero", () => {
+  assert.deepEqual(shownDiffCounts({ additions: 3, deletions: 0 }), { additions: 3 });
+  assert.deepEqual(shownDiffCounts({ additions: 0, deletions: 2 }), { deletions: 2 });
+  assert.deepEqual(shownDiffCounts({ additions: 0, deletions: 0 }), {});
+  assert.deepEqual(shownDiffCounts({ additions: 4, deletions: 1 }), {
+    additions: 4,
+    deletions: 1,
+  });
 });
 
 test("formatCopy renders paragraphs, code, and bold without raw HTML", () => {

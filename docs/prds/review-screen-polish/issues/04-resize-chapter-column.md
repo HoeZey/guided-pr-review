@@ -1,5 +1,5 @@
 ---
-status: done
+status: cancelled
 blocked_by: []
 blocks: []
 ---
@@ -9,6 +9,13 @@ blocks: []
 **Type:** Story
 
 **From PRD:** [Review screen polish](../)
+
+**Status:** cancelled. The PRD chose a fixed Guide chapter column. Files
+rail on Diff and Code Review still resizes. Do not restore a chapter-width
+handle or persist chapter width. localStorage guided-pr-review-rails may
+still hold a leftover chapter key; ignore it.
+
+The original scope is kept below only as history.
 
 **Seam(s):** Existing rail-width preference helpers, extended so the Guide
 chapter column width round-trips like the Files rail. Helper tests, not
@@ -34,11 +41,11 @@ width and have that width survive reload.
 
 **Acceptance criteria:**
 
-- [x] Dragging the chapter column changes its width.
-- [x] Reload restores the last chapter-column width.
-- [x] Helper tests cover parse/serialize of the persisted width, including
+- [ ] Dragging the chapter column changes its width.
+- [ ] Reload restores the last chapter-column width.
+- [ ] Helper tests cover parse/serialize of the persisted width, including
   a missing or invalid value falling back to the current default.
-- [x] No Astro DOM assertions.
+- [ ] No Astro DOM assertions.
 
 **Blocked by:** none
 

@@ -15,8 +15,8 @@ import {
   guideStops,
   stepGuide,
   parseDiffLayout,
-  parseChapterWidth,
-  serializeChapterWidth,
+  selectGuidePath,
+  shownDiffCounts,
   formatCopy,
   type Lined,
   type SplitRow,
@@ -144,7 +144,6 @@ let diffLayout: DiffLayout = "split";
 let splitPct = 0.5;
 let hideUnchanged = false;
 let sidebarPx = 280;
-let chapterPx = 300;
 let viewed = new Set<string>();
 let collapsed = new Set<string>();
 let collapsedDirs = new Set<string>();
@@ -320,7 +319,11 @@ function guideStats(data: Guide) {
 }
 
 function statsHtml(s: { additions: number; deletions: number }) {
-  return `<span class="stats"><span class="add">+${s.additions}</span> <span class="del">−${s.deletions}</span></span>`;
+  const shown = shownDiffCounts(s);
+  const parts: string[] = [];
+  if (shown.additions != null) parts.push(`<span class="add">+${shown.additions}</span>`);
+  if (shown.deletions != null) parts.push(`<span class="del">−${shown.deletions}</span>`);
+  return parts.length ? `<span class="stats">${parts.join(" ")}</span>` : "";
 }
 
 function codeAttrs(line: Lined, lang: string) {
@@ -372,15 +375,11 @@ function persistSplitPct() {
 
 function applyRails() {
   document.documentElement.style.setProperty("--sidebar", `${sidebarPx}px`);
-  document.documentElement.style.setProperty("--chapter", `${chapterPx}px`);
 }
 
 function persistRails() {
   try {
-    localStorage.setItem(
-      RAILS_KEY,
-      JSON.stringify({ sidebar: sidebarPx, chapter: serializeChapterWidth(chapterPx) }),
-    );
+    localStorage.setItem(RAILS_KEY, JSON.stringify({ sidebar: sidebarPx }));
   } catch {
     /* private mode */
   }
@@ -398,10 +397,6 @@ function bindRailHandles(root: HTMLElement) {
         const left = app.getBoundingClientRect().left;
         if (which === "sidebar") {
           sidebarPx = Math.min(520, Math.max(160, ev.clientX - left));
-        } else if (which === "chapter") {
-          const col = handle.closest(".guide-aside");
-          const colLeft = (col ?? app).getBoundingClientRect().left;
-          chapterPx = parseChapterWidth(ev.clientX - colLeft);
         }
         applyRails();
       };
@@ -608,18 +603,14 @@ function renderFilePill(file: FileChange, id: string, chapterId: string, current
 
 function renderSection(chapter: Chapter, index: number, total: number) {
   const sid = sectionId(chapter.id);
-  const chapterHandle = `<button type="button" class="col-handle" data-rail="chapter" aria-label="Resize chapter column"></button>`;
   if (chapter._omitted) {
-    return `<section class="guide-section" id="${esc(sid)}" data-chapter="${esc(chapter.id)}"><div class="guide-aside">${chapterHandle}<h2>Omitted</h2><div class="guide-progress"><button type="button" class="progress-toc" data-toggle-toc>${String(index + 1).padStart(2, "0")} / ${String(total).padStart(2, "0")}</button></div><div class="guide-why">${formatCopy("Binary or unreadable paths.")}</div></div><div class="guide-stage">${renderOmitted(guide?.omitted || [])}</div></section>`;
+    return `<section class="guide-section" id="${esc(sid)}" data-chapter="${esc(chapter.id)}"><div class="guide-aside"><h2>Omitted</h2><div class="guide-progress"><button type="button" class="progress-toc" data-toggle-toc>${String(index + 1).padStart(2, "0")} / ${String(total).padStart(2, "0")}</button></div><div class="guide-why">${formatCopy("Binary or unreadable paths.")}</div></div><div class="guide-stage">${renderOmitted(guide?.omitted || [])}</div></section>`;
   }
   const files = chapter.files || [];
-  const selected =
-    (selectedGuidePath && files.some((file) => file.path === selectedGuidePath) && selectedGuidePath) ||
-    files.find((file) => !viewed.has(file.path))?.path ||
-    files[0]?.path ||
-    null;
   const pills = files
-    .map((file, i) => renderFilePill(file, fileId(chapter.id, i), chapter.id, file.path === selected))
+    .map((file, i) =>
+      renderFilePill(file, fileId(chapter.id, i), chapter.id, file.path === selectedGuidePath),
+    )
     .join("");
   const stage = files
     .map((file, i) => renderFile(file, fileId(chapter.id, i), { stage: true }))
@@ -627,7 +618,7 @@ function renderSection(chapter: Chapter, index: number, total: number) {
   const idx = String(index + 1).padStart(2, "0");
   const tot = String(total).padStart(2, "0");
   const chapterDone = files.length > 0 && files.every((file) => viewed.has(file.path));
-  return `<section class="guide-section" id="${esc(sid)}" data-chapter="${esc(chapter.id)}"><aside class="guide-aside">${chapterHandle}<h2>${esc(chapter.title)}</h2><div class="guide-progress"><button type="button" class="progress-toc" data-toggle-toc>${idx} / ${tot}</button><label class="viewed"><input type="checkbox" data-reviewed-chapter="${esc(chapter.id)}"${chapterDone ? " checked" : ""}> Reviewed</label></div><div class="guide-why">${formatCopy(chapter.why)}</div><div class="file-pills">${pills}</div></aside><div class="guide-stage">${stage}</div></section>`;
+  return `<section class="guide-section" id="${esc(sid)}" data-chapter="${esc(chapter.id)}"><aside class="guide-aside"><h2>${esc(chapter.title)}</h2><div class="guide-progress"><button type="button" class="progress-toc" data-toggle-toc>${idx} / ${tot}</button><label class="viewed"><input type="checkbox" data-reviewed-chapter="${esc(chapter.id)}"${chapterDone ? " checked" : ""}> Reviewed</label></div><div class="guide-why">${formatCopy(chapter.why)}</div><div class="file-pills">${pills}</div></aside><div class="guide-stage">${stage}</div></section>`;
 }
 
 function persistViewed() {
@@ -832,6 +823,7 @@ function render(opts?: { restoreScroll?: boolean }) {
   const selected =
     chapters.find((ch) => ch.id === selectedChapterId) || chapters[0];
   selectedChapterId = selected.id;
+  selectedGuidePath = selectGuidePath(selected.files || [], selectedGuidePath, viewed);
   const rows = diffRows();
   if (!selectedDiffPath || !rows.some((row) => row.path === selectedDiffPath)) {
     selectedDiffPath = rows[0]?.path ?? null;
@@ -897,7 +889,7 @@ function render(opts?: { restoreScroll?: boolean }) {
       : tab === "review"
         ? `<nav aria-label="Code Review">${sideHandle}<div class="nav-label">Code Review</div>${reviewNavSide}</nav>`
         : "";
-  app.innerHTML = `<header><div class="header-bar"><div class="header-left">${BRAND_MARK}${BACK_HOME}<h1 title="${esc(guide.title)}">${esc(guide.title)}</h1></div>${sourceHeader(guide)}<div class="header-actions">${statsHtml(gs)}${display}</div></div>${tabs}</header>${filesRail}<main><div class="main-inner${tab === "guide" ? " is-guide" : ""}">${mainInner}</div></main>${pasteModal()}`;
+  app.innerHTML = `<header><div class="header-bar"><div class="header-left">${BRAND_MARK}${BACK_HOME}<h1 title="${esc(guide.title)}">${esc(guide.title)}</h1>${statsHtml(gs)}</div>${sourceHeader(guide)}<div class="header-actions">${display}</div></div>${tabs}</header>${filesRail}<main><div class="main-inner${tab === "guide" ? " is-guide" : ""}">${mainInner}</div></main>${pasteModal()}`;
   bindChrome(app);
   observeMain();
   requestAnimationFrame(() => app.classList.add("rails-ready"));
@@ -921,8 +913,7 @@ function bindChrome(app: HTMLElement) {
         selectedDiffPath = path;
       } else if (chapterId && guide) {
         const ch = chaptersForNav(guide).find((item) => item.id === chapterId);
-        selectedGuidePath =
-          ch?.files.find((file) => !viewed.has(file.path))?.path || ch?.files[0]?.path || null;
+        selectedGuidePath = selectGuidePath(ch?.files || [], null, viewed);
       }
       const wasToc = tocOpen;
       tocOpen = false;
@@ -1124,10 +1115,12 @@ async function loadActive(force = false): Promise<void> {
   if (switched) {
     hydrateViewed(id);
     if (tab === "diff") collapsed = collapsedOnDiff(viewed, collapsed);
+    selectedGuidePath = null;
   }
   if (switched || !guide.chapters.some((ch) => ch.id === selectedChapterId)) {
     const opened = guide.chapters.find((ch) => ch.open);
     selectedChapterId = opened ? opened.id : guide.chapters[0]?.id ?? null;
+    selectedGuidePath = null;
   }
   render({ restoreScroll: !switched });
 }
@@ -1236,14 +1229,23 @@ export function boot(): void {
   try {
     const rails = JSON.parse(localStorage.getItem(RAILS_KEY) || "null") as {
       sidebar?: number;
-      chapter?: unknown;
     } | null;
     if (rails?.sidebar) sidebarPx = rails.sidebar;
-    chapterPx = parseChapterWidth(rails?.chapter);
   } catch {
     /* ignore */
   }
   applyRails();
+  document.addEventListener(
+    "pointerdown",
+    (event) => {
+      if (!displayOpen) return;
+      const menu = document.querySelector("[data-display-menu]");
+      if (menu?.contains(event.target as Node)) return;
+      displayOpen = false;
+      if (menu instanceof HTMLDetailsElement) menu.open = false;
+    },
+    true,
+  );
   document.addEventListener("keydown", (event) => {
     const tag = (event.target as HTMLElement | null)?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA") return;

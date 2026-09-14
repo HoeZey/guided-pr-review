@@ -10,20 +10,20 @@ commit. These follow-ups are the 14 Sep 2026 screenshot pass.
 ```text
 01 Align chrome type and Linear mode tabs
 03 Round and border Diff and Guide stage cards
-04 Resize and persist the Guide chapter column
+04 Resize and persist the Guide chapter column (cancelled)
 05 Remove the saved-PR column and return via back
 06 Place mode tabs in a Linear tab row
 
 02 Persist Reviews rail per tab (cancelled)
 ```
 
-01, 03, 04, and 05 are parallel-eligible. File overlap is expected.
+01, 03, and 05 are parallel-eligible. File overlap is expected.
 
 ## Status
 
 - [01 Align chrome type and Linear mode tabs](01-align-type-scale.md) — done
 - [02 Persist Reviews rail per Guide, Diff, and Code Review](02-persist-reviews-rail-per-tab.md) — cancelled
 - [03 Round and border Diff and Guide stage cards](03-round-diff-cards.md) — done
-- [04 Resize and persist the Guide chapter column](04-resize-chapter-column.md) — done
+- [04 Resize and persist the Guide chapter column](04-resize-chapter-column.md) — cancelled
 - [05 Remove the saved-PR column and return via back](05-remove-reviews-column.md) — done
 - [06 Place mode tabs in a Linear tab row](06-linear-tab-row.md) — done
