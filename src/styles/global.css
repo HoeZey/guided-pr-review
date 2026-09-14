@@ -551,7 +551,7 @@ main {
 
 .chapter-btn {
   display: grid;
-  grid-template-columns: 22px 1fr;
+  grid-template-columns: 22px minmax(0, 1fr);
   gap: 8px;
   width: 100%;
   padding: 8px 16px;
@@ -586,6 +586,18 @@ main {
 
 .ch-title {
   font-weight: 550;
+}
+
+.toc-panel .chapter-btn {
+  padding: 6px 12px;
+  gap: 6px;
+  grid-template-columns: 18px minmax(0, 1fr);
+}
+
+.toc-panel .ch-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .file-link {
@@ -803,7 +815,49 @@ main {
 }
 
 .toc-group {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
+}
+
+.toc-group:last-child {
+  margin-bottom: 0;
+}
+
+.toc-file {
+  display: block;
+  width: 100%;
+  padding: 3px 12px 3px 28px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.toc-file:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.toc-file[aria-current="true"] {
+  background: var(--accent-dim);
+  color: var(--text);
+}
+
+.toc-file.viewed-link {
+  color: var(--faint);
+}
+
+.toc-file.viewed-link[aria-current="true"] {
+  color: var(--text);
+}
+
+.toc-file-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .toc-group-label {
@@ -862,7 +916,7 @@ main {
   max-height: calc(100vh - var(--header));
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 28px 20px 40px 24px;
+  padding: 28px 20px 40px 44px;
 }
 
 .guide-aside h2 {
@@ -885,6 +939,9 @@ main {
 }
 
 .progress-toc {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -894,7 +951,16 @@ main {
   cursor: pointer;
 }
 
+.progress-toc svg {
+  flex: none;
+  color: var(--faint);
+}
+
 .progress-toc:hover {
+  color: var(--text);
+}
+
+.progress-toc:hover svg {
   color: var(--text);
 }
 
@@ -908,22 +974,76 @@ main {
   top: var(--header);
   bottom: 0;
   z-index: 14;
-  width: 12px;
+  width: 28px;
 }
 
 .toc-hotzone {
   position: absolute;
-  inset: 0;
+  top: 16px;
+  bottom: 16px;
+  left: 0;
+  display: flex;
+  width: 28px;
+  overflow: hidden;
+}
+
+.toc-rail {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 4px 0;
+  margin: 0;
+}
+
+.toc-tick {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.toc-tick::after {
+  content: "";
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--faint);
+  opacity: 0.4;
+}
+
+.toc-tick.is-reviewed::after {
+  background: var(--accent);
+  opacity: 0.85;
+}
+
+.toc-tick[aria-current="true"]::after {
+  width: 6px;
+  height: 6px;
+  background: var(--text);
+  opacity: 1;
+}
+
+.toc-tick.is-reviewed[aria-current="true"]::after {
+  background: var(--accent);
 }
 
 .toc-panel {
   position: absolute;
-  left: 8px;
-  top: 12px;
-  width: min(280px, calc(100vw - 24px));
-  max-height: calc(100vh - var(--header) - 24px);
+  left: 10px;
+  top: 16px;
+  width: min(260px, calc(100vw - 24px));
+  max-height: calc(100% - 32px);
   overflow: auto;
-  padding: 12px 0 16px;
+  padding: 10px 0 12px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--bg-elevated);
@@ -934,12 +1054,16 @@ main {
   transition: opacity 120ms ease, transform 120ms ease;
 }
 
-.toc-anchor:hover .toc-panel,
-.toc-anchor:focus-within .toc-panel,
-#app[data-toc="open"] .toc-panel {
+.toc-anchor:hover:not([data-suppress]) .toc-panel,
+#app[data-toc="open"] .toc-anchor:not([data-suppress]) .toc-panel {
   opacity: 1;
   pointer-events: auto;
   transform: none;
+}
+
+.toc-anchor:hover:not([data-suppress]) .toc-rail,
+#app[data-toc="open"] .toc-anchor:not([data-suppress]) .toc-rail {
+  opacity: 0;
 }
 
 .toc-anchor[data-suppress] .toc-panel {
@@ -1451,11 +1575,29 @@ main {
   .toc-hotzone {
     display: none;
   }
+
+  .toc-anchor {
+    width: 0;
+    pointer-events: none;
+  }
+
+  #app[data-toc="open"] .toc-anchor {
+    pointer-events: auto;
+  }
 }
 
 @media (hover: none) {
   .toc-hotzone {
     display: none;
+  }
+
+  .toc-anchor {
+    width: 0;
+    pointer-events: none;
+  }
+
+  #app[data-toc="open"] .toc-anchor {
+    pointer-events: auto;
   }
 }
 
@@ -1466,6 +1608,5 @@ main {
 
   .toc-panel {
     transition: none;
-    transform: none;
   }
 }
