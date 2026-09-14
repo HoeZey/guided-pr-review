@@ -821,7 +821,10 @@ function homeCardHtml(card: HomeCard): string {
   const range = card.range
     ? `<span class="home-card-range">${esc(card.range)}</span>`
     : "";
-  return `<a class="home-card" href="${esc(reviewPath(card.id))}" data-open-review="${esc(card.id)}"><span class="home-card-title">${esc(card.title)}</span>${badge}${range}</a>`;
+  const ado = card.webUrl
+    ? `<a class="icon-btn ado-link" href="${esc(card.webUrl)}" target="_blank" rel="noreferrer" aria-label="Open in Azure DevOps" title="Open in Azure DevOps">${ADO_MARK}</a>`
+    : "";
+  return `<div class="home-card"><a class="home-card-open" href="${esc(reviewPath(card.id))}" data-open-review="${esc(card.id)}"><span class="home-card-title">${esc(card.title)}</span>${badge}${range}</a>${ado}</div>`;
 }
 
 function renderHome(app: HTMLElement): void {

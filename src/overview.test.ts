@@ -67,6 +67,32 @@ test("host-backed Home cards expose owner and repository; local cards do not", (
   });
 });
 
+test("host-backed Home cards expose the pull-request web URL; local cards do not", () => {
+  const local = summary({ id: "local-1", title: "Local" });
+  const hosted = summary({
+    id: "pr-1027",
+    title: "Named PR",
+    pullRequest: {
+      provider: "azure-devops",
+      host: "dev.azure.com",
+      repository: {
+        id: "repo-1",
+        owner: "braidteam/BRAID",
+        name: "braid-connection-designer",
+      },
+      number: 1027,
+      webUrl:
+        "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1027",
+    },
+  });
+  const cards = projectHomeCards([local, hosted]);
+  assert.equal(cards[0].webUrl, undefined);
+  assert.equal(
+    cards[1].webUrl,
+    "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1027",
+  );
+});
+
 test("Home cards keep title and saved range", () => {
   const cards = projectHomeCards([
     summary({ id: "local-1", title: "Local", range: "main...feature/one" }),
