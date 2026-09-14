@@ -39,8 +39,9 @@ chapter contracts.
   headers, and filename-first truncation so the stage matches Linear density.
 - As a reviewer, I want the brand mark and existing Inter / IBM Plex Mono type
   to remain; chapter title and why copy should keep editorial scale.
-- As a reviewer, I want Guide / Diff / Code Review to read as Linear header
-  mode tabs (text plus selected underline), not a boxed segmented control.
+- As a reviewer, I want Guide / Diff / Code Review to read as Linear
+  Overview / Files / Commits: a tab row under the identity header, plain
+  text, selected accent underline. Not options jammed into the top bar.
 - As a reviewer, I want the Diff (and Guide stage file) to sit in a rounded
   card with its own border, not flush to the pane edge.
 - As a reviewer, I want to drag the Guide chapter column width and have it
@@ -82,12 +83,16 @@ chapter contracts.
   formatter (paragraphs, inline code, bold; no raw HTML). Do not flatten
   why to chrome size. Linear-style phrase-to-diff underlines in why copy
   are not in this PRD.
-- Mode tabs: Guide, Diff, and Code Review sit in the header like Linear
-  Overview / Files / Commits — plain text, selected underline, chrome
-  13px. Not a bordered segmented control.
-- Diff and Guide stage file panels are rounded cards with their own
-  border and elevated background, inset from the pane, matching the
-  Linear Files screenshot from 14 Sep 2026.
+- Mode tabs: Guide, Diff, and Code Review match Linear Overview / Files /
+  Commits. They are a tab row under the identity header (brand, back,
+  title, source, actions stay on the first row). Plain muted text,
+  selected uses the accent underline, not a filled chip, not a boxed
+  segmented control, and not inlined with the title in the top bar.
+  Names stay Guide / Diff / Code Review.
+- Diff and Guide stage: the screenshot's Files panel is one rounded
+  bordered code pane (file head plus body). Per-file rounded cards that
+  are inset from the pane match that when several files exist. Do not
+  leave the code wall full-bleed.
 - The Guide chapter column (aside) is user-resizable, with the same kind
   of drag handle as the Files rail, and the width persists.
 - The saved-PR Reviews column is gone from the review screen. Brand and a
@@ -149,6 +154,7 @@ landed later. Board: [issues](issues/).
 - 03 Round and border Diff and Guide stage cards
 - 04 Resize and persist the Guide chapter column
 - 05 Remove the saved-PR column and return via back
+- 06 Place mode tabs in a Linear tab row (01 put them in the title bar)
 - 02 Persist Reviews rail per tab is cancelled.
 
 ## Success criteria
@@ -161,8 +167,9 @@ landed later. Board: [issues](issues/).
 - File heads stay visible while scrolling that file on Guide and on Diff.
 - File chips, TOC drawer, hunk headers, Files-rail truncation, and type scale
   match the density notes above on a manual pass of the seeded sample guide.
-- Guide / Diff / Code Review are Linear-style header underline tabs at chrome
-  13px.
+- Guide / Diff / Code Review sit in a tab row under the identity header,
+  with an accent underline on the selected tab, matching Linear Overview /
+  Files / Commits. They are not options in the title bar.
 - Diff and Guide stage files read as rounded bordered cards.
 - The Guide chapter column can be resized and the width survives reload.
 - The review screen has no saved-PR column; brand or back returns to Home
