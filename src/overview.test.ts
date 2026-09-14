@@ -313,6 +313,55 @@ test("projectHomeOverview places each live catalog item once by reviewer then au
   );
 });
 
+test("catalog cards say whether a saved Guide already exists", () => {
+  const requested = catalogItem({
+    number: 1101,
+    title: "Needs review",
+    isReviewer: true,
+    isAuthor: false,
+  });
+  const leftover = catalogItem({
+    number: 1102,
+    title: "No guide yet",
+    webUrl:
+      "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1102",
+    isReviewer: true,
+    isAuthor: false,
+  });
+  const overview = projectHomeOverview(
+    [
+      summary({
+        id: "saved-1101",
+        title: "Needs review",
+        syncKey: "azure-devops:dev.azure.com:repo-1:1101",
+        pullRequest: {
+          provider: "azure-devops",
+          host: "dev.azure.com",
+          repository: {
+            id: "repo-1",
+            owner: "braidteam/BRAID",
+            name: "braid-connection-designer",
+          },
+          number: 1101,
+          webUrl:
+            "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1101",
+          targetRef: "develop",
+          sourceRef: "feature/review-me",
+        },
+      }),
+    ],
+    [originSnapshot([requested, leftover])],
+  );
+  const cards = overview.groups.find((group) => group.id === "review-requests")?.cards ?? [];
+  assert.equal(cards.length, 2);
+  assert.equal(cards[0].title, "Needs review");
+  assert.equal(cards[0].hasGuide, true);
+  assert.equal(cards[0].reviewId, "saved-1101");
+  assert.equal(cards[1].title, "No guide yet");
+  assert.equal(cards[1].hasGuide, false);
+  assert.equal(cards[1].reviewId, undefined);
+});
+
 test("every host PR on the overview has a compact owner and repository badge", () => {
   const overview = projectHomeOverview(
     [

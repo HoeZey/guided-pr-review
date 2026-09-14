@@ -12,6 +12,7 @@ export type HomeCard = {
   repository: { owner: string; name: string } | undefined;
   webUrl: string | undefined;
   reviewId: string | undefined;
+  hasGuide: boolean;
 };
 
 export type HomeGroupId =
@@ -66,6 +67,7 @@ export function projectHomeCards(reviews: readonly ReviewSummary[]): HomeCard[] 
       : undefined,
     webUrl: review.pullRequest?.webUrl,
     reviewId: review.id,
+    hasGuide: true,
   }));
 }
 
@@ -92,6 +94,7 @@ function catalogCard(
     },
     webUrl: item.webUrl,
     reviewId: review?.id,
+    hasGuide: Boolean(review?.id),
   };
 }
 

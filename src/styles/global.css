@@ -153,7 +153,7 @@ body {
 
 .home-card {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
   padding: 14px 16px;
   border: 1px solid var(--border);
@@ -163,6 +163,10 @@ body {
 
 .home-card:hover {
   background: var(--bg-hover);
+}
+
+.home-card.is-pending:hover {
+  background: var(--bg-elevated);
 }
 
 .home-card-open {
@@ -175,9 +179,18 @@ body {
   text-decoration: none;
 }
 
+.home-card.is-pending .home-card-open {
+  cursor: default;
+}
+
 .home-card-title {
   font-size: 13px;
   font-weight: 600;
+}
+
+.home-card.is-pending .home-card-title {
+  font-weight: 500;
+  color: var(--muted);
 }
 
 .repo-badge {
@@ -190,6 +203,24 @@ body {
   font-size: 11px;
   color: var(--faint);
   font-family: var(--mono);
+}
+
+.home-card-aside {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.home-card-status {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.home-card-status.is-ready {
+  color: var(--accent);
 }
 
 header {
@@ -342,6 +373,7 @@ header h1 {
 .ado-link,
 .host-link {
   color: inherit;
+  align-self: center;
 }
 
 .ado-mark,
@@ -1051,11 +1083,11 @@ main {
 }
 
 .toc-panel {
-  position: absolute;
-  left: 10px;
-  top: 16px;
-  width: min(260px, calc(100vw - 24px));
-  max-height: calc(100% - 32px);
+  position: fixed;
+  left: 50%;
+  top: calc(var(--header) + 16px);
+  width: min(280px, calc(100vw - 48px));
+  max-height: calc(100vh - var(--header) - 32px);
   overflow: auto;
   padding: 10px 0 12px;
   border: 1px solid var(--border);
@@ -1064,7 +1096,7 @@ main {
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
   opacity: 0;
   pointer-events: none;
-  transform: translateX(-6px);
+  transform: translateX(-50%) translateY(-6px);
   transition: opacity 120ms ease, transform 120ms ease;
 }
 
@@ -1072,7 +1104,7 @@ main {
 #app[data-toc="open"] .toc-anchor:not([data-suppress]) .toc-panel {
   opacity: 1;
   pointer-events: auto;
-  transform: none;
+  transform: translateX(-50%);
 }
 
 .toc-anchor:hover:not([data-suppress]) .toc-rail,
@@ -1083,7 +1115,7 @@ main {
 .toc-anchor[data-suppress] .toc-panel {
   opacity: 0;
   pointer-events: none;
-  transform: translateX(-6px);
+  transform: translateX(-50%) translateY(-6px);
 }
 
 .guide-why {

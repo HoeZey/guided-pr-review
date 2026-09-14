@@ -180,17 +180,6 @@ function revealCurrentToc(): void {
   if (current instanceof HTMLElement) current.scrollIntoView({ block: "nearest" });
 }
 
-function pointerHoldsToc(target: EventTarget | null): boolean {
-  return target instanceof Element && Boolean(target.closest("[data-toc-anchor], [data-toggle-toc]"));
-}
-
-function dismissTocOnPointerAway(event: PointerEvent): void {
-  if (!tocOpen) return;
-  if (event.pointerType !== "mouse" && event.pointerType !== "pen") return;
-  if (pointerHoldsToc(event.target)) return;
-  applyTocOpen(false);
-}
-
 function suppressHoverToc(): void {
   const anchor = document.querySelector("[data-toc-anchor]");
   if (!(anchor instanceof HTMLElement)) return;
@@ -919,11 +908,14 @@ function homeCardHtml(card: HomeCard): string {
   const ado = card.webUrl
     ? `<a class="icon-btn ado-link" href="${esc(card.webUrl)}" target="_blank" rel="noreferrer" aria-label="Open in Azure DevOps" title="Open in Azure DevOps">${ADO_MARK}</a>`
     : "";
+  const status = card.hasGuide
+    ? `<span class="home-card-status is-ready">Guide</span>`
+    : `<span class="home-card-status">No guide</span>`;
   const body = `<span class="home-card-title">${esc(card.title)}</span>${badge}${range}`;
   const open = card.reviewId
     ? `<a class="home-card-open" href="${esc(reviewPath(card.reviewId))}" data-open-review="${esc(card.reviewId)}">${body}</a>`
     : `<div class="home-card-open">${body}</div>`;
-  return `<div class="home-card">${open}${ado}</div>`;
+  return `<div class="home-card${card.hasGuide ? "" : " is-pending"}">${open}<div class="home-card-aside">${status}${ado}</div></div>`;
 }
 
 function formatLastSynced(iso: string): string {
@@ -1114,11 +1106,9 @@ function bindChrome(app: HTMLElement) {
     });
   });
   const tocAnchorEl = app.querySelector("[data-toc-anchor]");
-  tocAnchorEl?.addEventListener("pointerenter", () => revealCurrentToc());
-  tocAnchorEl?.addEventListener("pointerleave", (event) => {
-    if (!(event instanceof PointerEvent)) return;
-    if (event.pointerType !== "mouse" && event.pointerType !== "pen") return;
-    applyTocOpen(false);
+  tocAnchorEl?.addEventListener("pointerenter", () => {
+    applyTocOpen(true);
+    revealCurrentToc();
   });
   app.querySelectorAll("[data-reviewed-chapter]").forEach((input) => {
     input.addEventListener("click", (event) => event.stopPropagation());
@@ -1419,9 +1409,6 @@ export function boot(): void {
     },
     true,
   );
-  document.addEventListener("pointerover", (event) => {
-    if (event instanceof PointerEvent) dismissTocOnPointerAway(event);
-  });
   document.addEventListener("keydown", (event) => {
     const tag = (event.target as HTMLElement | null)?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA") return;

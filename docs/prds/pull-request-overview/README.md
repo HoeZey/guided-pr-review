@@ -70,6 +70,9 @@ Guide only when they want one.
   PRs are a three-dot diff (merge-base of the branches vs head). Azure DevOps
   create-PR dropdowns put source on the left; this product follows the GitHub
   compare widget plus the requested merge_base ← feature reading order.
+  Until Open as Diff, catalog cards without a saved review are not openable.
+  A temporary Guide / No guide text label marks that. Do not spend time on a
+  prettier cue until Open works.
 - Opening a host PR is Diff-first. The waiting agent fetches exact source and
   target commits without checkout, upserts an unchaptered review, and the app
   lands on the Diff tab. No LLM chaptering runs for Open.
@@ -179,6 +182,10 @@ check covers Open landing on Diff, then Generate guide filling the Guide tab.
   overview stale in normal use
 - Multiple concurrent waiting agents — if a single local user runs more than
   one overview session at once
+- Home card Guide presence — replace the temporary Guide / No guide text with
+  a non-text cue (left color bar or equivalent). Do not invent a new status
+  vocabulary; the bar only means a saved Guide exists vs catalog-only. Not
+  before Open as Diff.
 
 ## Success criteria
 
