@@ -8,12 +8,14 @@ From [Pull request overview](../).
 Git-host 01 Open a named ADO PR ───────────────┐
                                               ├── 03 Open selected PR as Diff ── 07 Generate guide on request
 01 Open saved reviews from Home ── 02 Browse current-repo PRs ──┘
+01 also ── 08 Show Home range as target into source (parallel with 02)
                                                                   ├── 04 Refresh outdated and closed PRs
                                                                   └── 05 Add another repository ── 06 Open without a local clone
 ```
 
 Git-host 01 and Overview 01 are parallel-eligible. After Overview 03, issues
-04, 05, and 07 can run in parallel.
+04, 05, and 07 can run in parallel. Overview 08 only needs 01 and is
+parallel with 02.
 
 ## Status
 
@@ -24,3 +26,4 @@ Git-host 01 and Overview 01 are parallel-eligible. After Overview 03, issues
 - [05 Add another repository to the overview](05-add-another-repository.md) — todo
 - [06 Open a PR without a local clone](06-generate-without-local-clone.md) — todo
 - [07 Generate the reading-order guide on request](07-generate-guide-on-request.md) — todo
+- [08 Show Home range as target into source](08-show-home-range-as-target-into-source.md) — todo

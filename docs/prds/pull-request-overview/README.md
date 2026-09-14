@@ -51,12 +51,25 @@ Guide only when they want one.
 - As a reviewer, I want a local-range review to become that pull request once
   a PR is open for the same branch so Home does not keep a Local ranges leftover
   beside the real PR.
+- As a reviewer, I want each Home card to show target ← source (what we merge
+  into, then what is being merged) so a saved range is not an unlabeled
+  three-dot string.
 
 ## Implementation notes
 
 - Home and review are distinct navigation states. A bare skill trigger opens
   Home. An explicit PR, SHA, branch, or range opens its review directly.
-  Home and the brand mark return from a review to the overview.
+  Brand and a compact back control return from a review to Home. The review
+  screen has no saved-PR column; switching PRs is Home. Chrome details live
+  in the polish PRD.
+- Home cards show merge direction as target ← source (base / into on the
+  left, feature / from on the right). Prefer structured targetRef and
+  sourceRef with refs/heads/ stripped. Local ranges fall back to the saved
+  three-dot range parsed as base...head. Do not lead with a merge-base SHA.
+  GitHub compare puts base on the left and compare/head on the right; GitHub
+  PRs are a three-dot diff (merge-base of the branches vs head). Azure DevOps
+  create-PR dropdowns put source on the left; this product follows the GitHub
+  compare widget plus the requested merge_base ← feature reading order.
 - Opening a host PR is Diff-first. The waiting agent fetches exact source and
   target commits without checkout, upserts an unchaptered review, and the app
   lands on the Diff tab. No LLM chaptering runs for Open.
@@ -156,6 +169,7 @@ check covers Open landing on Diff, then Generate guide filling the Guide tab.
 | Refresh | Startup plus manual | Timer; app-owned host polling | Makes freshness explicit and keeps credentials in the agent |
 | Closed saved PRs | Archive without auto-delete | Remove on refresh; leave in live groups | Retains review history without polluting active work |
 | Data model | Catalog separate from reviews; unchaptered Diff reuses hunk shape | Empty placeholder Guides shown as walkthroughs | A host PR can be readable before chaptering without faking Guide copy |
+| Home range order | target ← source (base left) | source → target (ADO create-PR dropdowns); unlabeled A...B | GitHub compare and three-dot PR diffs put the into-branch first; names beat SHAs |
 
 ## Open questions (intentionally deferred)
 
@@ -177,6 +191,8 @@ check covers Open landing on Diff, then Generate guide filling the Guide tab.
 - Every host PR shows a compact owner and repository badge in Home and the
   review header, while structured repository identity round-trips through the
   review and catalog contracts.
+- A Home card range line reads target ← source (into-branch left, incoming
+  branch right), using structured refs when present.
 - Selecting an unopened PR queues one Open action; the waiting agent fetches
   exact commits without checkout, upserts an unchaptered review, and the app
   opens Diff. The Guide tab shows Generate guide, not a walkthrough.
@@ -212,4 +228,11 @@ check covers Open landing on Diff, then Generate guide filling the Guide tab.
 - Grill-me decisions in the planning chat
 - [PRD: Guided PR review](../guided-pr-review/)
 - [PRD: Git-host guided reviews](../git-host-guided-reviews/)
+- [PRD: Review screen polish](../review-screen-polish/) (review chrome; no
+  saved-PR column on the review screen)
+- Linear Files screenshot 14 Sep 2026
+- GitHub: Comparing commits; About comparing branches in pull requests
+  (base left, compare right; three-dot diff)
+- Azure DevOps: Create a pull request (source left / target right on the
+  create form — not used for Home range order)
 - Wayfinder: skipped because the decisions fit one session
