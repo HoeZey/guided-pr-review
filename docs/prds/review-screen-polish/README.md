@@ -98,8 +98,9 @@ chapter contracts.
   compact back control return to Home. Home is the PR switcher. Files /
   chapters rails stay. This supersedes persisting that Reviews rail per
   tab.
-- Header title remains the guide title. Structured owner/repo identity is
-  git-host / overview work, not this PRD.
+- Header title remains the Guide title in full. A host pull request adds only
+  an Azure DevOps or GitHub icon link. Structured owner/repo identity stays
+  git-host / overview work, not this bar.
 - No new MCP tools. No new npm dependencies.
 
 ## Testing / seams

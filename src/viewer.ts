@@ -42,6 +42,7 @@ import {
 const BRAND_MARK = `<a class="brand-link" href="${HOME_PATH}" data-home><img class="brand" src="/logo.svg" width="28" height="28" alt=""></a>`;
 const BACK_HOME = `<a class="back-link icon-btn" href="${HOME_PATH}" data-home aria-label="Back to Home" title="Back to Home"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg></a>`;
 const ADO_MARK = `<svg class="ado-mark" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="#0078D4" d="M0 8.877L2.247 5.91l8.405-3.416V.022l7.37 5.393L2.966 8.338v8.225L0 15.707zm24-4.45v14.651l-5.753 4.9-9.303-3.057v3.056l-5.978-7.416 15.057 1.798V5.415z"/></svg>`;
+const GH_MARK = `<svg class="gh-mark" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>`;
 const ICON_SUN = `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>`;
 const ICON_GEAR = `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`;
 const ICON_SPLIT = `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="2.5" width="5.5" height="11" rx="1.5"/><rect x="9" y="2.5" width="5.5" height="11" rx="1.5"/></svg>`;
@@ -305,14 +306,19 @@ async function paintCode(): Promise<void> {
 
 function sourceHeader(data: Guide): string {
   const src = data.source;
-  if (src?.kind === "pull-request") {
-    const identity = `${esc(src.repository.owner)} / ${esc(src.repository.name)} · PR ${esc(String(src.number))}`;
-    return `<div class="header-source"><span class="meta" title="${identity}">${identity}</span><a class="icon-btn ado-link" href="${esc(src.webUrl)}" target="_blank" rel="noreferrer" aria-label="Open in Azure DevOps" title="Open in Azure DevOps">${ADO_MARK}</a></div>`;
-  }
-  const range = data.range || `${data.base.slice(0, 7)}…${data.head.slice(0, 7)}`;
-  const repo = data.repo ? `${esc(data.repo)} · ` : "";
-  const label = `${repo}${esc(range)}`;
-  return `<div class="header-source"><span class="meta" title="${label}">${label}</span></div>`;
+  if (src?.kind !== "pull-request" || !src.webUrl) return "";
+  const github = src.provider === "github" || /github/i.test(src.host);
+  const label = github ? "Open in GitHub" : "Open in Azure DevOps";
+  return `<a class="icon-btn host-link" href="${esc(src.webUrl)}" target="_blank" rel="noreferrer" aria-label="${label}" title="${label}">${github ? GH_MARK : ADO_MARK}</a>`;
+}
+
+function syncHeaderHeight(): void {
+  const header = document.querySelector("#app > header");
+  if (!(header instanceof HTMLElement)) return;
+  document.documentElement.style.setProperty(
+    "--header",
+    `${Math.round(header.getBoundingClientRect().height)}px`,
+  );
 }
 
 function countLines(lines: DiffLine[] | undefined) {
@@ -931,6 +937,7 @@ function renderHome(app: HTMLElement): void {
   delete app.dataset.toc;
   app.innerHTML = `<header><div class="header-bar"><div class="header-left">${BRAND_MARK}<h1>Home</h1></div><div class="header-actions"><button type="button" class="ghost" data-open-paste>Add</button>${themeBtn}</div></div></header><main class="home-main"><div class="main-inner">${list}</div></main>${pasteModal()}`;
   bindChrome(app);
+  syncHeaderHeight();
 }
 
 async function navigate(path: string): Promise<void> {
@@ -1013,11 +1020,12 @@ function render(opts?: { restoreScroll?: boolean }) {
     tab === "guide"
       ? `<aside class="toc-anchor" data-toc-anchor><div class="toc-hotzone"><div class="toc-rail" aria-label="Guide files">${toc.rail}</div></div><nav class="toc-panel" id="guide-toc" aria-label="Guide sections"><div class="nav-label">Sections</div>${toc.nav}</nav></aside>`
       : "";
-  app.innerHTML = `<header><div class="header-bar"><div class="header-left">${BRAND_MARK}${BACK_HOME}<h1 title="${esc(guide.title)}">${esc(guide.title)}</h1>${statsHtml(gs)}</div>${sourceHeader(guide)}<div class="header-actions">${display}</div></div>${tabs}</header>${filesRail}<main><div class="main-inner${tab === "guide" ? " is-guide" : ""}">${mainInner}</div></main>${tocAnchor}${pasteModal()}`;
+  app.innerHTML = `<header><div class="header-bar"><div class="header-left">${BRAND_MARK}${BACK_HOME}<h1>${esc(guide.title)}</h1>${statsHtml(gs)}</div><div class="header-actions">${sourceHeader(guide)}${display}</div></div>${tabs}</header>${filesRail}<main><div class="main-inner${tab === "guide" ? " is-guide" : ""}">${mainInner}</div></main>${tocAnchor}${pasteModal()}`;
   if (tab === "guide") applyTocOpen(tocOpen);
   else applyTocOpen(false);
   bindChrome(app);
   observeMain();
+  syncHeaderHeight();
   requestAnimationFrame(() => app.classList.add("rails-ready"));
   if (opts?.restoreScroll) {
     document.querySelector("main")?.scrollTo(0, top);
@@ -1405,6 +1413,7 @@ export function boot(): void {
   window.addEventListener("popstate", () => {
     void loadActive(true);
   });
+  window.addEventListener("resize", () => syncHeaderHeight());
   void loadActive();
   setInterval(() => {
     void loadActive();
