@@ -6,6 +6,7 @@ import {
   listReviews,
   removeReview,
   setActive,
+  upsertReviewFromTool,
 } from "./store.ts";
 
 const PROTOCOL = "2024-11-05";
@@ -20,13 +21,20 @@ function schema(zodSchema: unknown): Record<string, unknown> {
 const TOOL_DEFS = [
   {
     name: "list_reviews",
-    description: "List saved guided reviews and the active id.",
+    description:
+      "List saved guided reviews, the active id, and pull-request provenance when present.",
     inputSchema: schema(tools.list_reviews.input),
   },
   {
     name: "add_review",
-    description: "Add a Guide v1 payload and make it active.",
+    description: "Add a Guide v1 payload as a new snapshot and make it active.",
     inputSchema: schema(tools.add_review.input),
+  },
+  {
+    name: "upsert_review",
+    description:
+      "Upsert a pull-request Guide v1 by provider, host, repository, and PR number.",
+    inputSchema: schema(tools.upsert_review.input),
   },
   {
     name: "remove_review",
@@ -63,6 +71,10 @@ async function callTool(
     case "add_review": {
       const input = tools.add_review.input.parse(args);
       return addReviewFromTool(input);
+    }
+    case "upsert_review": {
+      const input = tools.upsert_review.input.parse(args);
+      return upsertReviewFromTool(input);
     }
     case "remove_review": {
       const input = tools.remove_review.input.parse(args);

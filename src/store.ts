@@ -4,8 +4,10 @@ import { fileURLToPath } from "node:url";
 import {
   emptyStore,
   GuideV1,
+  pullRequestSyncKey,
   StoreV1,
   type ListReviewsOutput,
+  type ReviewRecord,
 } from "./contracts.ts";
 
 const root = join(fileURLToPath(new URL(".", import.meta.url)), "..");
@@ -48,21 +50,46 @@ async function writeStore(next: StoreV1): Promise<void> {
   cache = parsed;
 }
 
-export async function listReviews(): Promise<ListReviewsOutput> {
-  const store = await readStore();
+function unwrapGuide(body: unknown): GuideV1 {
+  return GuideV1.parse(
+    body && typeof body === "object" && "guide" in body
+      ? (body as { guide: unknown }).guide
+      : body,
+  );
+}
+
+function toSummary(record: ReviewRecord): ListReviewsOutput["reviews"][number] {
+  const source = record.guide.source;
+  if (!source) {
+    return {
+      id: record.id,
+      title: record.guide.title,
+      range: record.guide.range,
+      addedAt: record.addedAt,
+    };
+  }
   return {
-    activeId: store.activeId,
-    reviews: store.reviews.map((r) => ({
-      id: r.id,
-      title: r.guide.title,
-      range: r.guide.range,
-      addedAt: r.addedAt,
-    })),
+    id: record.id,
+    title: record.guide.title,
+    range: record.guide.range,
+    addedAt: record.addedAt,
+    syncKey: pullRequestSyncKey(source),
+    sourceCommit: source.sourceCommit,
+    pullRequest: {
+      provider: source.provider,
+      host: source.host,
+      repository: {
+        id: source.repository.id,
+        owner: source.repository.owner,
+        name: source.repository.name,
+      },
+      number: source.number,
+      webUrl: source.webUrl,
+    },
   };
 }
 
-export async function addReview(input: unknown): Promise<{ id: string }> {
-  const { guide } = { guide: GuideV1.parse(input) };
+async function appendActive(guide: GuideV1): Promise<{ id: string }> {
   const store = await readStore();
   const id = crypto.randomUUID();
   store.reviews.push({
@@ -75,15 +102,50 @@ export async function addReview(input: unknown): Promise<{ id: string }> {
   return { id };
 }
 
+export async function listReviews(): Promise<ListReviewsOutput> {
+  const store = await readStore();
+  return {
+    activeId: store.activeId,
+    reviews: store.reviews.map(toSummary),
+  };
+}
+
+export async function addReview(input: unknown): Promise<{ id: string }> {
+  return appendActive(GuideV1.parse(input));
+}
+
 export async function addReviewFromTool(
   body: unknown,
 ): Promise<{ id: string }> {
-  const parsed = GuideV1.parse(
-    body && typeof body === "object" && "guide" in body
-      ? (body as { guide: unknown }).guide
-      : body,
+  return addReview(unwrapGuide(body));
+}
+
+export async function upsertReview(input: unknown): Promise<{ id: string }> {
+  const guide = GuideV1.parse(input);
+  if (!guide.source) {
+    throw Object.assign(new Error("upsert_review requires pull-request source"), {
+      status: 400,
+    });
+  }
+  const key = pullRequestSyncKey(guide.source);
+  const store = await readStore();
+  const found = store.reviews.find(
+    (review) =>
+      review.guide.source && pullRequestSyncKey(review.guide.source) === key,
   );
-  return addReview(parsed);
+  if (found) {
+    found.guide = guide;
+    store.activeId = found.id;
+    await writeStore(store);
+    return { id: found.id };
+  }
+  return appendActive(guide);
+}
+
+export async function upsertReviewFromTool(
+  body: unknown,
+): Promise<{ id: string }> {
+  return upsertReview(unwrapGuide(body));
 }
 
 export async function removeReview(id: string): Promise<{ ok: true }> {

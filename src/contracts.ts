@@ -68,6 +68,58 @@ export const Omitted = z
   })
   .strict();
 
+const Sha = z.string().regex(/^[0-9a-f]{40}$/i);
+
+export function isAzureDevOpsHost(host: string): boolean {
+  const normalized = host.toLowerCase();
+  return (
+    normalized === "dev.azure.com" || normalized.endsWith(".visualstudio.com")
+  );
+}
+
+export const AzureDevOpsProviderContext = z
+  .object({
+    kind: z.literal("azure-devops"),
+    project: z.string().min(1),
+    firstComparingIteration: z.number().int(),
+    secondComparingIteration: z.number().int(),
+    changes: z.record(
+      z.string(),
+      z.object({ changeTrackingId: z.number().int() }).strict(),
+    ),
+  })
+  .strict();
+
+export const ProviderContext = z.discriminatedUnion("kind", [
+  AzureDevOpsProviderContext,
+]);
+
+export const PullRequestSource = z
+  .object({
+    kind: z.literal("pull-request"),
+    provider: z.literal("azure-devops"),
+    host: z
+      .string()
+      .min(1)
+      .refine(isAzureDevOpsHost, { message: "unsupported git host" }),
+    repository: z
+      .object({
+        id: z.string().min(1),
+        owner: z.string().min(1),
+        name: z.string().min(1),
+        webUrl: z.string().url(),
+      })
+      .strict(),
+    number: z.number().int().positive(),
+    webUrl: z.string().url(),
+    sourceRef: z.string().min(1),
+    targetRef: z.string().min(1),
+    sourceCommit: Sha,
+    targetCommit: Sha,
+    providerContext: ProviderContext,
+  })
+  .strict();
+
 export const GuideV1 = z
   .object({
     version: z.literal(1),
@@ -81,6 +133,7 @@ export const GuideV1 = z
     deletions: z.number().int().min(0).optional(),
     chapters: z.array(Chapter).min(1),
     omitted: z.array(Omitted).optional(),
+    source: PullRequestSource.optional(),
   })
   .strict();
 
@@ -88,6 +141,12 @@ export type GuideV1 = z.infer<typeof GuideV1>;
 export type Chapter = z.infer<typeof Chapter>;
 export type FileChange = z.infer<typeof FileChange>;
 export type Hunk = z.infer<typeof Hunk>;
+export type PullRequestSource = z.infer<typeof PullRequestSource>;
+export type AzureDevOpsProviderContext = z.infer<typeof AzureDevOpsProviderContext>;
+
+export function pullRequestSyncKey(source: PullRequestSource): string {
+  return `${source.provider}:${source.host}:${source.repository.id}:${source.number}`;
+}
 
 export const ReviewRecord = z
   .object({
@@ -114,6 +173,24 @@ export const ReviewSummary = z
     title: z.string(),
     range: z.string().optional(),
     addedAt: z.string(),
+    syncKey: z.string().optional(),
+    sourceCommit: z.string().optional(),
+    pullRequest: z
+      .object({
+        provider: z.literal("azure-devops"),
+        host: z.string(),
+        repository: z
+          .object({
+            id: z.string(),
+            owner: z.string(),
+            name: z.string(),
+          })
+          .strict(),
+        number: z.number().int(),
+        webUrl: z.string(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
@@ -128,6 +205,10 @@ export const tools = {
       .strict(),
   },
   add_review: {
+    input: z.object({ guide: GuideV1 }).strict(),
+    output: z.object({ id: z.string() }).strict(),
+  },
+  upsert_review: {
     input: z.object({ guide: GuideV1 }).strict(),
     output: z.object({ id: z.string() }).strict(),
   },

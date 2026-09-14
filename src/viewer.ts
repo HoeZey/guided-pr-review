@@ -63,6 +63,18 @@ type Guide = {
   deletions?: number;
   chapters: Chapter[];
   omitted?: { path: string; reason: string; note?: string }[];
+  source?: {
+    kind: string;
+    provider: string;
+    host: string;
+    repository: { id: string; owner: string; name: string; webUrl: string };
+    number: number;
+    webUrl: string;
+    sourceRef: string;
+    targetRef: string;
+    sourceCommit: string;
+    targetCommit: string;
+  };
 };
 
 type Chapter = {
@@ -228,6 +240,17 @@ async function paintCode(): Promise<void> {
       /* leave escaped text */
     }
   }
+}
+
+function sourceHeader(data: Guide): string {
+  const src = data.source;
+  if (src?.kind === "pull-request") {
+    const identity = `${esc(src.repository.owner)} / ${esc(src.repository.name)} · PR ${esc(String(src.number))}`;
+    return `<span class="meta">${identity}</span><a class="ado-link" href="${esc(src.webUrl)}" target="_blank" rel="noreferrer">Open in ADO</a>`;
+  }
+  const range = data.range || `${data.base.slice(0, 7)}…${data.head.slice(0, 7)}`;
+  const repo = data.repo ? `${esc(data.repo)} · ` : "";
+  return `<span class="meta">${repo}${esc(range)}</span>`;
 }
 
 function countLines(lines: DiffLine[] | undefined) {
@@ -731,8 +754,6 @@ function render(opts?: { restoreScroll?: boolean }) {
     selectedDiffPath = rows[0]?.path ?? null;
   }
   const gs = guideStats(guide);
-  const range = guide.range || `${guide.base.slice(0, 7)}…${guide.head.slice(0, 7)}`;
-  const repo = guide.repo ? `${esc(guide.repo)} · ` : "";
   const nextTheme = currentTheme() === "dark" ? "light" : "dark";
   const themeLabel = nextTheme === "dark" ? "Dark" : "Light";
 
@@ -783,7 +804,7 @@ function render(opts?: { restoreScroll?: boolean }) {
     tab === "diff"
       ? `<nav aria-label="Files">${sideHandle}<div class="nav-label">Files</div>${fileNav}</nav>`
       : "";
-  app.innerHTML = `<header>${BRAND_MARK}<h1>${esc(guide.title)}</h1>${tabs}<span class="meta">${repo}${esc(range)}</span><div class="header-actions">${statsHtml(gs)}${display}</div></header><nav aria-label="Reviews">${reviewsHandle}${reviewsToggle}<div class="reviews-pane"><div class="nav-label"><span>Reviews</span><button type="button" class="ghost" data-open-paste>Add</button></div><div class="review-list">${reviewNav}</div></div></nav>${filesRail}<main><div class="main-inner${tab === "guide" ? " is-guide" : ""}">${mainInner}</div></main>${pasteModal()}`;
+  app.innerHTML = `<header>${BRAND_MARK}<h1>${esc(guide.title)}</h1>${tabs}${sourceHeader(guide)}<div class="header-actions">${statsHtml(gs)}${display}</div></header><nav aria-label="Reviews">${reviewsHandle}${reviewsToggle}<div class="reviews-pane"><div class="nav-label"><span>Reviews</span><button type="button" class="ghost" data-open-paste>Add</button></div><div class="review-list">${reviewNav}</div></div></nav>${filesRail}<main><div class="main-inner${tab === "guide" ? " is-guide" : ""}">${mainInner}</div></main>${pasteModal()}`;
   bindChrome(app);
   observeMain();
   requestAnimationFrame(() => app.classList.add("rails-ready"));
