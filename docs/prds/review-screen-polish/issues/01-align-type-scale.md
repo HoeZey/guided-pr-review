@@ -4,43 +4,50 @@ blocked_by: []
 blocks: []
 ---
 
-# Align Code Review and Home type with Guide density
+# Align chrome type and Linear mode tabs
 
 **Type:** Story
 
 **From PRD:** [Review screen polish](../)
 
-**Seam(s):** CSS type scale on Home and Code Review; no new store contract.
-Manual browser check. Do not assert Astro DOM or pixel values in tests.
+**Seam(s):** CSS type scale and header tabs; existing copy formatter for
+why. Manual browser check. Do not assert Astro DOM or pixel values in tests.
 
-**What it delivers:** A reviewer reading Home or Code Review sees the same
-editorial and chrome sizes as Guide, so finding titles, axis heads, and
-meta lines do not jump when switching tabs.
+**What it delivers:** A reviewer sees Guide / Diff / Code Review as Linear
+header tabs (text, selected underline) at Display-menu size. Chapter title
+stays editorial. Why copy stays formatted body. Home and Code Review chrome
+match, so sizes do not jump across surfaces.
 
 **Scope (in):**
 
-- Match Code Review axis heads to Guide chapter title scale (about 26px /
-  -0.04em).
-- Match finding title, explanation, and recommendation to Guide why / body
-  scale (about 15px / 1.55 muted for prose; chrome 13px; meta 11px mono).
-- Match Home card title and range/badge to review chrome and meta, not a
-  third scale.
-- Keep Inter for UI and IBM Plex Mono for code, paths, and counts.
+- Default UI chrome (tabs, Display menu, buttons, chips, rails, Home meta)
+  uses the Display menu item size (13px).
+- Guide / Diff / Code Review are plain header text tabs with a selected
+  underline, not a boxed segmented control.
+- Chapter title stays about 26px / -0.04em.
+- Why / description stays formatted (paragraphs, inline code, bold) at
+  about 15px / 1.55 muted.
+- Code Review axis heads match chapter title scale. Finding title and prose
+  match why scale. Severity, classification, path, and reference stay
+  meta-sized (11px mono).
+- Home card titles match review chrome; badge stays meta.
 
 **Scope (out):**
 
-- A new Shiki theme or token contrast pass
-- Changing Guide chapter or why sizes that already match the density notes
-- Sticky heads, collapse, or highlight bugs
+- Linear phrase-to-diff underlines inside why copy
+- A new Shiki theme
+- Rounded Diff cards, chapter-column resize, removing the Reviews column
 
 **Touches:** UI, CSS
 
 **Acceptance criteria:**
 
-- [ ] Code Review axis headings match Guide chapter title scale on a manual
-  pass of the seeded sample plus a published outcome.
-- [ ] Finding cards use Guide why/body scale for title and prose; severity,
-  classification, path, and reference stay meta-sized.
+- [ ] Guide / Diff / Code Review read as Linear header underline tabs at
+  chrome 13px on a manual pass.
+- [ ] Chapter title stays editorial scale; why copy still renders formatted
+  paragraphs, inline code, and bold at body scale.
+- [ ] Code Review axis heads match chapter title; finding cards use why
+  scale; meta stays meta-sized.
 - [ ] Home card titles match review chrome; range and repository badge match
   header meta.
 - [ ] No automated Astro DOM or pixel assertions.

@@ -1,5 +1,5 @@
 ---
-status: todo
+status: cancelled
 blocked_by: []
 blocks: []
 ---
@@ -9,6 +9,12 @@ blocks: []
 **Type:** Story
 
 **From PRD:** [Review screen polish](../)
+
+**Status:** cancelled. The signed follow-up removes the saved-PR Reviews
+column from the review screen. Home (brand or compact back) is the
+switcher. Do not persist that rail per tab.
+
+The original scope is kept below only as history.
 
 **Seam(s):** parseReviewsRails and serializeReviewsRails, extended so each
 main tab has its own open/collapsed rail. Existing Guide collapsed / Diff
@@ -38,16 +44,10 @@ or Code Review is remembered for that tab only, including across reload.
 
 **Acceptance criteria:**
 
-- [ ] Collapsing Reviews on Guide leaves Diff and Code Review as they were.
-- [ ] Collapsing Reviews on Code Review leaves Guide and Diff as they were.
-- [ ] Reload restores each tab's last rail state.
-- [ ] Old guide/diff-only JSON still loads; missing Code Review key uses the
-  Diff default (open).
-- [ ] Helper tests cover parse/serialize, including the legacy string form.
-  No Astro DOM assertions.
+- [ ] Cancelled — do not implement.
 
 **Blocked by:** none
 
 **Blocks:** none
 
-**Parallel-eligible:** yes
+**Parallel-eligible:** n/a
