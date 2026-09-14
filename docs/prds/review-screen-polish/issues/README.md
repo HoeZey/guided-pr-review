@@ -22,6 +22,6 @@ commit. These follow-ups are the 14 Sep 2026 screenshot pass.
 
 - [01 Align chrome type and Linear mode tabs](01-align-type-scale.md) — done
 - [02 Persist Reviews rail per Guide, Diff, and Code Review](02-persist-reviews-rail-per-tab.md) — cancelled
-- [03 Round and border Diff and Guide stage cards](03-round-diff-cards.md) — todo
+- [03 Round and border Diff and Guide stage cards](03-round-diff-cards.md) — done
 - [04 Resize and persist the Guide chapter column](04-resize-chapter-column.md) — done
 - [05 Remove the saved-PR column and return via back](05-remove-reviews-column.md) — done

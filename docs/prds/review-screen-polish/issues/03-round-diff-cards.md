@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 blocked_by: []
 blocks: []
 ---
@@ -32,11 +32,11 @@ inset from the pane, like the Linear Files screenshot.
 
 **Acceptance criteria:**
 
-- [ ] Diff files read as rounded bordered cards, not flush to the pane, on
+- [x] Diff files read as rounded bordered cards, not flush to the pane, on
   a manual pass of Unified and Split.
-- [ ] Guide stage files match that card treatment.
-- [ ] File heads still stick while scrolling that file.
-- [ ] No automated Astro DOM or pixel assertions.
+- [x] Guide stage files match that card treatment.
+- [x] File heads still stick while scrolling that file.
+- [x] No automated Astro DOM or pixel assertions.
 
 **Blocked by:** none
 
