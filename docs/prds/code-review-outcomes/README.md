@@ -1,5 +1,5 @@
 ---
-status: signed
+status: in_progress
 ---
 
 # PRD: Code-review outcomes
@@ -86,7 +86,7 @@ head.
           "startLine": 1
         },
         "reference": {
-          "source": "docs/prds/guided-pr-review/",
+          "source": "docs/prds/done/guided-pr-review/",
           "quote": "File heads stick while scrolling that file."
         }
       }
@@ -188,7 +188,7 @@ status, and returns empty when no outcomes exist. Do not test Astro internals.
 
 ## References
 
-- [PRD: Guided PR review](../guided-pr-review/)
+- [PRD: Guided PR review](../done/guided-pr-review/)
 - [PRD: Git-host guided reviews](../git-host-guided-reviews/)
 - Grill decisions in the planning chat (independent producer, personal tool
   GitHub repo as product source, append-only history, stale warning, explicit

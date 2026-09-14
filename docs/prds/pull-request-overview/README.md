@@ -233,9 +233,9 @@ check covers Open landing on Diff, then Generate guide filling the Guide tab.
 ## References
 
 - Grill-me decisions in the planning chat
-- [PRD: Guided PR review](../guided-pr-review/)
+- [PRD: Guided PR review](../done/guided-pr-review/)
 - [PRD: Git-host guided reviews](../git-host-guided-reviews/)
-- [PRD: Review screen polish](../review-screen-polish/) (review chrome; no
+- [PRD: Review screen polish](../done/review-screen-polish/) (review chrome; no
   saved-PR column on the review screen)
 - Linear Files screenshot 14 Sep 2026
 - GitHub: Comparing commits; About comparing branches in pull requests

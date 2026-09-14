@@ -1,5 +1,5 @@
 ---
-status: signed
+status: in_progress
 ---
 
 # PRD: Git-host guided reviews
@@ -133,6 +133,6 @@ A reviewer can turn one selected or named ADO PR into a guide and post a comment
 ## References
 
 - Grill-me decisions in the planning chat (agent-first ADO ingest, current-repo reviewer PRs, azcli relay, right-side comments, deleted-line file fallback, no PAT in the app, provider-neutral preparation for GitHub)
-- [PRD: Guided PR review](../guided-pr-review/) (renderer, Guide v1, store, MCP tools)
+- [PRD: Guided PR review](../done/guided-pr-review/) (renderer, Guide v1, store, MCP tools)
 - [PRD: Pull request overview](../pull-request-overview/) (queue discovery, selection, refresh, and cross-repository caches)
 - Wayfinder: skipped (one session, decisions closed)

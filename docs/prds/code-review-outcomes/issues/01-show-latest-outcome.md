@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 blocked_by: []
 blocks:
   - 02-browse-outcome-history
@@ -45,17 +45,17 @@ tests
 
 **Acceptance criteria:**
 
-- [ ] A valid outcome publishes only to the requested existing review.
-- [ ] An independent /code-review run automatically publishes when one guide
+- [x] A valid outcome publishes only to the requested existing review.
+- [x] An independent /code-review run automatically publishes when one guide
   matches its fixed base and head.
-- [ ] The Code Review tab displays Standards and Spec independently without an
+- [x] The Code Review tab displays Standards and Spec independently without an
   aggregate verdict.
-- [ ] Counts are derived from finding arrays, including zero.
-- [ ] Every required finding field renders; optional fields render only when
+- [x] Counts are derived from finding arrays, including zero.
+- [x] Every required finding field renders; optional fields render only when
   present.
-- [ ] Invalid payloads, unknown fields, and unknown review ids are rejected.
-- [ ] Existing Store v1 JSON loads with empty outcome history.
-- [ ] No matching guide or unavailable localhost app leaves the normal chat
+- [x] Invalid payloads, unknown fields, and unknown review ids are rejected.
+- [x] Existing Store v1 JSON loads with empty outcome history.
+- [x] No matching guide or unavailable localhost app leaves the normal chat
   report intact and explains that nothing was attached.
 
 **Blocked by:** none

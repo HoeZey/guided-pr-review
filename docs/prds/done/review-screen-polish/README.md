@@ -1,5 +1,5 @@
 ---
-status: in_progress
+status: implemented
 ---
 
 # PRD: Review screen polish
@@ -69,7 +69,7 @@ chapter contracts.
   that.
 - Remaining density polish from the Linear gap pass: file chips are one-row
   (name and path left, +/- right, current file filled); the Guide Sections
-  list shows a file-tick rail, nested chapter files (titles ellipsize), fills the Guide viewport and scrolls, opens on hover or 01/04;
+  list shows a file-tick rail, nested chapter files (titles ellipsize), centered over the Guide viewport and scrolls, opens on hover or 01/04;
   unified hunk headers are muted
   separators; Diff Files rail ellipsizes directories, not filenames; chapter
   title about 26px / -0.04em; why copy 13px / 1.55 muted; code 12px /
@@ -199,5 +199,5 @@ landed later. Board: [issues](issues/).
 - Grill-me decisions in the planning chat (separate PRD, include polish, keep
   landed chrome, confirmed helper seams)
 - [PRD: Guided PR review](../guided-pr-review/) (chaptering, store, MCP)
-- [PRD: Pull request overview](../pull-request-overview/)
-- [PRD: Git-host guided reviews](../git-host-guided-reviews/)
+- [PRD: Pull request overview](../../pull-request-overview/)
+- [PRD: Git-host guided reviews](../../git-host-guided-reviews/)

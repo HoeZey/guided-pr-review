@@ -16,5 +16,5 @@ done. Pull request discovery and selection live in the
 
 ## Status
 
-- [01 Open a named Azure DevOps PR as a guided review](01-open-named-ado-pr.md) — todo
+- [01 Open a named Azure DevOps PR as a guided review](01-open-named-ado-pr.md) — done
 - [02 Post Azure DevOps comments from reviewed lines](02-post-ado-comments.md) — todo

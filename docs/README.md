@@ -6,11 +6,11 @@ vertical slices.
 
 ## Features
 
-- [Guided PR review](prds/guided-pr-review/) — in progress
-- [Review screen polish](prds/review-screen-polish/) — in progress
-- [Git-host guided reviews](prds/git-host-guided-reviews/) — signed
+- [Guided PR review](prds/done/guided-pr-review/) — implemented
+- [Review screen polish](prds/done/review-screen-polish/) — implemented
+- [Git-host guided reviews](prds/git-host-guided-reviews/) — in progress
 - [Pull request overview](prds/pull-request-overview/) — in progress
-- [Code-review outcomes](prds/code-review-outcomes/) — signed
+- [Code-review outcomes](prds/code-review-outcomes/) — in progress
 
 ## Status
 

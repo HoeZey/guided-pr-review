@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 blocked_by: []
 blocks:
   - 02-post-ado-comments
@@ -44,22 +44,22 @@ tests
 
 **Acceptance criteria:**
 
-- [ ] Naming an active ADO PR in the current repository adds one guide for its
+- [x] Naming an active ADO PR in the current repository adds one guide for its
   reported source and target SHAs.
-- [ ] The operation fetches commits without checkout or changing the user's
+- [x] The operation fetches commits without checkout or changing the user's
   current branch.
-- [ ] Repeating the same PR and source SHA keeps one stable review id.
-- [ ] A changed source SHA refreshes that review instead of adding a duplicate.
-- [ ] Pull-request identity round-trips through Guide and Store parsing; local
+- [x] Repeating the same PR and source SHA keeps one stable review id.
+- [x] A changed source SHA refreshes that review instead of adding a duplicate.
+- [x] Pull-request identity round-trips through Guide and Store parsing; local
   guides without source still load.
-- [ ] ADO-specific iteration and change data exist only in the ADO
+- [x] ADO-specific iteration and change data exist only in the ADO
   providerContext variant.
-- [ ] Unsupported hosts return a clear error and do not alter the store.
-- [ ] The review header identifies the repository and PR and links to ADO.
-- [ ] Upserting a PR whose source branch matches an unsourced local range
+- [x] Unsupported hosts return a clear error and do not alter the store.
+- [x] The review header identifies the repository and PR and links to ADO.
+- [x] Upserting a PR whose source branch matches an unsourced local range
   (or uniquely shares a ticket key after a rename) keeps that local review
   id and attaches provenance; two locals with the same ticket stay separate.
-- [ ] Store and contract checks run without live comment writes.
+- [x] Store and contract checks run without live comment writes.
 
 **Blocked by:** none
 
