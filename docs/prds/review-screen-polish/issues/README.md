@@ -12,6 +12,7 @@ commit. These follow-ups are the 14 Sep 2026 screenshot pass.
 03 Round and border Diff and Guide stage cards
 04 Resize and persist the Guide chapter column
 05 Remove the saved-PR column and return via back
+06 Place mode tabs in a Linear tab row
 
 02 Persist Reviews rail per tab (cancelled)
 ```
@@ -25,3 +26,4 @@ commit. These follow-ups are the 14 Sep 2026 screenshot pass.
 - [03 Round and border Diff and Guide stage cards](03-round-diff-cards.md) — done
 - [04 Resize and persist the Guide chapter column](04-resize-chapter-column.md) — done
 - [05 Remove the saved-PR column and return via back](05-remove-reviews-column.md) — done
+- [06 Place mode tabs in a Linear tab row](06-linear-tab-row.md) — done

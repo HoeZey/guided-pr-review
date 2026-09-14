@@ -810,7 +810,7 @@ function renderHome(app: HTMLElement): void {
   app.dataset.view = "home";
   delete app.dataset.tab;
   delete app.dataset.reviews;
-  app.innerHTML = `<header><div class="header-left">${BRAND_MARK}<h1>Home</h1></div><div class="header-actions"><button type="button" class="ghost" data-open-paste>Add</button>${themeBtn}</div></header><main class="home-main"><div class="main-inner">${list}</div></main>${pasteModal()}`;
+  app.innerHTML = `<header><div class="header-bar"><div class="header-left">${BRAND_MARK}<h1>Home</h1></div><div class="header-actions"><button type="button" class="ghost" data-open-paste>Add</button>${themeBtn}</div></div></header><main class="home-main"><div class="main-inner">${list}</div></main>${pasteModal()}`;
   bindChrome(app);
 }
 
@@ -897,7 +897,7 @@ function render(opts?: { restoreScroll?: boolean }) {
       : tab === "review"
         ? `<nav aria-label="Code Review">${sideHandle}<div class="nav-label">Code Review</div>${reviewNavSide}</nav>`
         : "";
-  app.innerHTML = `<header><div class="header-left">${BRAND_MARK}${BACK_HOME}<h1 title="${esc(guide.title)}">${esc(guide.title)}</h1>${tabs}</div>${sourceHeader(guide)}<div class="header-actions">${statsHtml(gs)}${display}</div></header>${filesRail}<main><div class="main-inner${tab === "guide" ? " is-guide" : ""}">${mainInner}</div></main>${pasteModal()}`;
+  app.innerHTML = `<header><div class="header-bar"><div class="header-left">${BRAND_MARK}${BACK_HOME}<h1 title="${esc(guide.title)}">${esc(guide.title)}</h1></div>${sourceHeader(guide)}<div class="header-actions">${statsHtml(gs)}${display}</div></div>${tabs}</header>${filesRail}<main><div class="main-inner${tab === "guide" ? " is-guide" : ""}">${mainInner}</div></main>${pasteModal()}`;
   bindChrome(app);
   observeMain();
   requestAnimationFrame(() => app.classList.add("rails-ready"));
