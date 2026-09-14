@@ -1,5 +1,5 @@
 ---
-status: signed
+status: in_progress
 ---
 
 # PRD: Review screen polish
@@ -105,6 +105,17 @@ chip layout, and type scale are one manual browser check on Guide and Diff.
   louder than Linear after density work
 - Wheel/keyboard extras beyond existing j/k — if file walking still feels
   jumpy after sticky heads land
+
+## Follow-up (after Home and Code Review)
+
+Original success criteria still describe Guide and Diff density. These
+slices do not reopen that contract; they extend chrome to surfaces that
+landed later. Board: [issues](issues/).
+
+- Align Code Review and Home type with Guide density (finding titles and
+  axis heads currently sit on a different scale than chapter / why).
+- Persist Reviews rail open/collapsed per Guide, Diff, and Code Review.
+  Today Code Review shares Diff's rail bit.
 
 ## Success criteria
 
