@@ -25,6 +25,7 @@ import {
 } from "./guide-view.ts";
 import { findingCounts, selectReviewOutcome } from "./review-outcome.ts";
 import type {
+  CatalogSnapshot,
   ReviewSummary,
   SpecFinding,
   StandardsFinding,
@@ -32,7 +33,7 @@ import type {
 } from "./contracts.ts";
 import {
   HOME_PATH,
-  projectHomeCards,
+  projectHomeOverview,
   resolveOverviewView,
   reviewPath,
   type HomeCard,
@@ -132,6 +133,7 @@ type Tab = "guide" | "diff" | "review";
 
 let highlighter: Highlighter | null = null;
 let reviews: ReviewSummary[] = [];
+let catalog: CatalogSnapshot[] = [];
 let view: OverviewView = { kind: "home" };
 let activeId: string | null = null;
 let guide: Guide | null = null;
@@ -917,19 +919,45 @@ function homeCardHtml(card: HomeCard): string {
   const ado = card.webUrl
     ? `<a class="icon-btn ado-link" href="${esc(card.webUrl)}" target="_blank" rel="noreferrer" aria-label="Open in Azure DevOps" title="Open in Azure DevOps">${ADO_MARK}</a>`
     : "";
-  return `<div class="home-card"><a class="home-card-open" href="${esc(reviewPath(card.id))}" data-open-review="${esc(card.id)}"><span class="home-card-title">${esc(card.title)}</span>${badge}${range}</a>${ado}</div>`;
+  const body = `<span class="home-card-title">${esc(card.title)}</span>${badge}${range}`;
+  const open = card.reviewId
+    ? `<a class="home-card-open" href="${esc(reviewPath(card.reviewId))}" data-open-review="${esc(card.reviewId)}">${body}</a>`
+    : `<div class="home-card-open">${body}</div>`;
+  return `<div class="home-card">${open}${ado}</div>`;
+}
+
+function formatLastSynced(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return `${date.toISOString().slice(0, 16).replace("T", " ")} UTC`;
 }
 
 function renderHome(app: HTMLElement): void {
   observer?.disconnect();
   stopGuideSpy();
-  const cards = projectHomeCards(reviews);
+  const overview = projectHomeOverview(reviews, catalog);
   const nextTheme = currentTheme() === "dark" ? "light" : "dark";
   const themeLabel = nextTheme === "dark" ? "Dark" : "Light";
   const themeBtn = `<button type="button" class="icon-btn square-toggle theme-toggle" data-theme-next="${nextTheme}" aria-pressed="${currentTheme() === "light" ? "true" : "false"}" aria-label="Switch to ${themeLabel} theme" title="Switch to ${themeLabel} theme">${ICON_SUN}</button>`;
-  const list = cards.length
-    ? `<div class="home-grid">${cards.map(homeCardHtml).join("")}</div>`
-    : `<p class="boot">No reviews yet. Add one from MCP or paste JSON.</p>`;
+  const synced = overview.lastSynced
+    ? `<p class="home-meta">Last synced ${esc(formatLastSynced(overview.lastSynced))}</p>`
+    : "";
+  const errors = overview.catalogErrors
+    .map(
+      (entry) =>
+        `<p class="home-error">${esc(entry.owner)} / ${esc(entry.name)}: ${esc(entry.message)}</p>`,
+    )
+    .join("");
+  const groups = overview.groups
+    .map(
+      (group) =>
+        `<section class="home-group"><h2>${esc(group.title)}</h2><div class="home-grid">${group.cards.map(homeCardHtml).join("")}</div></section>`,
+    )
+    .join("");
+  const list =
+    groups || errors || synced
+      ? `${synced}${errors}${groups}`
+      : `<p class="boot">No reviews yet. Add one from MCP or paste JSON.</p>`;
   document.title = "Home · Guided review";
   app.dataset.view = "home";
   delete app.dataset.tab;
@@ -1201,11 +1229,14 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 
 async function loadActive(force = false): Promise<void> {
   const pathAtStart = location.pathname;
-  const listed = await fetchJson<{ reviews: ReviewSummary[]; activeId: string | null }>(
-    "/api/reviews",
-  );
+  const listed = await fetchJson<{
+    reviews: ReviewSummary[];
+    activeId: string | null;
+    catalog?: CatalogSnapshot[];
+  }>("/api/reviews");
   if (location.pathname !== pathAtStart) return;
   reviews = listed.reviews;
+  catalog = listed.catalog ?? [];
   const nextView = resolveOverviewView(
     location.pathname,
     reviews.map((row) => row.id),

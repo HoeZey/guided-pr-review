@@ -11,6 +11,7 @@ import {
   listReviews,
   publishReviewOutcome,
   removeReview,
+  replaceCatalog,
   resetStoreCache,
   setActive,
   upsertReview,
@@ -462,5 +463,101 @@ test("list_reviews exposes guide base and head", async () => {
     const listed = await listReviews();
     assert.equal(listed.reviews[0].base, sample.base);
     assert.equal(listed.reviews[0].head, sample.head);
+  });
+});
+
+function catalogRepository() {
+  return {
+    provider: "azure-devops" as const,
+    host: "dev.azure.com",
+    id: "repo-1",
+    owner: "braidteam/BRAID",
+    name: "braid-connection-designer",
+    webUrl: "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer",
+  };
+}
+
+function catalogPullRequest(overrides: Record<string, unknown> = {}) {
+  return {
+    provider: "azure-devops" as const,
+    host: "dev.azure.com",
+    repository: {
+      id: "repo-1",
+      owner: "braidteam/BRAID",
+      name: "braid-connection-designer",
+      webUrl: "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer",
+    },
+    number: 1101,
+    title: "Please review",
+    webUrl:
+      "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1101",
+    sourceRef: "refs/heads/feature/review-me",
+    targetRef: "refs/heads/develop",
+    sourceCommit: SOURCE_A,
+    targetCommit: TARGET,
+    isDraft: false,
+    status: "active" as const,
+    author: "Ada",
+    isReviewer: true,
+    isAuthor: false,
+    updatedAt: "2026-09-14T11:00:00.000Z",
+    ...overrides,
+  };
+}
+
+test("replace_catalog persists the current origin repository and a fake host snapshot", async () => {
+  await withStore(async () => {
+    const syncedAt = "2026-09-14T12:00:00.000Z";
+    const result = await replaceCatalog({
+      origin: true,
+      repository: catalogRepository(),
+      syncedAt,
+      pullRequests: [catalogPullRequest()],
+    });
+    assert.deepEqual(result, { ok: true });
+    const listed = await listReviews();
+    assert.equal(listed.reviews.length, 0);
+    assert.deepEqual(listed.repositories, [{ ...catalogRepository(), origin: true }]);
+    assert.equal(listed.catalog.length, 1);
+    assert.equal(listed.catalog[0].syncedAt, syncedAt);
+    assert.equal(listed.catalog[0].error, undefined);
+    assert.equal(listed.catalog[0].pullRequests[0].number, 1101);
+    assert.equal(listed.catalog[0].pullRequests[0].isReviewer, true);
+  });
+});
+
+test("replace_catalog never deletes a saved guide", async () => {
+  await withStore(async () => {
+    const saved = await addReview(sample);
+    await replaceCatalog({
+      origin: true,
+      repository: catalogRepository(),
+      syncedAt: "2026-09-14T12:00:00.000Z",
+      pullRequests: [],
+    });
+    const listed = await listReviews();
+    assert.equal(listed.reviews.length, 1);
+    assert.equal(listed.reviews[0].id, saved.id);
+    assert.equal(listed.reviews[0].title, "One");
+    const got = await getReview(saved.id);
+    assert.equal(got.guide.title, "One");
+  });
+});
+
+test("a failed catalog replacement records an isolated error and keeps saved reviews", async () => {
+  await withStore(async () => {
+    const saved = await addReview(sample);
+    await replaceCatalog({
+      origin: true,
+      repository: catalogRepository(),
+      error: "Azure DevOps returned 401",
+    });
+    const listed = await listReviews();
+    assert.equal(listed.reviews.length, 1);
+    assert.equal(listed.reviews[0].id, saved.id);
+    assert.equal(listed.catalog[0].error, "Azure DevOps returned 401");
+    assert.equal(listed.catalog[0].syncedAt, undefined);
+    assert.deepEqual(listed.catalog[0].pullRequests, []);
+    assert.equal(listed.repositories[0].origin, true);
   });
 });

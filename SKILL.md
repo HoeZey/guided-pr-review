@@ -24,11 +24,68 @@ Skill root is the directory that contains this SKILL.md (this git repo).
 
 - Named Azure DevOps PR URL or numeric id → **Named ADO PR** (upsert_review).
 - Explicit SHA, branch, or git range → **Local range** (add_review).
-- Neither → **Home**. Ensure the instance is up. Open http://localhost:8765/.
-  Do not call add_review or upsert_review.
+- Neither → **Home**. Sync current-origin PR metadata, then open
+  http://localhost:8765/. Do not chapter a guide. Do not call add_review or
+  upsert_review.
 
 Do not switch the user's working tree on either review path. Do not git checkout,
 git switch, git reset, or git worktree add unless the user asked.
+
+## Home
+
+A bare skill trigger syncs current-origin PR metadata and opens Home. No guide
+is generated until the reviewer selects a named PR, SHA, branch, or range.
+
+1. **Ensure the instance is up** (same as Local range step 5). Do not start a
+   second process if port 8765 is already taken.
+
+2. **Read origin** (same host rules as Named ADO PR step 1). Parse organization,
+   project, repository name, owner, host, and repo web URL.
+
+   If origin is not Azure DevOps: open http://localhost:8765/. Tell the user
+   catalog sync needs an Azure DevOps origin. Do not call replace_catalog,
+   add_review, or upsert_review.
+
+3. **Authenticate** (same as Named ADO PR step 3).
+
+4. **Resolve the origin repository.** repo_repository action get, project and
+   repositoryNameOrId from origin. Read repository.id and webUrl. Owner is
+   org/project. Host is never ssh.dev.azure.com.
+
+5. **List relationship metadata** with repo_pull_request action list,
+   repositoryId, project, status Active, top 100:
+
+   - created_by_me true
+   - i_am_reviewer true
+
+   Union by pullRequestId. A PR in the authored list is isAuthor. A PR in the
+   reviewer list is isReviewer. Keep an item when it is an active non-draft
+   review request or the user is the author (including the user's active
+   drafts). Drop reviewer-only drafts; they are not review requests.
+
+6. **Fill refs and commits.** The list payload is trimmed. For each kept PR,
+   repo_pull_request action get with repositoryId, pullRequestId, project
+   (includeChangedFiles false). Read title, isDraft, status, createdBy display
+   name, sourceRefName, targetRefName, url, lastMergeSourceCommit.commitId,
+   lastMergeTargetCommit.commitId, and a timestamp (closedDate or
+   creationDate). If a SHA is missing, skip that PR rather than inventing one.
+   If one get fails, skip that PR and continue.
+
+7. **Push the snapshot.** tools/call name replace_catalog. origin true.
+   repository is provider azure-devops plus host, id, owner, name, webUrl.
+   syncedAt is the current UTC ISO timestamp. pullRequests use status
+   active / completed / abandoned, boolean isDraft / isReviewer / isAuthor,
+   and the 40-character source and target commits. HTTP equivalent: PUT
+   http://localhost:8765/api/catalog with the same JSON body.
+
+   If repository get or both list calls fail: still call replace_catalog with
+   origin true, the repository identity you have, error as a short message, and
+   no pullRequests. That records an isolated catalog failure and keeps saved
+   guides.
+
+8. **Open Home.** http://localhost:8765/. Do not call add_review or
+   upsert_review. Do not chapter. Do not open a review URL. Leave the server
+   running.
 
 ## Named ADO PR
 
@@ -226,14 +283,18 @@ git switch, git reset, or git worktree add unless the user asked.
 - No LLM inside the app.
 - Do not implement product code in the repo under review.
 - Do not post ADO comments from this skill (a later story).
-- Do not invent a live host catalog, relationship grouping, or multi-repo
-  Home until those overview stories.
+- Do not chapter or upsert from a bare Home trigger. Catalog sync is
+  replace_catalog only.
+- Do not add a second repository, Refresh, Open Diff, or Generate guide from
+  this path (later overview stories).
 
 ## MCP tools
 
-- list_reviews → { reviews, activeId }. Review rows include base and head,
-  and may include syncKey, sourceCommit, and pullRequest (provider, host,
-  repository, number, webUrl).
+- list_reviews → { reviews, activeId, repositories, catalog }. Review rows
+  include base and head, and may include syncKey, sourceCommit, and
+  pullRequest (provider, host, repository, number, webUrl).
+- replace_catalog { origin, repository, syncedAt?, error?, pullRequests } →
+  { ok: true } — current-origin catalog snapshot. Never deletes saved reviews.
 - add_review { guide } → { id } — new snapshot (local ranges).
 - upsert_review { guide } → { id } — stable id for a named ADO PR.
 - publish_review_outcome { reviewId, outcome } → { id }
@@ -241,5 +302,5 @@ git switch, git reset, or git worktree add unless the user asked.
 - get_review { id } → { guide, outcomes }
 - set_active { id } → { activeId }
 
-Bare http://localhost:8765/ is Home. An explicit add or upsert opens
-http://localhost:8765/reviews/{id}.
+Bare http://localhost:8765/ is Home after catalog sync. An explicit add or
+upsert opens http://localhost:8765/reviews/{id}.

@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { ReviewSummary } from "./contracts.ts";
-import { HOME_PATH, projectHomeCards, resolveOverviewView, reviewPath } from "./overview.ts";
+import type { CatalogPullRequest, CatalogSnapshot, ReviewSummary } from "./contracts.ts";
+import {
+  HOME_PATH,
+  projectHomeCards,
+  projectHomeOverview,
+  resolveOverviewView,
+  reviewPath,
+} from "./overview.ts";
 
 function summary(overrides: Partial<ReviewSummary> = {}): ReviewSummary {
   return {
@@ -207,4 +213,242 @@ test("reviewPath is the URL an explicit target opens and a reload preserves", ()
     reviewId: "pr-1027",
   });
   assert.deepEqual(resolveOverviewView(HOME_PATH, ["pr-1027"]), { kind: "home" });
+});
+
+const SHA_A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const SHA_B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+function catalogItem(overrides: Partial<CatalogPullRequest> = {}): CatalogPullRequest {
+  return {
+    provider: "azure-devops",
+    host: "dev.azure.com",
+    repository: {
+      id: "repo-1",
+      owner: "braidteam/BRAID",
+      name: "braid-connection-designer",
+      webUrl: "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer",
+    },
+    number: 1101,
+    title: "Please review",
+    webUrl:
+      "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1101",
+    sourceRef: "refs/heads/feature/review-me",
+    targetRef: "refs/heads/develop",
+    sourceCommit: SHA_A,
+    targetCommit: SHA_B,
+    isDraft: false,
+    status: "active",
+    author: "Ada",
+    isReviewer: true,
+    isAuthor: false,
+    updatedAt: "2026-09-14T11:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function originSnapshot(
+  pullRequests: CatalogPullRequest[],
+  extra: Partial<CatalogSnapshot> = {},
+): CatalogSnapshot {
+  return {
+    provider: "azure-devops",
+    host: "dev.azure.com",
+    repository: {
+      id: "repo-1",
+      owner: "braidteam/BRAID",
+      name: "braid-connection-designer",
+      webUrl: "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer",
+    },
+    syncedAt: "2026-09-14T12:00:00.000Z",
+    pullRequests,
+    ...extra,
+  };
+}
+
+test("projectHomeOverview places each live catalog item once by reviewer then author", () => {
+  const requested = catalogItem({
+    number: 1101,
+    title: "Needs review",
+    isReviewer: true,
+    isAuthor: false,
+    isDraft: false,
+  });
+  const draft = catalogItem({
+    number: 1102,
+    title: "My draft",
+    webUrl:
+      "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1102",
+    isReviewer: false,
+    isAuthor: true,
+    isDraft: true,
+  });
+  const both = catalogItem({
+    number: 1103,
+    title: "Mine and assigned",
+    webUrl:
+      "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1103",
+    isReviewer: true,
+    isAuthor: true,
+    isDraft: false,
+  });
+  const overview = projectHomeOverview([], [originSnapshot([requested, draft, both])]);
+  assert.deepEqual(
+    overview.groups.map((group) => ({
+      id: group.id,
+      title: group.title,
+      titles: group.cards.map((card) => card.title),
+    })),
+    [
+      {
+        id: "review-requests",
+        title: "Review requests",
+        titles: ["Needs review", "Mine and assigned"],
+      },
+      {
+        id: "authored-by-me",
+        title: "Authored by me",
+        titles: ["My draft"],
+      },
+    ],
+  );
+});
+
+test("every host PR on the overview has a compact owner and repository badge", () => {
+  const overview = projectHomeOverview(
+    [
+      summary({
+        id: "saved-pr",
+        title: "Saved PR",
+        pullRequest: {
+          provider: "azure-devops",
+          host: "dev.azure.com",
+          repository: {
+            id: "repo-1",
+            owner: "braidteam/BRAID",
+            name: "braid-connection-designer",
+          },
+          number: 1027,
+          webUrl:
+            "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1027",
+          targetRef: "develop",
+          sourceRef: "feature/example",
+        },
+      }),
+    ],
+    [
+      originSnapshot([
+        catalogItem({ isReviewer: true, isAuthor: false }),
+        catalogItem({
+          number: 1102,
+          title: "My draft",
+          webUrl:
+            "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1102",
+          isReviewer: false,
+          isAuthor: true,
+          isDraft: true,
+        }),
+      ]),
+    ],
+  );
+  const hostCards = overview.groups.flatMap((group) => group.cards);
+  assert.equal(hostCards.length, 3);
+  for (const card of hostCards) {
+    assert.deepEqual(card.repository, {
+      owner: "braidteam/BRAID",
+      name: "braid-connection-designer",
+    });
+  }
+});
+
+test("successful catalog replacement exposes Last synced", () => {
+  const overview = projectHomeOverview(
+    [],
+    [originSnapshot([catalogItem()], { syncedAt: "2026-09-14T12:00:00.000Z" })],
+  );
+  assert.equal(overview.lastSynced, "2026-09-14T12:00:00.000Z");
+  assert.deepEqual(overview.catalogErrors, []);
+});
+
+test("a failed catalog snapshot reports an isolated error and keeps saved reviews", () => {
+  const local = summary({ id: "local-1", title: "Local" });
+  const hosted = summary({
+    id: "pr-1027",
+    title: "Named PR",
+    syncKey: "azure-devops:dev.azure.com:repo-1:1027",
+    pullRequest: {
+      provider: "azure-devops",
+      host: "dev.azure.com",
+      repository: {
+        id: "repo-1",
+        owner: "braidteam/BRAID",
+        name: "braid-connection-designer",
+      },
+      number: 1027,
+      webUrl:
+        "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1027",
+      targetRef: "develop",
+      sourceRef: "feature/example",
+    },
+  });
+  const overview = projectHomeOverview(
+    [local, hosted],
+    [
+      originSnapshot([], {
+        syncedAt: undefined,
+        error: "Azure DevOps returned 401",
+      }),
+    ],
+  );
+  assert.deepEqual(overview.catalogErrors, [
+    {
+      owner: "braidteam/BRAID",
+      name: "braid-connection-designer",
+      message: "Azure DevOps returned 401",
+    },
+  ]);
+  assert.deepEqual(
+    overview.groups.map((group) => ({
+      id: group.id,
+      titles: group.cards.map((card) => card.title),
+    })),
+    [
+      { id: "other-saved-prs", titles: ["Named PR"] },
+      { id: "local-ranges", titles: ["Local"] },
+    ],
+  );
+});
+
+test("an empty catalog keeps saved guides visible", () => {
+  const local = summary({ id: "local-1", title: "Local" });
+  const hosted = summary({
+    id: "pr-1027",
+    title: "Named PR",
+    pullRequest: {
+      provider: "azure-devops",
+      host: "dev.azure.com",
+      repository: {
+        id: "repo-1",
+        owner: "braidteam/BRAID",
+        name: "braid-connection-designer",
+      },
+      number: 1027,
+      webUrl:
+        "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1027",
+      targetRef: "develop",
+      sourceRef: "feature/example",
+    },
+  });
+  const overview = projectHomeOverview([local, hosted], []);
+  assert.equal(overview.lastSynced, undefined);
+  assert.deepEqual(overview.catalogErrors, []);
+  assert.deepEqual(
+    overview.groups.map((group) => ({
+      id: group.id,
+      titles: group.cards.map((card) => card.title),
+    })),
+    [
+      { id: "other-saved-prs", titles: ["Named PR"] },
+      { id: "local-ranges", titles: ["Local"] },
+    ],
+  );
 });

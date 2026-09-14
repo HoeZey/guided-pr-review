@@ -7,6 +7,9 @@ import {
   GuideV1,
   pullRequestSyncKey,
   StoreV1,
+  tools,
+  type CatalogSnapshot,
+  type ConfiguredRepository,
   type ListReviewsOutput,
   type PullRequestSource,
   type ReviewRecord,
@@ -154,12 +157,72 @@ async function appendActive(guide: GuideV1): Promise<{ id: string }> {
   return { id };
 }
 
+function repositoryKey(repository: {
+  provider: string;
+  host: string;
+  id: string;
+}): string {
+  return `${repository.provider}:${repository.host}:${repository.id}`;
+}
+
+function snapshotKey(snapshot: CatalogSnapshot): string {
+  return repositoryKey({
+    provider: snapshot.provider,
+    host: snapshot.host,
+    id: snapshot.repository.id,
+  });
+}
+
 export async function listReviews(): Promise<ListReviewsOutput> {
   const store = await readStore();
   return {
     activeId: store.activeId,
     reviews: store.reviews.map(toSummary),
+    repositories: store.repositories,
+    catalog: store.catalog,
   };
+}
+
+export async function replaceCatalog(input: unknown): Promise<{ ok: true }> {
+  const parsed = tools.replace_catalog.input.parse(input);
+  const store = await readStore();
+  const key = repositoryKey(parsed.repository);
+  const configured: ConfiguredRepository = {
+    ...parsed.repository,
+    origin: parsed.origin,
+  };
+  store.repositories = store.repositories.filter(
+    (repository) => repositoryKey(repository) !== key,
+  );
+  if (parsed.origin) {
+    store.repositories = store.repositories.map((repository) => ({
+      ...repository,
+      origin: false,
+    }));
+  }
+  store.repositories.push(configured);
+  const previous = store.catalog.find((snapshot) => snapshotKey(snapshot) === key);
+  const snapshot: CatalogSnapshot = {
+    provider: parsed.repository.provider,
+    host: parsed.repository.host,
+    repository: {
+      id: parsed.repository.id,
+      owner: parsed.repository.owner,
+      name: parsed.repository.name,
+      webUrl: parsed.repository.webUrl,
+    },
+    pullRequests: parsed.error ? previous?.pullRequests ?? [] : parsed.pullRequests,
+  };
+  if (parsed.error) {
+    snapshot.error = parsed.error;
+    if (previous?.syncedAt) snapshot.syncedAt = previous.syncedAt;
+  } else if (parsed.syncedAt) {
+    snapshot.syncedAt = parsed.syncedAt;
+  }
+  store.catalog = store.catalog.filter((entry) => snapshotKey(entry) !== key);
+  store.catalog.push(snapshot);
+  await writeStore(store);
+  return { ok: true };
 }
 
 export async function addReview(input: unknown): Promise<{ id: string }> {

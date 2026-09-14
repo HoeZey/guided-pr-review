@@ -117,6 +117,35 @@ body {
   overflow: auto;
 }
 
+.home-meta,
+.home-error {
+  margin: 0 0 12px;
+  font-size: 12px;
+}
+
+.home-meta {
+  color: var(--muted);
+}
+
+.home-error {
+  color: var(--removed-text);
+}
+
+.home-group {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 22px;
+}
+
+.home-group h2 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .home-grid {
   display: grid;
   gap: 10px;

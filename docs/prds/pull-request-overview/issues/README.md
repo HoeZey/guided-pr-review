@@ -20,7 +20,7 @@ parallel with 02.
 ## Status
 
 - [01 Open saved reviews from Home](01-open-saved-reviews-from-home.md) — done
-- [02 Browse current-repository PRs by relationship](02-browse-current-repository-prs.md) — todo
+- [02 Browse current-repository PRs by relationship](02-browse-current-repository-prs.md) — done
 - [03 Open the selected PR as Diff](03-open-selected-pr-as-diff.md) — todo
 - [04 Refresh outdated and closed PRs](04-refresh-outdated-and-closed-prs.md) — todo
 - [05 Add another repository to the overview](05-add-another-repository.md) — todo
