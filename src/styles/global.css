@@ -80,6 +80,14 @@ body {
   grid-template-columns: var(--reviews-collapsed) 1fr;
 }
 
+#app[data-tab="review"] {
+  grid-template-columns: var(--reviews) var(--sidebar) 1fr;
+}
+
+#app[data-tab="review"][data-reviews="collapsed"] {
+  grid-template-columns: var(--reviews-collapsed) var(--sidebar) 1fr;
+}
+
 .boot,
 .err {
   grid-column: 1 / -1;
@@ -610,6 +618,7 @@ main {
   padding-left: calc(22px + var(--tree-depth, 0) * 12px);
 }
 
+
 .tree-dir {
   display: flex;
   align-items: center;
@@ -625,6 +634,121 @@ main {
   cursor: pointer;
   min-width: 0;
 }
+
+.axis-count {
+  color: var(--faint);
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.nav-empty,
+.outcome-empty {
+  padding: 8px 16px;
+  color: var(--muted);
+  max-width: 62ch;
+}
+
+.outcome-empty {
+  padding: 0;
+}
+
+.outcome-empty h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.outcome-section {
+  scroll-margin-top: 8px;
+  padding-bottom: 32px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.outcome-section:last-of-type {
+  border-bottom: 0;
+}
+
+.axis-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.finding {
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  padding: 12px 14px;
+}
+
+.finding-meta {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.severity,
+.classification {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.severity-major {
+  color: var(--removed-text);
+}
+
+.severity-minor {
+  color: var(--muted);
+}
+
+.severity-nit {
+  color: var(--faint);
+}
+
+.classification {
+  color: var(--accent);
+}
+
+.finding h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.finding .explanation {
+  margin: 0;
+  max-width: 62ch;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.finding .recommendation,
+.finding .location,
+.finding .reference {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  max-width: 62ch;
+}
+
+.finding .location {
+  font-family: var(--mono);
+}
+
+.finding-label {
+  color: var(--faint);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 10px;
+  margin-right: 6px;
+}
+
 
 .tree-dir:hover {
   color: var(--text);
@@ -1195,7 +1319,9 @@ main {
   #app,
   #app[data-reviews="collapsed"],
   #app[data-tab="guide"],
-  #app[data-tab="guide"][data-reviews="collapsed"] {
+  #app[data-tab="guide"][data-reviews="collapsed"],
+  #app[data-tab="review"],
+  #app[data-tab="review"][data-reviews="collapsed"] {
     grid-template-columns: 1fr;
     grid-template-rows: var(--header) auto auto 1fr;
   }

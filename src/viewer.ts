@@ -23,6 +23,8 @@ import {
   type DiffLayout,
   type FileTreeNode,
 } from "./guide-view.ts";
+import { findingCounts, selectReviewOutcome } from "./review-outcome.ts";
+import type { SpecFinding, StandardsFinding, StoredOutcome } from "./contracts.ts";
 
 const BRAND_MARK = `<img class="brand" src="/logo.svg" width="28" height="28" alt="">`;
 const ADO_MARK = `<svg class="ado-mark" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="#0078D4" d="M0 8.877L2.247 5.91l8.405-3.416V.022l7.37 5.393L2.966 8.338v8.225L0 15.707zm24-4.45v14.651l-5.753 4.9-9.303-3.057v3.056l-5.978-7.416 15.057 1.798V5.415z"/></svg>`;
@@ -116,17 +118,22 @@ type ReviewSummary = {
   title: string;
   range?: string;
   addedAt: string;
+  base?: string;
+  head?: string;
 };
+
+type Tab = "guide" | "diff" | "review";
 
 let highlighter: Highlighter | null = null;
 let reviews: ReviewSummary[] = [];
 let activeId: string | null = null;
 let guide: Guide | null = null;
+let outcomes: StoredOutcome[] = [];
 let selectedChapterId: string | null = null;
 let pasteOpen = false;
 let observer: IntersectionObserver | null = null;
 let lastPayloadKey = "";
-let tab: "guide" | "diff" = "guide";
+let tab: Tab = "guide";
 let guideLayout: DiffLayout = "unified";
 let diffLayout: DiffLayout = "split";
 let splitPct = 0.5;
@@ -138,6 +145,7 @@ let collapsed = new Set<string>();
 let collapsedDirs = new Set<string>();
 let selectedDiffPath: string | null = null;
 let selectedGuidePath: string | null = null;
+let selectedOutcomeSection: string | null = null;
 let guideReviewsCollapsed = true;
 let diffReviewsCollapsed = false;
 let tocOpen = false;
@@ -547,6 +555,48 @@ function renderOmitted(items: NonNullable<Guide["omitted"]>) {
   return `<div class="prose"><h2>Omitted</h2><p>Not shown as diffs.</p></div><ul class="omitted-list">${lis}</ul>`;
 }
 
+function renderFinding(finding: StandardsFinding | SpecFinding): string {
+  const classification =
+    "classification" in finding
+      ? `<span class="classification">${esc(finding.classification)}</span>`
+      : "";
+  const rec = finding.recommendation
+    ? `<p class="recommendation"><span class="finding-label">Recommendation</span> ${esc(finding.recommendation)}</p>`
+    : "";
+  let location = "";
+  if (finding.location) {
+    const end =
+      finding.location.endLine != null &&
+      finding.location.endLine !== finding.location.startLine
+        ? `–${finding.location.endLine}`
+        : "";
+    location = `<p class="location">${esc(finding.location.path)}:${finding.location.startLine}${end}</p>`;
+  }
+  const ref = finding.reference
+    ? `<p class="reference"><span class="finding-label">${esc(finding.reference.source)}</span>${
+        finding.reference.quote ? ` — ${esc(finding.reference.quote)}` : ""
+      }</p>`
+    : "";
+  return `<article class="finding"><div class="finding-meta"><span class="severity severity-${esc(finding.severity)}">${esc(finding.severity)}</span>${classification}</div><h3>${esc(finding.title)}</h3><p class="explanation">${esc(finding.explanation)}</p>${rec}${location}${ref}</article>`;
+}
+
+function renderAxis(
+  id: string,
+  title: string,
+  findings: readonly (StandardsFinding | SpecFinding)[],
+  emptyLabel: string,
+): string {
+  const count = findings.length;
+  const body = count
+    ? findings.map((finding) => renderFinding(finding)).join("")
+    : `<p class="axis-empty">${esc(emptyLabel)}</p>`;
+  return `<section class="outcome-section" id="${esc(id)}"><div class="guide-section-head"><p class="meta">${count} ${count === 1 ? "finding" : "findings"}</p><h2>${esc(title)}</h2></div>${body}</section>`;
+}
+
+function renderOutcome(outcome: StoredOutcome["outcome"]): string {
+  return `${renderAxis("outcome-standards", "Standards", outcome.standards.findings, "No Standards findings.")}${renderAxis("outcome-spec", "Spec", outcome.spec.findings, "No Spec findings.")}`;
+}
+
 function pasteModal(): string {
   if (!pasteOpen) return `<div class="modal hidden" id="paste-modal"></div>`;
   return `<div class="modal" id="paste-modal"><div class="modal-card"><p>Paste a Guide v1 JSON object.</p><textarea id="paste-json"></textarea><div class="modal-actions"><button type="button" class="ghost" data-paste-cancel>Cancel</button><button type="button" class="ghost" data-paste-save>Add</button></div></div></div>`;
@@ -627,7 +677,7 @@ function setDiffMode(next: DiffLayout) {
   render({ restoreScroll: true });
 }
 
-function setTab(next: "guide" | "diff") {
+function setTab(next: Tab) {
   tab = next;
   try {
     localStorage.setItem(TAB_KEY, tab);
@@ -691,6 +741,13 @@ function markCurrent() {
     });
     return;
   }
+  if (tab === "review") {
+    document.querySelectorAll(".file-link[data-jump]").forEach((btn) => {
+      const on = btn.getAttribute("data-jump") === selectedOutcomeSection;
+      btn.setAttribute("aria-current", on ? "true" : "false");
+    });
+    return;
+  }
   document.querySelectorAll(".file-link[data-path]").forEach((btn) => {
     const on = btn.getAttribute("data-path") === selectedDiffPath;
     btn.setAttribute("aria-current", on ? "true" : "false");
@@ -703,6 +760,9 @@ function jumpTo(id: string) {
   const section = el.closest(".guide-section");
   if (section?.id.startsWith("section-")) {
     selectedChapterId = section.id.slice("section-".length);
+  }
+  if (el.classList.contains("outcome-section")) {
+    selectedOutcomeSection = el.id;
   }
   const file = el.closest(".file") as HTMLElement | null;
   if (file?.dataset.path) {
@@ -717,7 +777,12 @@ function observeMain() {
   observer?.disconnect();
   const main = document.querySelector("main");
   if (!main) return;
-  const selector = tab === "guide" ? ".guide-section, .file.stage" : ".file[id]";
+  const selector =
+    tab === "guide"
+      ? ".guide-section, .file.stage"
+      : tab === "diff"
+        ? ".file[id]"
+        : ".outcome-section";
   observer = new IntersectionObserver(
     (entries) => {
       const hit = entries
@@ -733,6 +798,9 @@ function observeMain() {
       }
       if (tab === "diff" && target.dataset.path) {
         selectedDiffPath = target.dataset.path;
+      }
+      if (tab === "review" && target.id) {
+        selectedOutcomeSection = target.id;
       }
       markCurrent();
     },
@@ -788,13 +856,30 @@ function render(opts?: { restoreScroll?: boolean }) {
   const tocFlyout = tocOpen
     ? `<div class="toc-overlay" data-close-toc><div class="toc-panel" role="dialog" aria-label="Guide sections"><div class="nav-label">Sections</div>${chapterNav}</div></div>`
     : "";
+  const selection = selectReviewOutcome(guide.base, guide.head, outcomes);
+  const exact = selection.status === "exact" ? selection.record.outcome : null;
+  const counts = exact ? findingCounts(exact) : { standards: 0, spec: 0 };
+  if (
+    selectedOutcomeSection !== "outcome-standards" &&
+    selectedOutcomeSection !== "outcome-spec"
+  ) {
+    selectedOutcomeSection = "outcome-standards";
+  }
+  const reviewNavSide = exact
+    ? `<button type="button" class="file-link" data-jump="outcome-standards" aria-current="${selectedOutcomeSection === "outcome-standards" ? "true" : "false"}">Standards <span class="axis-count">${counts.standards}</span></button><button type="button" class="file-link" data-jump="outcome-spec" aria-current="${selectedOutcomeSection === "outcome-spec" ? "true" : "false"}">Spec <span class="axis-count">${counts.spec}</span></button>`
+    : `<p class="nav-empty">No matching run</p>`;
+  const reviewBody = exact
+    ? `${renderOutcome(exact)}<p class="hint">j / k jump axes · run /code-review to publish another snapshot</p>`
+    : `<div class="outcome-empty"><h2>No code-review outcome</h2><p>Run /code-review on this base and head. After the chat report it attaches here when exactly one saved guide matches.</p></div>`;
   const mainInner =
     tab === "guide"
       ? `<div class="guide-doc">${guideBody}</div>${tocFlyout}`
-      : `${diffBody}<p class="hint">j / k jump files · [ hide reviews · drag rail edges · ⌘B split · viewed stays collapsed on Diff</p>`;
+      : tab === "diff"
+        ? `${diffBody}<p class="hint">j / k jump files · [ hide reviews · drag rail edges · ⌘B split · viewed stays collapsed on Diff</p>`
+        : reviewBody;
   const layout = currentDiffLayout();
   const railsHidden = reviewsCollapsed();
-  const tabs = `<div class="view-tabs main-tabs" role="tablist"><button type="button" role="tab" data-tab="guide" aria-selected="${tab === "guide" ? "true" : "false"}">Guide</button><button type="button" role="tab" data-tab="diff" aria-selected="${tab === "diff" ? "true" : "false"}">Diff</button></div>`;
+  const tabs = `<div class="view-tabs main-tabs" role="tablist"><button type="button" role="tab" data-tab="guide" aria-selected="${tab === "guide" ? "true" : "false"}">Guide</button><button type="button" role="tab" data-tab="diff" aria-selected="${tab === "diff" ? "true" : "false"}">Diff</button><button type="button" role="tab" data-tab="review" aria-selected="${tab === "review" ? "true" : "false"}">Code Review</button></div>`;
   const modes = `<div class="display-modes" role="radiogroup" aria-label="Diff layout"><button type="button" class="display-mode" data-diff-mode="unified" aria-selected="${layout === "unified" ? "true" : "false"}">${ICON_UNIFIED} Unified</button><button type="button" class="display-mode" data-diff-mode="split" aria-selected="${layout === "split" ? "true" : "false"}">${ICON_SPLIT} Split</button></div>`;
   const hideBtn = `<button type="button" class="ghost" data-hide-unchanged aria-pressed="${hideUnchanged ? "true" : "false"}">${hideUnchanged ? "Show unchanged" : "Hide unchanged"}</button>`;
   const themeBtn = `<button type="button" class="icon-btn square-toggle theme-toggle" data-theme-next="${nextTheme}" aria-pressed="${currentTheme() === "light" ? "true" : "false"}" aria-label="Switch to ${themeLabel} theme" title="Switch to ${themeLabel} theme">${ICON_SUN}</button>`;
@@ -803,13 +888,16 @@ function render(opts?: { restoreScroll?: boolean }) {
   const reviewsHandle = `<button type="button" class="col-handle" data-rail="reviews" aria-label="Resize reviews"></button>`;
   const sideHandle = `<button type="button" class="col-handle" data-rail="sidebar" aria-label="Resize file list"></button>`;
 
+
   document.title = `${guide.title} · Guided review`;
   app.dataset.reviews = railsHidden ? "collapsed" : "open";
   app.dataset.tab = tab;
   const filesRail =
     tab === "diff"
       ? `<nav aria-label="Files">${sideHandle}<div class="nav-label">Files</div>${fileNav}</nav>`
-      : "";
+      : tab === "review"
+        ? `<nav aria-label="Code Review">${sideHandle}<div class="nav-label">Code Review</div>${reviewNavSide}</nav>`
+        : "";
   app.innerHTML = `<header><div class="header-left">${BRAND_MARK}<h1 title="${esc(guide.title)}">${esc(guide.title)}</h1>${tabs}</div>${sourceHeader(guide)}<div class="header-actions">${statsHtml(gs)}${display}</div></header><nav aria-label="Reviews">${reviewsHandle}${reviewsToggle}<div class="reviews-pane"><div class="nav-label"><span>Reviews</span><button type="button" class="ghost" data-open-paste>Add</button></div><div class="review-list">${reviewNav}</div></div></nav>${filesRail}<main><div class="main-inner${tab === "guide" ? " is-guide" : ""}">${mainInner}</div></main>${pasteModal()}`;
   bindChrome(app);
   observeMain();
@@ -847,7 +935,7 @@ function bindChrome(app: HTMLElement) {
   app.querySelectorAll("[data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const next = btn.getAttribute("data-tab");
-      if (next === "guide" || next === "diff") setTab(next);
+      if (next === "guide" || next === "diff" || next === "review") setTab(next);
     });
   });
   app.querySelectorAll("[data-diff-mode]").forEach((btn) => {
@@ -1001,16 +1089,21 @@ async function loadActive(force = false): Promise<void> {
   if (pasteOpen && !force) return;
   if (!activeId) {
     guide = null;
+    outcomes = [];
     lastPayloadKey = "";
     viewed = new Set();
     collapsed = new Set();
     render();
     return;
   }
-  const payload = await fetchJson<{ guide: Guide }>(`/api/reviews/${activeId}`);
-  const key = JSON.stringify({ listed, guide: payload.guide });
+  const payload = await fetchJson<{ guide: Guide; outcomes?: StoredOutcome[] }>(
+    `/api/reviews/${activeId}`,
+  );
+  const nextOutcomes = payload.outcomes ?? [];
+  const key = JSON.stringify({ listed, guide: payload.guide, outcomes: nextOutcomes });
   const switched = !guide || selectedChapterId === null;
   guide = payload.guide;
+  outcomes = nextOutcomes;
   if (!force && key === lastPayloadKey) return;
   lastPayloadKey = key;
   if (switched) {
@@ -1103,6 +1196,14 @@ function openStop(stop: { chapterId: string; path: string }) {
 
 function move(delta: number) {
   if (!guide) return;
+  if (tab === "review") {
+    const ids = ["outcome-standards", "outcome-spec"];
+    const i = ids.indexOf(selectedOutcomeSection || "outcome-standards");
+    const next = ids[i + delta];
+    if (!next) return;
+    jumpTo(next);
+    return;
+  }
   if (tab === "diff") {
     const rows = diffRows();
     const i = rows.findIndex((row) => row.path === selectedDiffPath);
@@ -1123,7 +1224,7 @@ export function boot(): void {
   const saved = localStorage.getItem(THEME_KEY);
   document.documentElement.dataset.theme = saved === "light" || saved === "dark" ? saved : "dark";
   const savedTab = localStorage.getItem(TAB_KEY);
-  if (savedTab === "guide" || savedTab === "diff") tab = savedTab;
+  if (savedTab === "guide" || savedTab === "diff" || savedTab === "review") tab = savedTab;
   guideLayout = parseDiffLayout(localStorage.getItem(GUIDE_DIFF_KEY), "unified");
   diffLayout = parseDiffLayout(localStorage.getItem(DIFF_KEY), "split");
   const savedSplit = Number(localStorage.getItem(SPLIT_KEY));

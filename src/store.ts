@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  CodeReviewOutcome,
   emptyStore,
   GuideV1,
   pullRequestSyncKey,
@@ -9,6 +10,7 @@ import {
   type ListReviewsOutput,
   type PullRequestSource,
   type ReviewRecord,
+  type StoredOutcome,
 } from "./contracts.ts";
 
 const root = join(fileURLToPath(new URL(".", import.meta.url)), "..");
@@ -109,19 +111,17 @@ function unwrapGuide(body: unknown): GuideV1 {
 
 function toSummary(record: ReviewRecord): ListReviewsOutput["reviews"][number] {
   const source = record.guide.source;
-  if (!source) {
-    return {
-      id: record.id,
-      title: record.guide.title,
-      range: record.guide.range,
-      addedAt: record.addedAt,
-    };
-  }
-  return {
+  const summary = {
     id: record.id,
     title: record.guide.title,
     range: record.guide.range,
     addedAt: record.addedAt,
+    base: record.guide.base,
+    head: record.guide.head,
+  };
+  if (!source) return summary;
+  return {
+    ...summary,
     syncKey: pullRequestSyncKey(source),
     sourceCommit: source.sourceCommit,
     pullRequest: {
@@ -145,6 +145,7 @@ async function appendActive(guide: GuideV1): Promise<{ id: string }> {
     id,
     addedAt: new Date().toISOString(),
     guide,
+    outcomes: [],
   });
   store.activeId = id;
   await writeStore(store);
@@ -212,13 +213,35 @@ export async function removeReview(id: string): Promise<{ ok: true }> {
   return { ok: true };
 }
 
-export async function getReview(id: string): Promise<{ guide: GuideV1 }> {
+export async function getReview(
+  id: string,
+): Promise<{ guide: GuideV1; outcomes: StoredOutcome[] }> {
   const store = await readStore();
   const found = store.reviews.find((r) => r.id === id);
   if (!found) {
     throw Object.assign(new Error(`unknown review ${id}`), { status: 404 });
   }
-  return { guide: found.guide };
+  return { guide: found.guide, outcomes: found.outcomes };
+}
+
+export async function publishReviewOutcome(
+  reviewId: string,
+  outcome: unknown,
+): Promise<{ id: string }> {
+  const parsed = CodeReviewOutcome.parse(outcome);
+  const store = await readStore();
+  const found = store.reviews.find((r) => r.id === reviewId);
+  if (!found) {
+    throw Object.assign(new Error(`unknown review ${reviewId}`), { status: 404 });
+  }
+  const id = crypto.randomUUID();
+  found.outcomes.push({
+    id,
+    addedAt: new Date().toISOString(),
+    outcome: parsed,
+  });
+  await writeStore(store);
+  return { id };
 }
 
 export async function setActive(id: string): Promise<{ activeId: string }> {
