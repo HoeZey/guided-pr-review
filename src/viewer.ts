@@ -24,9 +24,22 @@ import {
   type FileTreeNode,
 } from "./guide-view.ts";
 import { findingCounts, selectReviewOutcome } from "./review-outcome.ts";
-import type { SpecFinding, StandardsFinding, StoredOutcome } from "./contracts.ts";
+import type {
+  ReviewSummary,
+  SpecFinding,
+  StandardsFinding,
+  StoredOutcome,
+} from "./contracts.ts";
+import {
+  HOME_PATH,
+  projectHomeCards,
+  resolveOverviewView,
+  reviewPath,
+  type HomeCard,
+  type OverviewView,
+} from "./overview.ts";
 
-const BRAND_MARK = `<img class="brand" src="/logo.svg" width="28" height="28" alt="">`;
+const BRAND_MARK = `<a class="brand-link" href="${HOME_PATH}" data-home><img class="brand" src="/logo.svg" width="28" height="28" alt=""></a>`;
 const ADO_MARK = `<svg class="ado-mark" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="#0078D4" d="M0 8.877L2.247 5.91l8.405-3.416V.022l7.37 5.393L2.966 8.338v8.225L0 15.707zm24-4.45v14.651l-5.753 4.9-9.303-3.057v3.056l-5.978-7.416 15.057 1.798V5.415z"/></svg>`;
 const ICON_SUN = `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>`;
 const ICON_GEAR = `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`;
@@ -113,19 +126,11 @@ type DiffLine = {
   newLine?: number;
 };
 
-type ReviewSummary = {
-  id: string;
-  title: string;
-  range?: string;
-  addedAt: string;
-  base?: string;
-  head?: string;
-};
-
 type Tab = "guide" | "diff" | "review";
 
 let highlighter: Highlighter | null = null;
 let reviews: ReviewSummary[] = [];
+let view: OverviewView = { kind: "home" };
 let activeId: string | null = null;
 let guide: Guide | null = null;
 let outcomes: StoredOutcome[] = [];
@@ -809,14 +814,45 @@ function observeMain() {
   main.querySelectorAll(selector).forEach((el) => observer?.observe(el));
 }
 
+function homeCardHtml(card: HomeCard): string {
+  const badge = card.repository
+    ? `<span class="repo-badge">${esc(card.repository.owner)} / ${esc(card.repository.name)}</span>`
+    : "";
+  const range = card.range
+    ? `<span class="home-card-range">${esc(card.range)}</span>`
+    : "";
+  return `<a class="home-card" href="${esc(reviewPath(card.id))}" data-open-review="${esc(card.id)}"><span class="home-card-title">${esc(card.title)}</span>${badge}${range}</a>`;
+}
+
+function renderHome(app: HTMLElement): void {
+  observer?.disconnect();
+  const cards = projectHomeCards(reviews);
+  const nextTheme = currentTheme() === "dark" ? "light" : "dark";
+  const themeLabel = nextTheme === "dark" ? "Dark" : "Light";
+  const themeBtn = `<button type="button" class="icon-btn square-toggle theme-toggle" data-theme-next="${nextTheme}" aria-pressed="${currentTheme() === "light" ? "true" : "false"}" aria-label="Switch to ${themeLabel} theme" title="Switch to ${themeLabel} theme">${ICON_SUN}</button>`;
+  const list = cards.length
+    ? `<div class="home-grid">${cards.map(homeCardHtml).join("")}</div>`
+    : `<p class="boot">No reviews yet. Add one from MCP or paste JSON.</p>`;
+  document.title = "Home · Guided review";
+  app.dataset.view = "home";
+  delete app.dataset.tab;
+  delete app.dataset.reviews;
+  app.innerHTML = `<header><div class="header-left">${BRAND_MARK}<h1>Home</h1></div><div class="header-actions"><button type="button" class="ghost" data-open-paste>Add</button>${themeBtn}</div></header><main class="home-main"><div class="main-inner">${list}</div></main>${pasteModal()}`;
+  bindChrome(app);
+}
+
+async function navigate(path: string): Promise<void> {
+  if (location.pathname !== path) history.pushState({}, "", path);
+  await loadActive(true);
+}
+
 function render(opts?: { restoreScroll?: boolean }) {
   const app = document.getElementById("app");
   if (!app) return;
   const prevMain = document.querySelector("main");
   const top = prevMain?.scrollTop ?? 0;
-  if (!guide) {
-    app.innerHTML = `<header><div class="header-left">${BRAND_MARK}<h1>Guided review</h1></div></header><p class="boot">No reviews yet. Add one from MCP or paste JSON.</p>${pasteModal()}`;
-    bindChrome(app);
+  if (view.kind === "home" || !guide) {
+    renderHome(app);
     return;
   }
   const chapters = chaptersForNav(guide);
@@ -890,6 +926,7 @@ function render(opts?: { restoreScroll?: boolean }) {
 
 
   document.title = `${guide.title} · Guided review`;
+  app.dataset.view = "review";
   app.dataset.reviews = railsHidden ? "collapsed" : "open";
   app.dataset.tab = tab;
   const filesRail =
@@ -898,7 +935,7 @@ function render(opts?: { restoreScroll?: boolean }) {
       : tab === "review"
         ? `<nav aria-label="Code Review">${sideHandle}<div class="nav-label">Code Review</div>${reviewNavSide}</nav>`
         : "";
-  app.innerHTML = `<header><div class="header-left">${BRAND_MARK}<h1 title="${esc(guide.title)}">${esc(guide.title)}</h1>${tabs}</div>${sourceHeader(guide)}<div class="header-actions">${statsHtml(gs)}${display}</div></header><nav aria-label="Reviews">${reviewsHandle}${reviewsToggle}<div class="reviews-pane"><div class="nav-label"><span>Reviews</span><button type="button" class="ghost" data-open-paste>Add</button></div><div class="review-list">${reviewNav}</div></div></nav>${filesRail}<main><div class="main-inner${tab === "guide" ? " is-guide" : ""}">${mainInner}</div></main>${pasteModal()}`;
+  app.innerHTML = `<header><div class="header-left">${BRAND_MARK}<a class="home-link" href="${HOME_PATH}" data-home>Home</a><h1 title="${esc(guide.title)}">${esc(guide.title)}</h1>${tabs}</div>${sourceHeader(guide)}<div class="header-actions">${statsHtml(gs)}${display}</div></header><nav aria-label="Reviews">${reviewsHandle}${reviewsToggle}<div class="reviews-pane"><div class="nav-label"><span>Reviews</span><button type="button" class="ghost" data-open-paste>Add</button></div><div class="review-list">${reviewNav}</div></div></nav>${filesRail}<main><div class="main-inner${tab === "guide" ? " is-guide" : ""}">${mainInner}</div></main>${pasteModal()}`;
   bindChrome(app);
   observeMain();
   requestAnimationFrame(() => app.classList.add("rails-ready"));
@@ -1071,6 +1108,19 @@ function bindChrome(app: HTMLElement) {
       ?.value;
     if (text) void pasteGuide(text);
   });
+  app.querySelectorAll("[data-home]").forEach((el) => {
+    el.addEventListener("click", (event) => {
+      event.preventDefault();
+      void navigate(HOME_PATH);
+    });
+  });
+  app.querySelectorAll("[data-open-review]").forEach((el) => {
+    el.addEventListener("click", (event) => {
+      event.preventDefault();
+      const id = el.getAttribute("data-open-review");
+      if (id) void navigate(reviewPath(id));
+    });
+  });
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -1081,33 +1131,53 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 async function loadActive(force = false): Promise<void> {
+  const pathAtStart = location.pathname;
   const listed = await fetchJson<{ reviews: ReviewSummary[]; activeId: string | null }>(
     "/api/reviews",
   );
+  if (location.pathname !== pathAtStart) return;
   reviews = listed.reviews;
-  activeId = listed.activeId;
+  const nextView = resolveOverviewView(
+    location.pathname,
+    reviews.map((row) => row.id),
+  );
+  if (
+    nextView.kind === "home" &&
+    /^\/reviews\//.test(location.pathname.replace(/\/+$/, "") || "/")
+  ) {
+    history.replaceState({}, "", HOME_PATH);
+  }
+  view = nextView;
   if (pasteOpen && !force) return;
-  if (!activeId) {
+  if (view.kind === "home") {
+    activeId = listed.activeId;
     guide = null;
     outcomes = [];
-    lastPayloadKey = "";
-    viewed = new Set();
-    collapsed = new Set();
+    const key = JSON.stringify({ view: "home", listed });
+    if (!force && key === lastPayloadKey) return;
+    lastPayloadKey = key;
     render();
     return;
   }
+  const id = view.reviewId;
+  if (listed.activeId !== id) {
+    await fetchJson(`/api/reviews/${id}/active`, { method: "POST" });
+    if (location.pathname !== pathAtStart) return;
+  }
+  activeId = id;
   const payload = await fetchJson<{ guide: Guide; outcomes?: StoredOutcome[] }>(
-    `/api/reviews/${activeId}`,
+    `/api/reviews/${id}`,
   );
+  if (location.pathname !== pathAtStart) return;
   const nextOutcomes = payload.outcomes ?? [];
-  const key = JSON.stringify({ listed, guide: payload.guide, outcomes: nextOutcomes });
+  const key = JSON.stringify({ listed, guide: payload.guide, outcomes: nextOutcomes, id });
   const switched = !guide || selectedChapterId === null;
   guide = payload.guide;
   outcomes = nextOutcomes;
   if (!force && key === lastPayloadKey) return;
   lastPayloadKey = key;
   if (switched) {
-    hydrateViewed(activeId);
+    hydrateViewed(id);
     if (tab === "diff") collapsed = collapsedOnDiff(viewed, collapsed);
   }
   if (switched || !guide.chapters.some((ch) => ch.id === selectedChapterId)) {
@@ -1118,15 +1188,18 @@ async function loadActive(force = false): Promise<void> {
 }
 
 async function activate(id: string): Promise<void> {
-  await fetchJson(`/api/reviews/${id}/active`, { method: "POST" });
   selectedChapterId = null;
-  await loadActive();
+  await navigate(reviewPath(id));
 }
 
 async function remove(id: string): Promise<void> {
   await fetchJson(`/api/reviews/${id}`, { method: "DELETE" });
   selectedChapterId = null;
-  await loadActive();
+  if (view.kind === "review" && view.reviewId === id) {
+    await navigate(HOME_PATH);
+    return;
+  }
+  await loadActive(true);
 }
 
 async function pasteGuide(text: string): Promise<void> {
@@ -1138,14 +1211,14 @@ async function pasteGuide(text: string): Promise<void> {
     return;
   }
   const body = parsed && typeof parsed === "object" && "guide" in parsed ? parsed : { guide: parsed };
-  await fetchJson("/api/reviews", {
+  const created = await fetchJson<{ id: string }>("/api/reviews", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
   pasteOpen = false;
   selectedChapterId = null;
-  await loadActive();
+  await navigate(reviewPath(created.id));
 }
 
 function markReviewed(path: string) {
@@ -1264,6 +1337,9 @@ export function boot(): void {
       event.preventDefault();
       setDiffMode(currentDiffLayout() === "split" ? "unified" : "split");
     }
+  });
+  window.addEventListener("popstate", () => {
+    void loadActive(true);
   });
   void loadActive();
   setInterval(() => {

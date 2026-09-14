@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 blocked_by: []
 blocks:
   - 02-browse-current-repository-prs
@@ -39,16 +39,16 @@ pure projection helper, tests
 
 **Acceptance criteria:**
 
-- [ ] A bare app or skill launch opens Home rather than an arbitrary saved
+- [x] A bare app or skill launch opens Home rather than an arbitrary saved
   review.
-- [ ] Every saved local or host-backed guide appears once on Home.
-- [ ] A host-backed card shows owner and repository when structured source
+- [x] Every saved local or host-backed guide appears once on Home.
+- [x] A host-backed card shows owner and repository when structured source
   identity exists; a local guide still loads without it.
-- [ ] Selecting a card opens that guide's Guide and Diff tabs.
-- [ ] Home and the brand mark return from a review without losing saved state.
-- [ ] An explicit target bypasses Home and opens its generated guide directly.
-- [ ] Reloading a Home or review URL preserves the selected navigation state.
-- [ ] Projection tests do not assert Astro DOM internals.
+- [x] Selecting a card opens that guide's Guide and Diff tabs.
+- [x] Home and the brand mark return from a review without losing saved state.
+- [x] An explicit target bypasses Home and opens its generated guide directly.
+- [x] Reloading a Home or review URL preserves the selected navigation state.
+- [x] Projection tests do not assert Astro DOM internals.
 
 **Blocked by:** none
 

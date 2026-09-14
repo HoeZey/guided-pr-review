@@ -7,7 +7,7 @@
     "dev": "astro dev --host localhost --port 8765",
     "build": "astro build",
     "start": "HOST=localhost PORT=8765 node dist/server/entry.mjs",
-    "test": "tsx --test src/store.test.ts src/guide-view.test.ts src/review-outcome.test.ts"
+    "test": "tsx --test src/store.test.ts src/guide-view.test.ts src/review-outcome.test.ts src/overview.test.ts"
   },
   "dependencies": {
     "@astrojs/node": "^9.4.4",

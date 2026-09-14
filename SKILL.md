@@ -24,9 +24,10 @@ Skill root is the directory that contains this SKILL.md (this git repo).
 
 - Named Azure DevOps PR URL or numeric id → **Named ADO PR** (upsert_review).
 - Explicit SHA, branch, or git range → **Local range** (add_review).
-- Neither → Local range on merge-base(default-branch)...HEAD.
+- Neither → **Home**. Ensure the instance is up. Open http://localhost:8765/.
+  Do not call add_review or upsert_review.
 
-Do not switch the user's working tree on either path. Do not git checkout,
+Do not switch the user's working tree on either review path. Do not git checkout,
 git switch, git reset, or git worktree add unless the user asked.
 
 ## Named ADO PR
@@ -80,7 +81,7 @@ git switch, git reset, or git worktree add unless the user asked.
    instance is up (same as Local range step 5). tools/call list_reviews.
    Sync key is azure-devops:{host}:{repository.id}:{number}. If a listed
    review has that syncKey and the same sourceCommit, tools/call set_active
-   for that id, open http://localhost:8765/, and stop. Do not upsert.
+   for that id, open http://localhost:8765/reviews/{id}, and stop. Do not upsert.
    A listed review with no syncKey is not a skip: continue so upsert can
    attach this PR to a matching local-range row.
 
@@ -142,8 +143,8 @@ git switch, git reset, or git worktree add unless the user asked.
     adopts exactly one unsourced local-range review when the range head
     matches the PR source branch, or when that branch was renamed but
     exactly one local range shares the ticket key (TCD-n). Ambiguous
-    ticket matches create a new row. Open http://localhost:8765/. Leave
-    the server running.
+    ticket matches create a new row. Open http://localhost:8765/reviews/{id}
+    using the id returned by upsert_review. Leave the server running.
 
 ## Local range
 
@@ -197,8 +198,8 @@ git switch, git reset, or git worktree add unless the user asked.
    - tools/call name set_active if you need a different id (add_review already
      sets active)
 
-   Open http://localhost:8765/ for the reviewer. Guide, Diff, and Code Review
-   tabs. Leave the server running.
+   Open http://localhost:8765/reviews/{id} using the id returned by add_review.
+   Guide, Diff, and Code Review tabs. Leave the server running.
 
 ## Hard no
 
@@ -209,7 +210,8 @@ git switch, git reset, or git worktree add unless the user asked.
 - No LLM inside the app.
 - Do not implement product code in the repo under review.
 - Do not post ADO comments from this skill (a later story).
-- Do not invent overview Home, catalog, or multi-repo grouping.
+- Do not invent a live host catalog, relationship grouping, or multi-repo
+  Home until those overview stories.
 
 ## MCP tools
 
@@ -222,3 +224,6 @@ git switch, git reset, or git worktree add unless the user asked.
 - remove_review { id } → { ok: true }
 - get_review { id } → { guide, outcomes }
 - set_active { id } → { activeId }
+
+Bare http://localhost:8765/ is Home. An explicit add or upsert opens
+http://localhost:8765/reviews/{id}.

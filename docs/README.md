@@ -9,7 +9,7 @@ vertical slices.
 - [Guided PR review](prds/guided-pr-review/) — in progress
 - [Review screen polish](prds/review-screen-polish/) — signed
 - [Git-host guided reviews](prds/git-host-guided-reviews/) — signed
-- [Pull request overview](prds/pull-request-overview/) — signed
+- [Pull request overview](prds/pull-request-overview/) — in progress
 - [Code-review outcomes](prds/code-review-outcomes/) — signed
 
 ## Status
