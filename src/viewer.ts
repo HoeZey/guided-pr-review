@@ -153,6 +153,28 @@ let selectedOutcomeSection: string | null = null;
 let tocOpen = false;
 let displayOpen = false;
 
+function applyTocOpen(next: boolean): void {
+  tocOpen = next;
+  const app = document.getElementById("app");
+  if (!app) return;
+  if (next) app.dataset.toc = "open";
+  else delete app.dataset.toc;
+  app.querySelectorAll("[data-toggle-toc]").forEach((btn) => {
+    btn.setAttribute("aria-expanded", next ? "true" : "false");
+  });
+}
+
+function suppressHoverToc(): void {
+  const anchor = document.querySelector("[data-toc-anchor]");
+  if (!(anchor instanceof HTMLElement)) return;
+  anchor.dataset.suppress = "";
+  const clear = () => {
+    delete anchor.dataset.suppress;
+    anchor.removeEventListener("pointerleave", clear);
+  };
+  anchor.addEventListener("pointerleave", clear);
+}
+
 function esc(value: unknown): string {
   return String(value)
     .replace(/&/g, "&amp;")
@@ -545,7 +567,7 @@ function renderFinding(finding: StandardsFinding | SpecFinding): string {
       ? `<span class="classification">${esc(finding.classification)}</span>`
       : "";
   const rec = finding.recommendation
-    ? `<p class="recommendation"><span class="finding-label">Recommendation</span> ${esc(finding.recommendation)}</p>`
+    ? `<div class="recommendation"><span class="finding-label">Recommendation</span> ${formatCopy(finding.recommendation)}</div>`
     : "";
   let location = "";
   if (finding.location) {
@@ -561,7 +583,7 @@ function renderFinding(finding: StandardsFinding | SpecFinding): string {
         finding.reference.quote ? ` — ${esc(finding.reference.quote)}` : ""
       }</p>`
     : "";
-  return `<article class="finding"><div class="finding-meta"><span class="severity severity-${esc(finding.severity)}">${esc(finding.severity)}</span>${classification}</div><h3>${esc(finding.title)}</h3><p class="explanation">${esc(finding.explanation)}</p>${rec}${location}${ref}</article>`;
+  return `<article class="finding"><div class="finding-meta"><span class="severity severity-${esc(finding.severity)}">${esc(finding.severity)}</span>${classification}</div><h3>${esc(finding.title)}</h3><div class="explanation">${formatCopy(finding.explanation)}</div>${rec}${location}${ref}</article>`;
 }
 
 function renderAxis(
@@ -594,6 +616,12 @@ function fileId(chapterId: string, index: number) {
   return `file-${chapterId}-${index}`;
 }
 
+function progressToc(index: number, total: number) {
+  const idx = String(index + 1).padStart(2, "0");
+  const tot = String(total).padStart(2, "0");
+  return `<button type="button" class="progress-toc" data-toggle-toc aria-expanded="${tocOpen ? "true" : "false"}" aria-controls="guide-toc">${idx} / ${tot}</button>`;
+}
+
 function renderFilePill(file: FileChange, id: string, chapterId: string, current: boolean) {
   const { name, dir } = pathParts(file.path);
   const s = fileStats(file);
@@ -604,7 +632,7 @@ function renderFilePill(file: FileChange, id: string, chapterId: string, current
 function renderSection(chapter: Chapter, index: number, total: number) {
   const sid = sectionId(chapter.id);
   if (chapter._omitted) {
-    return `<section class="guide-section" id="${esc(sid)}" data-chapter="${esc(chapter.id)}"><div class="guide-aside"><h2>Omitted</h2><div class="guide-progress"><button type="button" class="progress-toc" data-toggle-toc>${String(index + 1).padStart(2, "0")} / ${String(total).padStart(2, "0")}</button></div><div class="guide-why">${formatCopy("Binary or unreadable paths.")}</div></div><div class="guide-stage">${renderOmitted(guide?.omitted || [])}</div></section>`;
+    return `<section class="guide-section" id="${esc(sid)}" data-chapter="${esc(chapter.id)}"><div class="guide-aside"><h2>Omitted</h2><div class="guide-progress">${progressToc(index, total)}</div><div class="guide-why">${formatCopy("Binary or unreadable paths.")}</div></div><div class="guide-stage">${renderOmitted(guide?.omitted || [])}</div></section>`;
   }
   const files = chapter.files || [];
   const pills = files
@@ -615,10 +643,8 @@ function renderSection(chapter: Chapter, index: number, total: number) {
   const stage = files
     .map((file, i) => renderFile(file, fileId(chapter.id, i), { stage: true }))
     .join("");
-  const idx = String(index + 1).padStart(2, "0");
-  const tot = String(total).padStart(2, "0");
   const chapterDone = files.length > 0 && files.every((file) => viewed.has(file.path));
-  return `<section class="guide-section" id="${esc(sid)}" data-chapter="${esc(chapter.id)}"><aside class="guide-aside"><h2>${esc(chapter.title)}</h2><div class="guide-progress"><button type="button" class="progress-toc" data-toggle-toc>${idx} / ${tot}</button><label class="viewed"><input type="checkbox" data-reviewed-chapter="${esc(chapter.id)}"${chapterDone ? " checked" : ""}> Reviewed</label></div><div class="guide-why">${formatCopy(chapter.why)}</div><div class="file-pills">${pills}</div></aside><div class="guide-stage">${stage}</div></section>`;
+  return `<section class="guide-section" id="${esc(sid)}" data-chapter="${esc(chapter.id)}"><aside class="guide-aside"><h2>${esc(chapter.title)}</h2><div class="guide-progress">${progressToc(index, total)}<label class="viewed"><input type="checkbox" data-reviewed-chapter="${esc(chapter.id)}"${chapterDone ? " checked" : ""}> Reviewed</label></div><div class="guide-why">${formatCopy(chapter.why)}</div><div class="file-pills">${pills}</div></aside><div class="guide-stage">${stage}</div></section>`;
 }
 
 function persistViewed() {
@@ -801,6 +827,7 @@ function renderHome(app: HTMLElement): void {
   app.dataset.view = "home";
   delete app.dataset.tab;
   delete app.dataset.reviews;
+  delete app.dataset.toc;
   app.innerHTML = `<header><div class="header-bar"><div class="header-left">${BRAND_MARK}<h1>Home</h1></div><div class="header-actions"><button type="button" class="ghost" data-open-paste>Add</button>${themeBtn}</div></div></header><main class="home-main"><div class="main-inner">${list}</div></main>${pasteModal()}`;
   bindChrome(app);
 }
@@ -847,9 +874,6 @@ function render(opts?: { restoreScroll?: boolean }) {
 
   const guideBody = chapters.map((ch, i) => renderSection(ch, i, chapters.length)).join("");
   const diffBody = rows.map((file, i) => renderFile(file, diffFileId(i))).join("");
-  const tocFlyout = tocOpen
-    ? `<div class="toc-overlay" data-close-toc><div class="toc-panel" role="dialog" aria-label="Guide sections"><div class="nav-label">Sections</div>${chapterNav}</div></div>`
-    : "";
   const selection = selectReviewOutcome(guide.base, guide.head, outcomes);
   const exact = selection.status === "exact" ? selection.record.outcome : null;
   const counts = exact ? findingCounts(exact) : { standards: 0, spec: 0 };
@@ -867,7 +891,7 @@ function render(opts?: { restoreScroll?: boolean }) {
     : `<div class="outcome-empty"><h2>No code-review outcome</h2><p>Run /code-review on this base and head. After the chat report it attaches here when exactly one saved guide matches.</p></div>`;
   const mainInner =
     tab === "guide"
-      ? `<div class="guide-doc">${guideBody}</div>${tocFlyout}`
+      ? `<div class="guide-doc">${guideBody}</div>`
       : tab === "diff"
         ? `${diffBody}<p class="hint">j / k jump files · drag rail edges · ⌘B split · viewed stays collapsed on Diff</p>`
         : reviewBody;
@@ -889,7 +913,13 @@ function render(opts?: { restoreScroll?: boolean }) {
       : tab === "review"
         ? `<nav aria-label="Code Review">${sideHandle}<div class="nav-label">Code Review</div>${reviewNavSide}</nav>`
         : "";
-  app.innerHTML = `<header><div class="header-bar"><div class="header-left">${BRAND_MARK}${BACK_HOME}<h1 title="${esc(guide.title)}">${esc(guide.title)}</h1>${statsHtml(gs)}</div>${sourceHeader(guide)}<div class="header-actions">${display}</div></div>${tabs}</header>${filesRail}<main><div class="main-inner${tab === "guide" ? " is-guide" : ""}">${mainInner}</div></main>${pasteModal()}`;
+  const tocAnchor =
+    tab === "guide"
+      ? `<aside class="toc-anchor" data-toc-anchor><div class="toc-hotzone" aria-hidden="true"></div><nav class="toc-panel" id="guide-toc" aria-label="Guide sections"><div class="nav-label">Sections</div>${chapterNav}</nav></aside>`
+      : "";
+  app.innerHTML = `<header><div class="header-bar"><div class="header-left">${BRAND_MARK}${BACK_HOME}<h1 title="${esc(guide.title)}">${esc(guide.title)}</h1>${statsHtml(gs)}</div>${sourceHeader(guide)}<div class="header-actions">${display}</div></div>${tabs}</header>${filesRail}<main><div class="main-inner${tab === "guide" ? " is-guide" : ""}">${mainInner}</div></main>${tocAnchor}${pasteModal()}`;
+  if (tab === "guide") applyTocOpen(tocOpen);
+  else applyTocOpen(false);
   bindChrome(app);
   observeMain();
   requestAnimationFrame(() => app.classList.add("rails-ready"));
@@ -915,9 +945,8 @@ function bindChrome(app: HTMLElement) {
         const ch = chaptersForNav(guide).find((item) => item.id === chapterId);
         selectedGuidePath = selectGuidePath(ch?.files || [], null, viewed);
       }
-      const wasToc = tocOpen;
-      tocOpen = false;
-      if (wasToc) render();
+      applyTocOpen(false);
+      suppressHoverToc();
       if (id) jumpTo(id);
       markCurrent();
     });
@@ -948,17 +977,9 @@ function bindChrome(app: HTMLElement) {
   });
   app.querySelectorAll("[data-toggle-toc]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      tocOpen = !tocOpen;
-      render({ restoreScroll: true });
+      applyTocOpen(!tocOpen);
     });
   });
-  app.querySelector("[data-close-toc]")?.addEventListener("click", (event) => {
-    if (event.target === event.currentTarget) {
-      tocOpen = false;
-      render({ restoreScroll: true });
-    }
-  });
-  app.querySelector(".toc-panel")?.addEventListener("click", (event) => event.stopPropagation());
   app.querySelectorAll("[data-reviewed-chapter]").forEach((input) => {
     input.addEventListener("click", (event) => event.stopPropagation());
     input.addEventListener("change", () => {
@@ -1238,11 +1259,20 @@ export function boot(): void {
   document.addEventListener(
     "pointerdown",
     (event) => {
-      if (!displayOpen) return;
-      const menu = document.querySelector("[data-display-menu]");
-      if (menu?.contains(event.target as Node)) return;
-      displayOpen = false;
-      if (menu instanceof HTMLDetailsElement) menu.open = false;
+      const target = event.target as Node | null;
+      if (displayOpen) {
+        const menu = document.querySelector("[data-display-menu]");
+        if (!menu?.contains(target)) {
+          displayOpen = false;
+          if (menu instanceof HTMLDetailsElement) menu.open = false;
+        }
+      }
+      if (tocOpen) {
+        const el = event.target as HTMLElement | null;
+        if (el?.closest("[data-toggle-toc]")) return;
+        const anchor = document.querySelector("[data-toc-anchor]");
+        if (!anchor?.contains(target)) applyTocOpen(false);
+      }
     },
     true,
   );
@@ -1257,8 +1287,9 @@ export function boot(): void {
       move(-1);
     } else if (event.key === "Escape" && tocOpen) {
       event.preventDefault();
-      tocOpen = false;
-      render({ restoreScroll: true });
+      applyTocOpen(false);
+      suppressHoverToc();
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     } else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "b") {
       event.preventDefault();
       setDiffMode(currentDiffLayout() === "split" ? "unified" : "split");
