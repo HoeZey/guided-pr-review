@@ -2,26 +2,38 @@ import { createHighlighter, type Highlighter } from "shiki";
 import {
   collapsedOnDiff,
   filesForDiff,
+  fileTree,
+  isUnchangedGap,
   markViewed,
   overlaySegments,
   pairWordDiff,
   parseViewed,
   serializeViewed,
+  splitRows,
   unmarkViewed,
+  withUnchangedGaps,
+  guideStops,
+  stepGuide,
+  parseDiffLayout,
+  parseReviewsRails,
+  serializeReviewsRails,
+  formatCopy,
   type Lined,
+  type SplitRow,
+  type DiffLayout,
+  type FileTreeNode,
 } from "./guide-view.ts";
 
-const KIND_LABEL: Record<string, string> = {
-  core: "Core",
-  consequences: "Consequences",
-  glue: "Glue",
-  tests: "Tests",
-  noise: "Other",
-};
-
+const BRAND_MARK = `<img class="brand" src="/logo.svg" width="28" height="28" alt="">`;
 const THEME_KEY = "guided-pr-review-theme";
 const TAB_KEY = "guided-pr-review-tab";
+const DIFF_KEY = "guided-pr-review-diff";
+const GUIDE_DIFF_KEY = "guided-pr-review-guide-diff";
+const SPLIT_KEY = "guided-pr-review-split";
+const HIDE_KEY = "guided-pr-review-hide-unchanged";
+const RAILS_KEY = "guided-pr-review-rails";
 const VIEWED_PREFIX = "guided-pr-review-viewed:";
+const REVIEWS_KEY = "guided-pr-review-reviews";
 const LANGS = [
   "python",
   "javascript",
@@ -98,9 +110,21 @@ let pasteOpen = false;
 let observer: IntersectionObserver | null = null;
 let lastPayloadKey = "";
 let tab: "guide" | "diff" = "guide";
+let guideLayout: DiffLayout = "unified";
+let diffLayout: DiffLayout = "split";
+let splitPct = 0.5;
+let hideUnchanged = false;
+let reviewsPx = 220;
+let sidebarPx = 280;
 let viewed = new Set<string>();
 let collapsed = new Set<string>();
+let collapsedDirs = new Set<string>();
 let selectedDiffPath: string | null = null;
+let selectedGuidePath: string | null = null;
+let guideReviewsCollapsed = true;
+let diffReviewsCollapsed = false;
+let tocOpen = false;
+let displayOpen = false;
 
 function esc(value: unknown): string {
   return String(value)
@@ -259,35 +283,214 @@ function statsHtml(s: { additions: number; deletions: number }) {
   return `<span class="stats"><span class="add">+${s.additions}</span> <span class="del">−${s.deletions}</span></span>`;
 }
 
+function codeAttrs(line: Lined, lang: string) {
+  const langAttr = lang ? ` data-lang="${esc(lang)}" data-raw="${esc(line.content)}"` : "";
+  const segAttr = line.segments ? ` data-segments="${esc(JSON.stringify(line.segments))}"` : "";
+  return `${langAttr}${segAttr}`;
+}
+
 function renderLine(line: Lined, lang: string) {
   const oldN = line.oldLine != null ? esc(line.oldLine) : "";
   const newN = line.newLine != null ? esc(line.newLine) : "";
   const mark = line.type === "added" ? "+" : line.type === "removed" ? "−" : "";
-  const langAttr = lang ? ` data-lang="${esc(lang)}" data-raw="${esc(line.content)}"` : "";
-  const segAttr = line.segments ? ` data-segments="${esc(JSON.stringify(line.segments))}"` : "";
-  return `<div class="line ${esc(line.type)}"><span class="gutter">${oldN}</span><span class="gutter">${newN}</span><span class="mark">${mark}</span><span class="code"${langAttr}${segAttr}>${esc(line.content)}</span></div>`;
+  return `<div class="line ${esc(line.type)}"><span class="gutter">${oldN}</span><span class="gutter">${newN}</span><span class="mark">${mark}</span><span class="code"${codeAttrs(line, lang)}>${esc(line.content)}</span></div>`;
 }
 
-function renderFile(file: FileChange, id: string) {
+function renderSplitCell(side: "left" | "right", line: Lined | null, lang: string) {
+  if (!line) {
+    return `<div class="line split-cell ${side} empty"></div>`;
+  }
+  const n =
+    side === "left"
+      ? line.oldLine != null
+        ? esc(line.oldLine)
+        : ""
+      : line.newLine != null
+        ? esc(line.newLine)
+        : "";
+  const mark = line.type === "added" ? "+" : line.type === "removed" ? "−" : "";
+  return `<div class="line split-cell ${side} ${esc(line.type)}"><span class="gutter">${n}</span><span class="mark">${mark}</span><span class="code"${codeAttrs(line, lang)}>${esc(line.content)}</span></div>`;
+}
+
+function applySplitPct(pct: number) {
+  splitPct = Math.min(0.85, Math.max(0.15, pct));
+  document.documentElement.style.setProperty("--split-left", `${splitPct}fr`);
+  document.documentElement.style.setProperty("--split-right", `${1 - splitPct}fr`);
+}
+
+function currentDiffLayout(): DiffLayout {
+  return tab === "guide" ? guideLayout : diffLayout;
+}
+
+function reviewsCollapsed(): boolean {
+  return tab === "guide" ? guideReviewsCollapsed : diffReviewsCollapsed;
+}
+
+function persistReviewsRails() {
+  try {
+    localStorage.setItem(
+      REVIEWS_KEY,
+      serializeReviewsRails({
+        guide: guideReviewsCollapsed ? "collapsed" : "open",
+        diff: diffReviewsCollapsed ? "collapsed" : "open",
+      }),
+    );
+  } catch {
+    /* private mode */
+  }
+}
+
+function persistSplitPct() {
+  try {
+    localStorage.setItem(SPLIT_KEY, String(splitPct));
+  } catch {
+    /* private mode */
+  }
+}
+
+function applyRails() {
+  document.documentElement.style.setProperty("--reviews", `${reviewsPx}px`);
+  document.documentElement.style.setProperty("--sidebar", `${sidebarPx}px`);
+}
+
+function persistRails() {
+  try {
+    localStorage.setItem(RAILS_KEY, JSON.stringify({ reviews: reviewsPx, sidebar: sidebarPx }));
+  } catch {
+    /* private mode */
+  }
+}
+
+function bindRailHandles(root: HTMLElement) {
+  root.querySelectorAll<HTMLElement>("[data-rail]").forEach((handle) => {
+    handle.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      handle.setPointerCapture(event.pointerId);
+      const which = handle.dataset.rail;
+      const app = document.getElementById("app");
+      if (!app) return;
+      const move = (ev: PointerEvent) => {
+        const left = app.getBoundingClientRect().left;
+        if (which === "reviews") {
+          reviewsPx = Math.min(420, Math.max(140, ev.clientX - left));
+        } else if (which === "sidebar") {
+          const reviewsW = reviewsCollapsed() ? 40 : reviewsPx;
+          sidebarPx = Math.min(520, Math.max(160, ev.clientX - left - reviewsW));
+        }
+        applyRails();
+      };
+      const up = () => {
+        handle.removeEventListener("pointermove", move);
+        handle.removeEventListener("pointerup", up);
+        persistRails();
+      };
+      handle.addEventListener("pointermove", move);
+      handle.addEventListener("pointerup", up);
+    });
+  });
+}
+
+function setHideUnchanged(next: boolean) {
+  hideUnchanged = next;
+  displayOpen = true;
+  try {
+    localStorage.setItem(HIDE_KEY, next ? "1" : "0");
+  } catch {
+    /* private mode */
+  }
+  render({ restoreScroll: true });
+}
+
+function renderGap(count: number) {
+  return `<div class="unchanged-gap">··· ${count} unchanged</div>`;
+}
+
+function splitRowUnchanged(row: SplitRow): boolean {
+  const types = [row.left?.type, row.right?.type].filter((t): t is string => Boolean(t));
+  return types.length > 0 && types.every((t) => t === "context");
+}
+
+function bindSplitHandles(root: HTMLElement) {
+  root.querySelectorAll<HTMLElement>(".split-handle").forEach((handle) => {
+    handle.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      const diff = handle.closest(".diff.split");
+      if (!diff) return;
+      handle.setPointerCapture(event.pointerId);
+      const move = (ev: PointerEvent) => {
+        const rect = diff.getBoundingClientRect();
+        if (rect.width <= 0) return;
+        applySplitPct((ev.clientX - rect.left) / rect.width);
+      };
+      const up = () => {
+        handle.removeEventListener("pointermove", move);
+        handle.removeEventListener("pointerup", up);
+        persistSplitPct();
+      };
+      handle.addEventListener("pointermove", move);
+      handle.addEventListener("pointerup", up);
+    });
+  });
+}
+
+function pathParts(path: string) {
+  const i = path.lastIndexOf("/");
+  return i < 0 ? { name: path, dir: "" } : { name: path.slice(i + 1), dir: path.slice(0, i) };
+}
+
+function compactDirLabel(name: string): string {
+  return name
+    .split(" / ")
+    .map((part) => esc(part))
+    .join('<span class="tree-slash"> / </span>');
+}
+
+function renderFile(file: FileChange, id: string, opts?: { stage?: boolean }) {
   const s = fileStats(file);
   const lang = langFor(file);
+  const stage = Boolean(opts?.stage);
   const isCollapsed = collapsed.has(file.path);
   const viewedOn = viewed.has(file.path);
-  const head = `<div class="file-head"><button type="button" class="chevron" data-toggle-path="${esc(file.path)}" aria-expanded="${isCollapsed ? "false" : "true"}" aria-label="Toggle file">${isCollapsed ? "▸" : "▾"}</button><span class="path">${esc(file.path)}</span><label class="viewed"><input type="checkbox" data-viewed-path="${esc(file.path)}"${viewedOn ? " checked" : ""}> Viewed</label>${statsHtml(s)}</div>`;
+  const { name, dir } = pathParts(file.path);
+  const title = stage
+    ? `<span class="file-title"><span class="path">${esc(name)}</span>${dir ? `<span class="dir">${esc(dir)}</span>` : ""}</span>`
+    : `<span class="path">${esc(file.path)}</span>`;
+  const action = `<label class="viewed"><input type="checkbox" data-viewed-path="${esc(file.path)}"${viewedOn ? " checked" : ""}> ${stage ? "Reviewed" : "Viewed"}</label>`;
+  const chevron = `<button type="button" class="chevron" data-toggle-path="${esc(file.path)}" aria-expanded="${isCollapsed ? "false" : "true"}" aria-label="Toggle file">${isCollapsed ? "▸" : "▾"}</button>`;
+  const head = `<div class="file-head">${chevron}${title}${statsHtml(s)}${action}</div>`;
+  const cls = stage ? "file stage" : "file";
   if (file.stub) {
     const reason = file.reason ? ` · ${esc(file.reason)}` : "";
-    return `<section class="file" id="${esc(id)}" data-path="${esc(file.path)}" data-collapsed="${isCollapsed}">${head}<div class="file-body"><div class="stub">Body omitted${reason}.</div></div></section>`;
+    return `<section class="${cls}" id="${esc(id)}" data-path="${esc(file.path)}" data-collapsed="${isCollapsed}">${head}<div class="file-body"><div class="stub">Body omitted${reason}.</div></div></section>`;
   }
   const hunks = (file.hunks || [])
     .map((hunk) => {
       const header = hunk.header
         ? `<div class="hunk-header">${esc(hunk.header)}</div>`
         : "";
-      const lines = pairWordDiff(hunk.lines || []).map((line) => renderLine(line, lang)).join("");
-      return `${header}<div class="diff">${lines}</div>`;
+      const lined = pairWordDiff(hunk.lines || []);
+      if (currentDiffLayout() === "split") {
+        const items = withUnchangedGaps(splitRows(lined), hideUnchanged, splitRowUnchanged);
+        const left = items
+          .map((item) =>
+            isUnchangedGap(item) ? renderGap(item.count) : renderSplitCell("left", item.left, lang),
+          )
+          .join("");
+        const right = items
+          .map((item) =>
+            isUnchangedGap(item) ? renderGap(item.count) : renderSplitCell("right", item.right, lang),
+          )
+          .join("");
+        return `${header}<div class="diff split"><div class="split-pane left">${left}</div><button type="button" class="split-handle" aria-label="Resize diff panes"></button><div class="split-pane right">${right}</div></div>`;
+      }
+      const items = withUnchangedGaps(lined, hideUnchanged, (line) => line.type === "context");
+      const body = items
+        .map((item) => (isUnchangedGap(item) ? renderGap(item.count) : renderLine(item, lang)))
+        .join("");
+      return `${header}<div class="diff">${body}</div>`;
     })
     .join("");
-  return `<section class="file" id="${esc(id)}" data-path="${esc(file.path)}" data-collapsed="${isCollapsed}">${head}<div class="file-body">${hunks}</div></section>`;
+  return `<section class="${cls}" id="${esc(id)}" data-path="${esc(file.path)}" data-collapsed="${isCollapsed}">${head}<div class="file-body">${hunks}</div></section>`;
 }
 
 function chaptersForNav(data: Guide): Chapter[] {
@@ -328,15 +531,34 @@ function fileId(chapterId: string, index: number) {
   return `file-${chapterId}-${index}`;
 }
 
+function renderFilePill(file: FileChange, id: string, chapterId: string, current: boolean) {
+  const { name, dir } = pathParts(file.path);
+  const s = fileStats(file);
+  const dim = viewed.has(file.path) ? " viewed-link" : "";
+  return `<button type="button" class="file-pill${dim}" data-jump="${esc(id)}" data-chapter="${esc(chapterId)}" data-path="${esc(file.path)}" title="${esc(file.path)}" aria-current="${current ? "true" : "false"}"><span class="file-pill-main"><span class="file-pill-name">${esc(name)}</span>${dir ? `<span class="file-pill-dir">${esc(dir)}</span>` : ""}</span>${statsHtml(s)}</button>`;
+}
+
 function renderSection(chapter: Chapter, index: number, total: number) {
   const sid = sectionId(chapter.id);
   if (chapter._omitted) {
-    return `<section class="guide-section" id="${esc(sid)}">${renderOmitted(guide?.omitted || [])}</section>`;
+    return `<section class="guide-section" id="${esc(sid)}" data-chapter="${esc(chapter.id)}"><div class="guide-aside"><h2>Omitted</h2><div class="guide-progress"><button type="button" class="progress-toc" data-toggle-toc>${String(index + 1).padStart(2, "0")} / ${String(total).padStart(2, "0")}</button></div><div class="guide-why">${formatCopy("Binary or unreadable paths.")}</div></div><div class="guide-stage">${renderOmitted(guide?.omitted || [])}</div></section>`;
   }
-  const files = (chapter.files || [])
-    .map((file, i) => renderFile(file, fileId(chapter.id, i)))
+  const files = chapter.files || [];
+  const selected =
+    (selectedGuidePath && files.some((file) => file.path === selectedGuidePath) && selectedGuidePath) ||
+    files.find((file) => !viewed.has(file.path))?.path ||
+    files[0]?.path ||
+    null;
+  const pills = files
+    .map((file, i) => renderFilePill(file, fileId(chapter.id, i), chapter.id, file.path === selected))
     .join("");
-  return `<section class="guide-section" id="${esc(sid)}"><div class="guide-section-head"><p class="meta">Section ${index + 1} of ${total}</p><h2>${esc(chapter.title)}</h2><p>${esc(chapter.why)}</p></div>${files}</section>`;
+  const stage = files
+    .map((file, i) => renderFile(file, fileId(chapter.id, i), { stage: true }))
+    .join("");
+  const idx = String(index + 1).padStart(2, "0");
+  const tot = String(total).padStart(2, "0");
+  const chapterDone = files.length > 0 && files.every((file) => viewed.has(file.path));
+  return `<section class="guide-section" id="${esc(sid)}" data-chapter="${esc(chapter.id)}"><aside class="guide-aside"><h2>${esc(chapter.title)}</h2><div class="guide-progress"><button type="button" class="progress-toc" data-toggle-toc>${idx} / ${tot}</button><label class="viewed"><input type="checkbox" data-reviewed-chapter="${esc(chapter.id)}"${chapterDone ? " checked" : ""}> Reviewed</label></div><div class="guide-why">${formatCopy(chapter.why)}</div><div class="file-pills">${pills}</div></aside><div class="guide-stage">${stage}</div></section>`;
 }
 
 function persistViewed() {
@@ -354,7 +576,26 @@ function hydrateViewed(id: string | null) {
   } catch {
     viewed = new Set();
   }
-  collapsed = new Set();
+  collapsed = new Set(viewed);
+}
+
+function setDiffMode(next: DiffLayout) {
+  if (tab === "guide") {
+    guideLayout = next;
+    try {
+      localStorage.setItem(GUIDE_DIFF_KEY, next);
+    } catch {
+      /* private mode */
+    }
+  } else {
+    diffLayout = next;
+    try {
+      localStorage.setItem(DIFF_KEY, next);
+    } catch {
+      /* private mode */
+    }
+  }
+  render({ restoreScroll: true });
 }
 
 function setTab(next: "guide" | "diff") {
@@ -368,9 +609,40 @@ function setTab(next: "guide" | "diff") {
   render();
 }
 
+function setReviewsCollapsed(next: boolean) {
+  if (tab === "guide") guideReviewsCollapsed = next;
+  else diffReviewsCollapsed = next;
+  persistReviewsRails();
+  const app = document.getElementById("app");
+  if (!app) return;
+  app.dataset.reviews = next ? "collapsed" : "open";
+  const btn = app.querySelector("[data-toggle-reviews]");
+  if (!btn) return;
+  btn.setAttribute("aria-expanded", next ? "false" : "true");
+  btn.setAttribute("aria-label", next ? "Show reviews" : "Hide reviews");
+  btn.setAttribute("title", next ? "Show reviews ([)" : "Hide reviews ([)");
+  btn.textContent = next ? "›" : "‹";
+}
+
 function diffRows() {
   if (!guide) return [];
   return filesForDiff(guide as Parameters<typeof filesForDiff>[0]);
+}
+
+function renderFileTree(nodes: FileTreeNode[], depth: number, rows: FileChange[]): string {
+  return nodes
+    .map((node) => {
+      if (node.kind === "dir") {
+        const shut = collapsedDirs.has(node.path);
+        const kids = shut ? "" : renderFileTree(node.children, depth + 1, rows);
+        return `<div class="tree-branch"><button type="button" class="tree-dir" style="--tree-depth:${depth}" data-tree-dir="${esc(node.path)}" aria-expanded="${shut ? "false" : "true"}"><span class="tree-chevron">${shut ? "▸" : "▾"}</span><span class="tree-dir-name">${compactDirLabel(node.name)}</span></button>${kids}</div>`;
+      }
+      const i = rows.findIndex((row) => row.path === node.path);
+      const current = node.path === selectedDiffPath ? "true" : "false";
+      const dim = viewed.has(node.path) ? " viewed-link" : "";
+      return `<button type="button" class="file-link tree-file${dim}" style="--tree-depth:${depth}" data-jump="${esc(diffFileId(i))}" data-path="${esc(node.path)}" title="${esc(node.path)}" aria-current="${current}"><span class="file-link-name">${esc(node.name)}</span></button>`;
+    })
+    .join("");
 }
 
 function diffFileId(index: number) {
@@ -382,6 +654,10 @@ function markCurrent() {
     document.querySelectorAll(".chapter-btn[data-jump]").forEach((btn) => {
       const jump = btn.getAttribute("data-jump");
       const on = jump === sectionId(selectedChapterId || "");
+      btn.setAttribute("aria-current", on ? "true" : "false");
+    });
+    document.querySelectorAll(".file-pill[data-path]").forEach((btn) => {
+      const on = btn.getAttribute("data-path") === selectedGuidePath;
       btn.setAttribute("aria-current", on ? "true" : "false");
     });
     return;
@@ -400,7 +676,10 @@ function jumpTo(id: string) {
     selectedChapterId = section.id.slice("section-".length);
   }
   const file = el.closest(".file") as HTMLElement | null;
-  if (file?.dataset.path) selectedDiffPath = file.dataset.path;
+  if (file?.dataset.path) {
+    selectedDiffPath = file.dataset.path;
+    selectedGuidePath = file.dataset.path;
+  }
   markCurrent();
   el.scrollIntoView({ behavior: "auto", block: "start" });
 }
@@ -409,7 +688,7 @@ function observeMain() {
   observer?.disconnect();
   const main = document.querySelector("main");
   if (!main) return;
-  const selector = tab === "guide" ? ".guide-section" : ".file[id]";
+  const selector = tab === "guide" ? ".guide-section, .file.stage" : ".file[id]";
   observer = new IntersectionObserver(
     (entries) => {
       const hit = entries
@@ -419,6 +698,9 @@ function observeMain() {
       const target = hit.target as HTMLElement;
       if (tab === "guide" && target.id.startsWith("section-")) {
         selectedChapterId = target.id.slice("section-".length);
+      }
+      if (tab === "guide" && target.classList.contains("stage") && target.dataset.path) {
+        selectedGuidePath = target.dataset.path;
       }
       if (tab === "diff" && target.dataset.path) {
         selectedDiffPath = target.dataset.path;
@@ -436,7 +718,7 @@ function render(opts?: { restoreScroll?: boolean }) {
   const prevMain = document.querySelector("main");
   const top = prevMain?.scrollTop ?? 0;
   if (!guide) {
-    app.innerHTML = `<p class="boot">No reviews yet. Add one from MCP or paste JSON.</p>${pasteModal()}`;
+    app.innerHTML = `<header>${BRAND_MARK}<h1>Guided review</h1></header><p class="boot">No reviews yet. Add one from MCP or paste JSON.</p>${pasteModal()}`;
     bindChrome(app);
     return;
   }
@@ -457,51 +739,54 @@ function render(opts?: { restoreScroll?: boolean }) {
   const reviewNav = reviews
     .map((r) => {
       const current = r.id === activeId ? "true" : "false";
-      return `<div class="review-btn" role="button" tabindex="0" data-review-id="${esc(r.id)}" aria-current="${current}"><span><span class="review-title">${esc(r.title)}</span><div class="review-range">${esc(r.range || "")}</div></span><button type="button" class="remove-btn" data-remove-id="${esc(r.id)}" aria-label="Remove">×</button></div>`;
+      return `<div class="review-btn" role="button" tabindex="0" data-review-id="${esc(r.id)}" aria-current="${current}" title="${esc(r.title)}"><span><span class="review-title">${esc(r.title)}</span><div class="review-range">${esc(r.range || "")}</div></span><button type="button" class="remove-btn" data-remove-id="${esc(r.id)}" aria-label="Remove">×</button></div>`;
     })
     .join("");
 
   const chapterNav = chapters
     .map((ch, i) => {
-      const s = ch._omitted ? { additions: 0, deletions: 0 } : chapterStats(ch);
       const current = ch.id === selectedChapterId ? "true" : "false";
-      const files = ch._omitted
-        ? ""
-        : (ch.files || [])
-            .map(
-              (file, fi) =>
-                `<button type="button" class="file-link" data-jump="${esc(fileId(ch.id, fi))}">${esc(file.path)}</button>`,
-            )
-            .join("");
-      return `<div class="toc-block"><button type="button" class="chapter-btn" data-jump="${esc(sectionId(ch.id))}" aria-current="${current}"><span class="idx">${String(i + 1).padStart(2, "0")}</span><span><span class="ch-kind ${esc(ch.kind)}">${esc(KIND_LABEL[ch.kind] || ch.kind)}</span><span class="ch-title">${esc(ch.title)}</span>${ch._omitted ? "" : `<div class="ch-stats">${statsHtml(s)}</div>`}</span></button>${files}</div>`;
+      return `<button type="button" class="chapter-btn" data-jump="${esc(sectionId(ch.id))}" data-chapter="${esc(ch.id)}" aria-current="${current}"><span class="idx">${String(i + 1).padStart(2, "0")}</span><span class="ch-title">${esc(ch.title)}</span></button>`;
     })
     .join("");
 
-  const fileNav = rows
-    .map((file, i) => {
-      const current = file.path === selectedDiffPath ? "true" : "false";
-      const dim = viewed.has(file.path) ? " viewed-link" : "";
-      return `<button type="button" class="file-link${dim}" data-jump="${esc(diffFileId(i))}" data-path="${esc(file.path)}" aria-current="${current}">${esc(file.path)}</button>`;
-    })
-    .join("");
+  const fileNav = renderFileTree(
+    fileTree(rows.map((row) => row.path)),
+    0,
+    rows,
+  );
 
-  const intro = guide.summary
-    ? `<div class="guide-intro prose"><p>${esc(guide.summary)}</p></div>`
-    : "";
   const guideBody = chapters.map((ch, i) => renderSection(ch, i, chapters.length)).join("");
   const diffBody = rows.map((file, i) => renderFile(file, diffFileId(i))).join("");
-  const sideLabel = tab === "guide" ? "Guide" : "Files";
-  const sideNav = tab === "guide" ? chapterNav : fileNav;
+  const tocFlyout = tocOpen
+    ? `<div class="toc-overlay" data-close-toc><div class="toc-panel" role="dialog" aria-label="Guide sections"><div class="nav-label">Sections</div>${chapterNav}</div></div>`
+    : "";
   const mainInner =
     tab === "guide"
-      ? `${intro}${guideBody}<p class="hint">j / k jump sections · TOC jumps · MCP at /mcp</p>`
-      : `${diffBody}<p class="hint">j / k jump files · viewed stays collapsed on Diff · MCP at /mcp</p>`;
-  const tabs = `<div class="view-tabs" role="tablist"><button type="button" role="tab" data-tab="guide" aria-selected="${tab === "guide" ? "true" : "false"}">Guide</button><button type="button" role="tab" data-tab="diff" aria-selected="${tab === "diff" ? "true" : "false"}">Diff</button></div>`;
+      ? `<div class="guide-doc">${guideBody}</div>${tocFlyout}`
+      : `${diffBody}<p class="hint">j / k jump files · [ hide reviews · drag rail edges · ⌘B split · viewed stays collapsed on Diff</p>`;
+  const layout = currentDiffLayout();
+  const railsHidden = reviewsCollapsed();
+  const tabs = `<div class="view-tabs main-tabs" role="tablist"><button type="button" role="tab" data-tab="guide" aria-selected="${tab === "guide" ? "true" : "false"}">Guide</button><button type="button" role="tab" data-tab="diff" aria-selected="${tab === "diff" ? "true" : "false"}">Diff</button></div>`;
+  const modes = `<div class="view-tabs" role="radiogroup" aria-label="Diff layout"><button type="button" data-diff-mode="unified" aria-selected="${layout === "unified" ? "true" : "false"}">Unified</button><button type="button" data-diff-mode="split" aria-selected="${layout === "split" ? "true" : "false"}">Split</button></div>`;
+  const hideBtn = `<button type="button" class="ghost" data-hide-unchanged aria-pressed="${hideUnchanged ? "true" : "false"}">${hideUnchanged ? "Show unchanged" : "Hide unchanged"}</button>`;
+  const themeBtn = `<button type="button" class="ghost theme-toggle" data-theme-next="${nextTheme}" aria-label="Switch to ${themeLabel} theme">${themeLabel}</button>`;
+  const display = `<details class="display-menu"${displayOpen ? " open" : ""} data-display-menu><summary>Display</summary><div class="display-panel">${modes}${hideBtn}${themeBtn}</div></details>`;
+  const reviewsToggle = `<button type="button" class="rail-toggle" data-toggle-reviews aria-expanded="${railsHidden ? "false" : "true"}" aria-label="${railsHidden ? "Show reviews" : "Hide reviews"}" title="Hide reviews ([)">${railsHidden ? "›" : "‹"}</button>`;
+  const reviewsHandle = `<button type="button" class="col-handle" data-rail="reviews" aria-label="Resize reviews"></button>`;
+  const sideHandle = `<button type="button" class="col-handle" data-rail="sidebar" aria-label="Resize file list"></button>`;
 
   document.title = `${guide.title} · Guided review`;
-  app.innerHTML = `<header><h1>${esc(guide.title)}</h1>${tabs}<span class="meta">${repo}${esc(range)}</span><div class="header-actions">${statsHtml(gs)}<button type="button" class="theme-toggle" data-theme-next="${nextTheme}" aria-label="Switch to ${themeLabel} theme">${themeLabel}</button></div></header><nav aria-label="Reviews"><div class="nav-label">Reviews <button type="button" class="ghost" data-open-paste>Add</button></div>${reviewNav}</nav><nav aria-label="${sideLabel}"><div class="nav-label">${sideLabel}</div>${sideNav}</nav><main>${mainInner}</main>${pasteModal()}`;
+  app.dataset.reviews = railsHidden ? "collapsed" : "open";
+  app.dataset.tab = tab;
+  const filesRail =
+    tab === "diff"
+      ? `<nav aria-label="Files">${sideHandle}<div class="nav-label">Files</div>${fileNav}</nav>`
+      : "";
+  app.innerHTML = `<header>${BRAND_MARK}<h1>${esc(guide.title)}</h1>${tabs}<span class="meta">${repo}${esc(range)}</span><div class="header-actions">${statsHtml(gs)}${display}</div></header><nav aria-label="Reviews">${reviewsHandle}${reviewsToggle}<div class="reviews-pane"><div class="nav-label"><span>Reviews</span><button type="button" class="ghost" data-open-paste>Add</button></div><div class="review-list">${reviewNav}</div></div></nav>${filesRail}<main><div class="main-inner${tab === "guide" ? " is-guide" : ""}">${mainInner}</div></main>${pasteModal()}`;
   bindChrome(app);
   observeMain();
+  requestAnimationFrame(() => app.classList.add("rails-ready"));
   if (opts?.restoreScroll) {
     document.querySelector("main")?.scrollTo(0, top);
   }
@@ -512,13 +797,94 @@ function bindChrome(app: HTMLElement) {
   app.querySelectorAll("[data-jump]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const id = btn.getAttribute("data-jump");
+      const path = btn.getAttribute("data-path");
+      const chapterId =
+        btn.getAttribute("data-chapter") ||
+        (id?.startsWith("section-") ? id.slice("section-".length) : null);
+      if (chapterId) selectedChapterId = chapterId;
+      if (path) {
+        selectedGuidePath = path;
+        selectedDiffPath = path;
+      } else if (chapterId && guide) {
+        const ch = chaptersForNav(guide).find((item) => item.id === chapterId);
+        selectedGuidePath =
+          ch?.files.find((file) => !viewed.has(file.path))?.path || ch?.files[0]?.path || null;
+      }
+      const wasToc = tocOpen;
+      tocOpen = false;
+      if (wasToc) render();
       if (id) jumpTo(id);
+      markCurrent();
     });
   });
   app.querySelectorAll("[data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const next = btn.getAttribute("data-tab");
       if (next === "guide" || next === "diff") setTab(next);
+    });
+  });
+  app.querySelectorAll("[data-diff-mode]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const next = btn.getAttribute("data-diff-mode");
+      if (next === "unified" || next === "split") {
+        displayOpen = true;
+        setDiffMode(next);
+      }
+    });
+  });
+  bindSplitHandles(app);
+  bindRailHandles(app);
+  const displayMenu = app.querySelector<HTMLDetailsElement>("[data-display-menu]");
+  displayMenu?.addEventListener("toggle", () => {
+    displayOpen = displayMenu.open;
+  });
+  app.querySelector("[data-hide-unchanged]")?.addEventListener("click", () => {
+    setHideUnchanged(!hideUnchanged);
+  });
+  app.querySelectorAll("[data-toggle-toc]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      tocOpen = !tocOpen;
+      render({ restoreScroll: true });
+    });
+  });
+  app.querySelector("[data-close-toc]")?.addEventListener("click", (event) => {
+    if (event.target === event.currentTarget) {
+      tocOpen = false;
+      render({ restoreScroll: true });
+    }
+  });
+  app.querySelector(".toc-panel")?.addEventListener("click", (event) => event.stopPropagation());
+  app.querySelectorAll("[data-reviewed-chapter]").forEach((input) => {
+    input.addEventListener("click", (event) => event.stopPropagation());
+    input.addEventListener("change", () => {
+      const id = input.getAttribute("data-reviewed-chapter");
+      if (!id || !guide) return;
+      if ((input as HTMLInputElement).checked) {
+        markChapterReviewed(id);
+        return;
+      }
+      const ch = chaptersForNav(guide).find((item) => item.id === id);
+      for (const file of ch?.files || []) {
+        const next = unmarkViewed(viewed, collapsed, file.path);
+        viewed = next.viewed;
+        collapsed = next.collapsed;
+      }
+      persistViewed();
+      render({ restoreScroll: true });
+    });
+  });
+  app.querySelector("[data-toggle-reviews]")?.addEventListener("click", () => {
+    setReviewsCollapsed(!reviewsCollapsed());
+  });
+  app.querySelectorAll("[data-tree-dir]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const path = btn.getAttribute("data-tree-dir");
+      if (!path) return;
+      const next = new Set(collapsedDirs);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      collapsedDirs = next;
+      render({ restoreScroll: true });
     });
   });
   app.querySelectorAll("[data-viewed-path]").forEach((input) => {
@@ -528,8 +894,12 @@ function bindChrome(app: HTMLElement) {
       if (!path) return;
       const on = (input as HTMLInputElement).checked;
       if (on) {
+        if (tab === "guide") {
+          markReviewed(path);
+          return;
+        }
         viewed = markViewed(viewed, collapsed, path).viewed;
-        if (tab === "diff") collapsed = new Set([...collapsed, path]);
+        collapsed = new Set([...collapsed, path]);
       } else {
         const next = unmarkViewed(viewed, collapsed, path);
         viewed = next.viewed;
@@ -568,7 +938,8 @@ function bindChrome(app: HTMLElement) {
   const themeBtn = app.querySelector(".theme-toggle");
   if (themeBtn) {
     themeBtn.addEventListener("click", () => {
-      setTheme(themeBtn.getAttribute("data-theme-next") || "light");
+      displayOpen = true;
+      setTheme(themeBtn.getAttribute("data-theme-next") || "dark");
       render({ restoreScroll: true });
     });
   }
@@ -657,6 +1028,52 @@ async function pasteGuide(text: string): Promise<void> {
   await loadActive();
 }
 
+function markReviewed(path: string) {
+  viewed = markViewed(viewed, collapsed, path).viewed;
+  collapsed = new Set([...collapsed, path]);
+  persistViewed();
+  if (!guide) {
+    render({ restoreScroll: true });
+    return;
+  }
+  const stops = guideStops(chaptersForNav(guide).filter((ch) => !ch._omitted));
+  const next = stepGuide(stops, selectedChapterId || "", path, 1);
+  if (next && (next.path !== path || next.chapterId !== selectedChapterId)) {
+    openStop(next);
+    return;
+  }
+  selectedGuidePath = path;
+  render({ restoreScroll: true });
+}
+
+function markChapterReviewed(chapterId: string) {
+  if (!guide) return;
+  const ch = chaptersForNav(guide).find((item) => item.id === chapterId);
+  for (const file of ch?.files || []) {
+    viewed = markViewed(viewed, collapsed, file.path).viewed;
+    collapsed = new Set([...collapsed, file.path]);
+  }
+  persistViewed();
+  const last = ch?.files[(ch.files || []).length - 1];
+  const stops = guideStops(chaptersForNav(guide).filter((item) => !item._omitted));
+  const next = last ? stepGuide(stops, chapterId, last.path, 1) : null;
+  if (next && next.chapterId !== chapterId) {
+    openStop(next);
+    return;
+  }
+  render({ restoreScroll: true });
+}
+
+function openStop(stop: { chapterId: string; path: string }) {
+  selectedChapterId = stop.chapterId;
+  selectedGuidePath = stop.path;
+  render();
+  if (!guide) return;
+  const ch = chaptersForNav(guide).find((item) => item.id === stop.chapterId);
+  const i = (ch?.files || []).findIndex((file) => file.path === stop.path);
+  jumpTo(i >= 0 && ch ? fileId(ch.id, i) : sectionId(stop.chapterId));
+}
+
 function move(delta: number) {
   if (!guide) return;
   if (tab === "diff") {
@@ -667,18 +1084,38 @@ function move(delta: number) {
     jumpTo(diffFileId(i + delta));
     return;
   }
-  const chapters = chaptersForNav(guide);
-  const i = chapters.findIndex((ch) => ch.id === selectedChapterId);
-  const next = chapters[i + delta];
-  if (!next) return;
-  jumpTo(sectionId(next.id));
+  const stops = guideStops(chaptersForNav(guide).filter((ch) => !ch._omitted));
+  const path = selectedGuidePath || stops[0]?.path;
+  const chapterId = selectedChapterId || stops[0]?.chapterId;
+  if (!path || !chapterId) return;
+  const next = stepGuide(stops, chapterId, path, delta);
+  if (next) openStop(next);
 }
 
 export function boot(): void {
   const saved = localStorage.getItem(THEME_KEY);
-  if (saved) document.documentElement.dataset.theme = saved;
+  document.documentElement.dataset.theme = saved === "light" || saved === "dark" ? saved : "dark";
   const savedTab = localStorage.getItem(TAB_KEY);
   if (savedTab === "guide" || savedTab === "diff") tab = savedTab;
+  guideLayout = parseDiffLayout(localStorage.getItem(GUIDE_DIFF_KEY), "unified");
+  diffLayout = parseDiffLayout(localStorage.getItem(DIFF_KEY), "split");
+  const savedSplit = Number(localStorage.getItem(SPLIT_KEY));
+  applySplitPct(Number.isFinite(savedSplit) && savedSplit > 0 ? savedSplit : 0.5);
+  hideUnchanged = localStorage.getItem(HIDE_KEY) === "1";
+  try {
+    const rails = JSON.parse(localStorage.getItem(RAILS_KEY) || "null") as {
+      reviews?: number;
+      sidebar?: number;
+    } | null;
+    if (rails?.reviews) reviewsPx = rails.reviews;
+    if (rails?.sidebar) sidebarPx = rails.sidebar;
+  } catch {
+    /* ignore */
+  }
+  applyRails();
+  const reviewRails = parseReviewsRails(localStorage.getItem(REVIEWS_KEY));
+  guideReviewsCollapsed = reviewRails.guide === "collapsed";
+  diffReviewsCollapsed = reviewRails.diff === "collapsed";
   document.addEventListener("keydown", (event) => {
     const tag = (event.target as HTMLElement | null)?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA") return;
@@ -688,6 +1125,16 @@ export function boot(): void {
     } else if (event.key === "k") {
       event.preventDefault();
       move(-1);
+    } else if (event.key === "[") {
+      event.preventDefault();
+      setReviewsCollapsed(!reviewsCollapsed());
+    } else if (event.key === "Escape" && tocOpen) {
+      event.preventDefault();
+      tocOpen = false;
+      render({ restoreScroll: true });
+    } else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "b") {
+      event.preventDefault();
+      setDiffMode(currentDiffLayout() === "split" ? "unified" : "split");
     }
   });
   void loadActive();
