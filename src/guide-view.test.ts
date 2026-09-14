@@ -18,6 +18,8 @@ import {
   guideStops,
   stepGuide,
   parseDiffLayout,
+  parseChapterWidth,
+  serializeChapterWidth,
   formatCopy,
 } from "./guide-view.ts";
 
@@ -306,6 +308,31 @@ test("parseDiffLayout keeps a saved Diff mode and falls back per tab", () => {
   assert.equal(parseDiffLayout("unified", "split"), "unified");
   assert.equal(parseDiffLayout(null, "unified"), "unified");
   assert.equal(parseDiffLayout("nope", "split"), "split");
+});
+
+test("parseChapterWidth restores a saved Guide aside width", () => {
+  assert.equal(parseChapterWidth(360), 360);
+});
+
+test("parseChapterWidth uses the Guide aside default when the value is missing", () => {
+  assert.equal(parseChapterWidth(null), 300);
+  assert.equal(parseChapterWidth(undefined), 300);
+});
+
+test("parseChapterWidth uses the Guide aside default when the value is invalid", () => {
+  assert.equal(parseChapterWidth("nope"), 300);
+  assert.equal(parseChapterWidth({}), 300);
+  assert.equal(parseChapterWidth(Number.NaN), 300);
+});
+
+test("parseChapterWidth clamps a saved width to the Guide aside min and max", () => {
+  assert.equal(parseChapterWidth(10), 240);
+  assert.equal(parseChapterWidth(9999), 520);
+});
+
+test("serializeChapterWidth round-trips a clamped width", () => {
+  assert.equal(parseChapterWidth(serializeChapterWidth(360)), 360);
+  assert.equal(parseChapterWidth(serializeChapterWidth(10)), 240);
 });
 
 test("formatCopy renders paragraphs, code, and bold without raw HTML", () => {

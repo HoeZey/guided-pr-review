@@ -15,6 +15,8 @@ import {
   guideStops,
   stepGuide,
   parseDiffLayout,
+  parseChapterWidth,
+  serializeChapterWidth,
   formatCopy,
   type Lined,
   type SplitRow,
@@ -142,6 +144,7 @@ let diffLayout: DiffLayout = "split";
 let splitPct = 0.5;
 let hideUnchanged = false;
 let sidebarPx = 280;
+let chapterPx = 300;
 let viewed = new Set<string>();
 let collapsed = new Set<string>();
 let collapsedDirs = new Set<string>();
@@ -369,11 +372,15 @@ function persistSplitPct() {
 
 function applyRails() {
   document.documentElement.style.setProperty("--sidebar", `${sidebarPx}px`);
+  document.documentElement.style.setProperty("--chapter", `${chapterPx}px`);
 }
 
 function persistRails() {
   try {
-    localStorage.setItem(RAILS_KEY, JSON.stringify({ sidebar: sidebarPx }));
+    localStorage.setItem(
+      RAILS_KEY,
+      JSON.stringify({ sidebar: sidebarPx, chapter: serializeChapterWidth(chapterPx) }),
+    );
   } catch {
     /* private mode */
   }
@@ -391,6 +398,10 @@ function bindRailHandles(root: HTMLElement) {
         const left = app.getBoundingClientRect().left;
         if (which === "sidebar") {
           sidebarPx = Math.min(520, Math.max(160, ev.clientX - left));
+        } else if (which === "chapter") {
+          const col = handle.closest(".guide-aside");
+          const colLeft = (col ?? app).getBoundingClientRect().left;
+          chapterPx = parseChapterWidth(ev.clientX - colLeft);
         }
         applyRails();
       };
@@ -597,8 +608,9 @@ function renderFilePill(file: FileChange, id: string, chapterId: string, current
 
 function renderSection(chapter: Chapter, index: number, total: number) {
   const sid = sectionId(chapter.id);
+  const chapterHandle = `<button type="button" class="col-handle" data-rail="chapter" aria-label="Resize chapter column"></button>`;
   if (chapter._omitted) {
-    return `<section class="guide-section" id="${esc(sid)}" data-chapter="${esc(chapter.id)}"><div class="guide-aside"><h2>Omitted</h2><div class="guide-progress"><button type="button" class="progress-toc" data-toggle-toc>${String(index + 1).padStart(2, "0")} / ${String(total).padStart(2, "0")}</button></div><div class="guide-why">${formatCopy("Binary or unreadable paths.")}</div></div><div class="guide-stage">${renderOmitted(guide?.omitted || [])}</div></section>`;
+    return `<section class="guide-section" id="${esc(sid)}" data-chapter="${esc(chapter.id)}"><div class="guide-aside">${chapterHandle}<h2>Omitted</h2><div class="guide-progress"><button type="button" class="progress-toc" data-toggle-toc>${String(index + 1).padStart(2, "0")} / ${String(total).padStart(2, "0")}</button></div><div class="guide-why">${formatCopy("Binary or unreadable paths.")}</div></div><div class="guide-stage">${renderOmitted(guide?.omitted || [])}</div></section>`;
   }
   const files = chapter.files || [];
   const selected =
@@ -615,7 +627,7 @@ function renderSection(chapter: Chapter, index: number, total: number) {
   const idx = String(index + 1).padStart(2, "0");
   const tot = String(total).padStart(2, "0");
   const chapterDone = files.length > 0 && files.every((file) => viewed.has(file.path));
-  return `<section class="guide-section" id="${esc(sid)}" data-chapter="${esc(chapter.id)}"><aside class="guide-aside"><h2>${esc(chapter.title)}</h2><div class="guide-progress"><button type="button" class="progress-toc" data-toggle-toc>${idx} / ${tot}</button><label class="viewed"><input type="checkbox" data-reviewed-chapter="${esc(chapter.id)}"${chapterDone ? " checked" : ""}> Reviewed</label></div><div class="guide-why">${formatCopy(chapter.why)}</div><div class="file-pills">${pills}</div></aside><div class="guide-stage">${stage}</div></section>`;
+  return `<section class="guide-section" id="${esc(sid)}" data-chapter="${esc(chapter.id)}"><aside class="guide-aside">${chapterHandle}<h2>${esc(chapter.title)}</h2><div class="guide-progress"><button type="button" class="progress-toc" data-toggle-toc>${idx} / ${tot}</button><label class="viewed"><input type="checkbox" data-reviewed-chapter="${esc(chapter.id)}"${chapterDone ? " checked" : ""}> Reviewed</label></div><div class="guide-why">${formatCopy(chapter.why)}</div><div class="file-pills">${pills}</div></aside><div class="guide-stage">${stage}</div></section>`;
 }
 
 function persistViewed() {
@@ -1224,8 +1236,10 @@ export function boot(): void {
   try {
     const rails = JSON.parse(localStorage.getItem(RAILS_KEY) || "null") as {
       sidebar?: number;
+      chapter?: unknown;
     } | null;
     if (rails?.sidebar) sidebarPx = rails.sidebar;
+    chapterPx = parseChapterWidth(rails?.chapter);
   } catch {
     /* ignore */
   }
