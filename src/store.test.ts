@@ -304,6 +304,8 @@ test("list_reviews exposes source commit so an unchanged PR is detectable", asyn
     );
     assert.equal(listed.reviews[0].pullRequest?.number, 1027);
     assert.equal(listed.reviews[0].pullRequest?.repository.id, "repo-1");
+    assert.equal(listed.reviews[0].pullRequest?.targetRef, "refs/heads/develop");
+    assert.equal(listed.reviews[0].pullRequest?.sourceRef, "refs/heads/feature/example");
   });
 });
 

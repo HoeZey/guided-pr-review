@@ -134,6 +134,8 @@ function toSummary(record: ReviewRecord): ListReviewsOutput["reviews"][number] {
       },
       number: source.number,
       webUrl: source.webUrl,
+      targetRef: source.targetRef,
+      sourceRef: source.sourceRef,
     },
   };
 }

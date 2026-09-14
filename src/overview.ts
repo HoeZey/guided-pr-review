@@ -33,7 +33,7 @@ export function projectHomeCards(reviews: readonly ReviewSummary[]): HomeCard[] 
   return reviews.map((review) => ({
     id: review.id,
     title: review.title,
-    range: review.range,
+    range: homeRange(review),
     repository: review.pullRequest
       ? {
           owner: review.pullRequest.repository.owner,
@@ -42,4 +42,24 @@ export function projectHomeCards(reviews: readonly ReviewSummary[]): HomeCard[] 
       : undefined,
     webUrl: review.pullRequest?.webUrl,
   }));
+}
+
+function homeRange(review: ReviewSummary): string | undefined {
+  const pr = review.pullRequest;
+  if (pr) return `${stripHeads(pr.targetRef)} ← ${stripHeads(pr.sourceRef)}`;
+  return parseThreeDot(review.range);
+}
+
+function parseThreeDot(range: string | undefined): string | undefined {
+  if (!range) return undefined;
+  const idx = range.indexOf("...");
+  if (idx === -1) return undefined;
+  const target = range.slice(0, idx).trim();
+  const source = range.slice(idx + 3).trim();
+  if (!target || !source) return undefined;
+  return `${target} ← ${source}`;
+}
+
+function stripHeads(ref: string): string {
+  return ref.replace(/^refs\/heads\//i, "");
 }
