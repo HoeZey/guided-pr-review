@@ -144,6 +144,7 @@ body {
 }
 
 .home-card-title {
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -228,7 +229,7 @@ header h1 {
 .view-tabs.main-tabs {
   border: 0;
   border-radius: 0;
-  gap: 2px;
+  gap: 4px;
   overflow: visible;
 }
 
@@ -238,15 +239,16 @@ header h1 {
   padding: 4px 12px;
   color: var(--muted);
   font: inherit;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
 }
 
 .view-tabs.main-tabs button {
-  padding: 10px 8px 8px;
+  padding: 14px 8px 12px;
   border-bottom: 2px solid transparent;
   border-radius: 0;
+  font-weight: 500;
 }
 
 .view-tabs button[aria-selected="true"] {
@@ -419,9 +421,9 @@ header h1 {
   background: var(--bg-elevated);
   color: var(--muted);
   font: inherit;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: normal;
   cursor: pointer;
 }
 
@@ -545,7 +547,7 @@ main {
   background: transparent;
   color: var(--muted);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 13px;
   text-align: left;
   cursor: pointer;
   min-width: 0;
@@ -588,7 +590,7 @@ main {
   background: transparent;
   color: var(--muted);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 13px;
   text-align: left;
   cursor: pointer;
   min-width: 0;
@@ -613,9 +615,18 @@ main {
 
 .outcome-empty h2 {
   margin: 0 0 8px;
-  font-size: 20px;
+  font-size: 26px;
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.04em;
+  line-height: 1.2;
+}
+
+.guide-section-head h2 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1.2;
 }
 
 .outcome-section {
@@ -632,7 +643,8 @@ main {
 .axis-empty {
   margin: 0;
   color: var(--muted);
-  font-size: 14px;
+  font-size: 15px;
+  line-height: 1.55;
 }
 
 .finding {
@@ -651,7 +663,8 @@ main {
 
 .severity,
 .classification {
-  font-size: 10px;
+  font-family: var(--mono);
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -675,15 +688,17 @@ main {
 
 .finding h3 {
   margin: 0 0 6px;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
+  line-height: 1.55;
 }
 
 .finding .explanation {
   margin: 0;
   max-width: 62ch;
-  font-size: 13px;
-  line-height: 1.5;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.55;
 }
 
 .finding .recommendation,
@@ -691,12 +706,16 @@ main {
 .finding .reference {
   margin: 8px 0 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 15px;
+  line-height: 1.55;
   max-width: 62ch;
 }
 
-.finding .location {
+.finding .location,
+.finding .reference {
   font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .finding-label {
@@ -913,7 +932,7 @@ main {
   flex: 0 1 auto;
   min-width: 0;
   font-weight: 550;
-  font-size: 12px;
+  font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1048,7 +1067,7 @@ main {
   margin-left: auto;
   color: var(--muted);
   font-family: var(--sans);
-  font-size: 11px;
+  font-size: 13px;
   cursor: pointer;
   user-select: none;
 }

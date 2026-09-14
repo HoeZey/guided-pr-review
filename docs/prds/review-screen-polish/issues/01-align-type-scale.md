@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 blocked_by: []
 blocks: []
 ---
@@ -42,15 +42,15 @@ match, so sizes do not jump across surfaces.
 
 **Acceptance criteria:**
 
-- [ ] Guide / Diff / Code Review read as Linear header underline tabs at
+- [x] Guide / Diff / Code Review read as Linear header underline tabs at
   chrome 13px on a manual pass.
-- [ ] Chapter title stays editorial scale; why copy still renders formatted
+- [x] Chapter title stays editorial scale; why copy still renders formatted
   paragraphs, inline code, and bold at body scale.
-- [ ] Code Review axis heads match chapter title; finding cards use why
+- [x] Code Review axis heads match chapter title; finding cards use why
   scale; meta stays meta-sized.
-- [ ] Home card titles match review chrome; range and repository badge match
+- [x] Home card titles match review chrome; range and repository badge match
   header meta.
-- [ ] No automated Astro DOM or pixel assertions.
+- [x] No automated Astro DOM or pixel assertions.
 
 **Blocked by:** none
 
