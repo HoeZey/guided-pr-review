@@ -2,7 +2,9 @@ import {
   pullRequestSyncKey,
   type CatalogPullRequest,
   type CatalogSnapshot,
+  type OpenActionTarget,
   type ReviewSummary,
+  type StoredAction,
 } from "./contracts.ts";
 
 export type HomeCard = {
@@ -13,7 +15,10 @@ export type HomeCard = {
   webUrl: string | undefined;
   reviewId: string | undefined;
   hasGuide: boolean;
+  openTarget?: OpenActionTarget;
 };
+
+export type HomeCardAction = "open-saved" | "queue-open" | "disabled-host";
 
 export type HomeGroupId =
   | "review-requests"
@@ -39,6 +44,52 @@ export const HOME_PATH = "/";
 
 export function reviewPath(reviewId: string): string {
   return `/reviews/${encodeURIComponent(reviewId)}`;
+}
+
+export function reviewLandingTab(guide: { unchaptered?: boolean }): "guide" | "diff" {
+  return guide.unchaptered ? "diff" : "guide";
+}
+
+export function guidePresentsWalkthrough(guide: { unchaptered?: boolean }): boolean {
+  return !guide.unchaptered;
+}
+
+export const AGENT_DISCONNECTED_HINT =
+  "The guided-review skill must be running to open a pull request from the host.";
+
+export function hostActionHint(agentConnected: boolean): string | undefined {
+  return agentConnected ? undefined : AGENT_DISCONNECTED_HINT;
+}
+
+export function inFlightOpenCopy(
+  status: StoredAction["status"],
+): "Waiting" | "Opening" | undefined {
+  if (status === "queued") return "Waiting";
+  if (status === "claimed") return "Opening";
+  return undefined;
+}
+
+export function homeCardAction(
+  card: HomeCard,
+  agentConnected: boolean,
+): HomeCardAction {
+  if (card.reviewId) return "open-saved";
+  if (card.openTarget && agentConnected) return "queue-open";
+  return "disabled-host";
+}
+
+export function latestOpenAction(
+  card: HomeCard,
+  actions: readonly StoredAction[],
+): StoredAction | undefined {
+  if (!card.openTarget) return undefined;
+  const key = pullRequestSyncKey(card.openTarget);
+  return [...actions]
+    .reverse()
+    .find(
+      (action) =>
+        action.kind === "open" && pullRequestSyncKey(action.target) === key,
+    );
 }
 
 export function resolveOverviewView(
@@ -67,7 +118,7 @@ export function projectHomeCards(reviews: readonly ReviewSummary[]): HomeCard[] 
       : undefined,
     webUrl: review.pullRequest?.webUrl,
     reviewId: review.id,
-    hasGuide: true,
+    hasGuide: !review.unchaptered,
   }));
 }
 
@@ -94,7 +145,13 @@ function catalogCard(
     },
     webUrl: item.webUrl,
     reviewId: review?.id,
-    hasGuide: Boolean(review?.id),
+    hasGuide: Boolean(review?.id) && !review?.unchaptered,
+    openTarget: {
+      provider: item.provider,
+      host: item.host,
+      repository: item.repository,
+      number: item.number,
+    },
   };
 }
 

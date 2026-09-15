@@ -3,9 +3,14 @@ import { test } from "node:test";
 import type { CatalogPullRequest, CatalogSnapshot, ReviewSummary } from "./contracts.ts";
 import {
   HOME_PATH,
+  guidePresentsWalkthrough,
+  homeCardAction,
+  hostActionHint,
+  inFlightOpenCopy,
   projectHomeCards,
   projectHomeOverview,
   resolveOverviewView,
+  reviewLandingTab,
   reviewPath,
 } from "./overview.ts";
 
@@ -500,4 +505,48 @@ test("an empty catalog keeps saved guides visible", () => {
       { id: "local-ranges", titles: ["Local"] },
     ],
   );
+});
+
+test("the Guide tab does not present a placeholder walkthrough for an unchaptered review", () => {
+  assert.equal(guidePresentsWalkthrough({ unchaptered: true }), false);
+  assert.equal(guidePresentsWalkthrough({}), true);
+  assert.equal(reviewLandingTab({ unchaptered: true }), "diff");
+  assert.equal(reviewLandingTab({}), "guide");
+});
+
+test("catalog cards without a saved review expose an Open target", () => {
+  const overview = projectHomeOverview([], [originSnapshot([catalogItem()])]);
+  const card = overview.groups[0].cards[0];
+  assert.equal(card.reviewId, undefined);
+  assert.deepEqual(card.openTarget, {
+    provider: "azure-devops",
+    host: "dev.azure.com",
+    repository: {
+      id: "repo-1",
+      owner: "braidteam/BRAID",
+      name: "braid-connection-designer",
+      webUrl: "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer",
+    },
+    number: 1101,
+  });
+  assert.equal(homeCardAction(card, true), "queue-open");
+});
+
+test("host-backed actions explain that the skill must be running when disconnected", () => {
+  assert.equal(hostActionHint(true), undefined);
+  assert.match(hostActionHint(false) ?? "", /skill must be running/);
+  assert.equal(inFlightOpenCopy("queued"), "Waiting");
+  assert.equal(inFlightOpenCopy("claimed"), "Opening");
+});
+
+test("current saved reviews remain openable while disconnected", () => {
+  const saved = projectHomeOverview(
+    [summary({ id: "local-1", title: "Local" })],
+    [],
+  ).groups[0].cards[0];
+  assert.equal(homeCardAction(saved, false), "open-saved");
+  const catalog = projectHomeOverview([], [originSnapshot([catalogItem()])]).groups[0]
+    .cards[0];
+  assert.equal(homeCardAction(catalog, false), "disabled-host");
+  assert.equal(homeCardAction(catalog, true), "queue-open");
 });

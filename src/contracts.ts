@@ -133,6 +133,7 @@ export const GuideV1 = z
     deletions: z.number().int().min(0).optional(),
     chapters: z.array(Chapter).min(1),
     omitted: z.array(Omitted).optional(),
+    unchaptered: z.boolean().optional(),
     source: PullRequestSource.optional(),
   })
   .strict();
@@ -290,6 +291,39 @@ export const CatalogSnapshot = z
   })
   .strict();
 
+export const OpenActionTarget = z
+  .object({
+    provider: z.literal("azure-devops"),
+    host: z
+      .string()
+      .min(1)
+      .refine(isAzureDevOpsHost, { message: "unsupported git host" }),
+    repository: CatalogRepositoryIdentity,
+    number: z.number().int().positive(),
+  })
+  .strict();
+
+export const ActionError = z
+  .object({
+    code: z.string().min(1),
+    message: z.string().min(1),
+  })
+  .strict();
+
+export const StoredAction = z
+  .object({
+    id: z.string().min(1),
+    kind: z.literal("open"),
+    status: z.enum(["queued", "claimed", "succeeded", "failed"]),
+    queuedAt: z.string().min(1),
+    claimedAt: z.string().min(1).optional(),
+    completedAt: z.string().min(1).optional(),
+    target: OpenActionTarget,
+    reviewId: z.string().min(1).optional(),
+    error: ActionError.optional(),
+  })
+  .strict();
+
 export const StoreV1 = z
   .object({
     version: z.literal(1),
@@ -297,11 +331,16 @@ export const StoreV1 = z
     reviews: z.array(ReviewRecord),
     repositories: z.array(ConfiguredRepository).default([]),
     catalog: z.array(CatalogSnapshot).default([]),
+    actions: z.array(StoredAction).default([]),
+    agentLastSeen: z.string().min(1).optional(),
   })
   .strict();
 
 export type StoreV1 = z.infer<typeof StoreV1>;
 export type ReviewRecord = z.infer<typeof ReviewRecord>;
+export type StoredAction = z.infer<typeof StoredAction>;
+export type OpenActionTarget = z.infer<typeof OpenActionTarget>;
+export type ActionError = z.infer<typeof ActionError>;
 
 export const ReviewSummary = z
   .object({
@@ -313,6 +352,7 @@ export const ReviewSummary = z
     head: z.string(),
     syncKey: z.string().optional(),
     sourceCommit: z.string().optional(),
+    unchaptered: z.boolean().optional(),
     pullRequest: z
       .object({
         provider: z.literal("azure-devops"),
@@ -345,8 +385,54 @@ export const tools = {
         activeId: z.string().nullable(),
         repositories: z.array(ConfiguredRepository),
         catalog: z.array(CatalogSnapshot),
+        actions: z.array(StoredAction),
+        agentConnected: z.boolean(),
       })
       .strict(),
+  },
+  queue_action: {
+    input: z
+      .object({
+        kind: z.literal("open"),
+        target: OpenActionTarget,
+      })
+      .strict(),
+    output: z.object({ id: z.string() }).strict(),
+  },
+  wait_for_action: {
+    input: z
+      .object({
+        timeoutMs: z.number().int().min(0).max(30_000).optional(),
+      })
+      .strict(),
+    output: z.object({ action: StoredAction.nullable() }).strict(),
+  },
+  complete_action: {
+    input: z
+      .object({
+        id: z.string().min(1),
+        status: z.enum(["succeeded", "failed"]),
+        reviewId: z.string().min(1).optional(),
+        error: ActionError.optional(),
+      })
+      .strict()
+      .superRefine((value, ctx) => {
+        if (value.status === "succeeded" && !value.reviewId) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "reviewId required when Open succeeds",
+            path: ["reviewId"],
+          });
+        }
+        if (value.status === "failed" && !value.error) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "error required when an action fails",
+            path: ["error"],
+          });
+        }
+      }),
+    output: z.object({ ok: z.literal(true) }).strict(),
   },
   replace_catalog: {
     input: z
@@ -427,4 +513,5 @@ export const emptyStore = (): StoreV1 => ({
   reviews: [],
   repositories: [],
   catalog: [],
+  actions: [],
 });

@@ -2,13 +2,16 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 import { tools } from "./contracts.ts";
 import {
   addReviewFromTool,
+  completeAction,
   getReview,
   listReviews,
   publishReviewOutcome,
+  queueAction,
   removeReview,
   replaceCatalog,
   setActive,
   upsertReviewFromTool,
+  waitForAction,
 } from "./store.ts";
 
 const PROTOCOL = "2024-11-05";
@@ -24,7 +27,7 @@ const TOOL_DEFS = [
   {
     name: "list_reviews",
     description:
-      "List saved guided reviews, the active id, configured repositories, catalog snapshots, pull-request provenance when present, and guide base/head.",
+      "List saved guided reviews, the active id, configured repositories, catalog snapshots, in-flight actions, and whether the waiting agent is connected.",
     inputSchema: schema(tools.list_reviews.input),
   },
   {
@@ -32,6 +35,24 @@ const TOOL_DEFS = [
     description:
       "Replace the pull-request catalog snapshot for one repository. Includes the current origin repository in configuration. Never deletes saved reviews.",
     inputSchema: schema(tools.replace_catalog.input),
+  },
+  {
+    name: "queue_action",
+    description:
+      "Queue an Open action for a catalog pull request that has no saved review. Dedupes an in-flight Open for the same target.",
+    inputSchema: schema(tools.queue_action.input),
+  },
+  {
+    name: "wait_for_action",
+    description:
+      "Long-poll until a queued browser action is claimed, or until timeoutMs. Heartbeats the waiting agent. Returns null when idle.",
+    inputSchema: schema(tools.wait_for_action.input),
+  },
+  {
+    name: "complete_action",
+    description:
+      "Mark a claimed action succeeded or failed. Succeeded Open requires reviewId. Failed requires a structured error.",
+    inputSchema: schema(tools.complete_action.input),
   },
   {
     name: "add_review",
@@ -85,6 +106,18 @@ async function callTool(
     case "replace_catalog": {
       const input = tools.replace_catalog.input.parse(args);
       return replaceCatalog(input);
+    }
+    case "queue_action": {
+      const input = tools.queue_action.input.parse(args);
+      return queueAction(input);
+    }
+    case "wait_for_action": {
+      const input = tools.wait_for_action.input.parse(args ?? {});
+      return { action: await waitForAction(input) };
+    }
+    case "complete_action": {
+      const input = tools.complete_action.input.parse(args);
+      return completeAction(input);
     }
     case "add_review": {
       const input = tools.add_review.input.parse(args);

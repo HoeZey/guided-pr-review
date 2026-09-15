@@ -6,15 +6,18 @@ import { test } from "node:test";
 import { GuideV1 } from "./contracts.ts";
 import {
   addReview,
+  agentIsConnected,
   dataFile,
   getReview,
   listReviews,
   publishReviewOutcome,
+  queueAction,
   removeReview,
   replaceCatalog,
   resetStoreCache,
   setActive,
   upsertReview,
+  waitForAction,
 } from "./store.ts";
 
 const sample = GuideV1.parse({
@@ -560,4 +563,52 @@ test("a failed catalog replacement records an isolated error and keeps saved rev
     assert.deepEqual(listed.catalog[0].pullRequests, []);
     assert.equal(listed.repositories[0].origin, true);
   });
+});
+
+function openTarget(number = 1101) {
+  return {
+    provider: "azure-devops" as const,
+    host: "dev.azure.com",
+    repository: {
+      id: "repo-1",
+      owner: "braidteam/BRAID",
+      name: "braid-connection-designer",
+      webUrl: "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer",
+    },
+    number,
+  };
+}
+
+test("selecting an unopened PR queues exactly one Open action", async () => {
+  await withStore(async () => {
+    const first = await queueAction({ kind: "open", target: openTarget() });
+    const second = await queueAction({ kind: "open", target: openTarget() });
+    assert.equal(second.id, first.id);
+    const listed = await listReviews();
+    assert.equal(listed.actions.length, 1);
+    assert.equal(listed.actions[0].id, first.id);
+    assert.equal(listed.actions[0].kind, "open");
+    assert.equal(listed.actions[0].status, "queued");
+    assert.equal(listed.actions[0].target.number, 1101);
+  });
+});
+
+test("waitForAction claims a queued Open and marks the agent connected", async () => {
+  await withStore(async () => {
+    let listed = await listReviews();
+    assert.equal(listed.agentConnected, false);
+    const queued = await queueAction({ kind: "open", target: openTarget() });
+    const claimed = await waitForAction({ timeoutMs: 0 });
+    assert.equal(claimed?.id, queued.id);
+    assert.equal(claimed?.status, "claimed");
+    listed = await listReviews();
+    assert.equal(listed.agentConnected, true);
+    assert.equal(listed.actions[0].status, "claimed");
+  });
+});
+
+test("a missing or stale heartbeat is disconnected", () => {
+  assert.equal(agentIsConnected(undefined), false);
+  assert.equal(agentIsConnected(new Date(Date.now() - 40_000).toISOString()), false);
+  assert.equal(agentIsConnected(new Date().toISOString()), true);
 });

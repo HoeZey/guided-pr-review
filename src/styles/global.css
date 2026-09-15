@@ -223,6 +223,20 @@ body {
   color: var(--accent);
 }
 
+.home-card-status.is-failed {
+  color: var(--removed-text);
+}
+
+button.home-card-open {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
 header {
   grid-column: 1 / -1;
   position: relative;

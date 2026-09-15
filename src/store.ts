@@ -11,10 +11,14 @@ import {
   type CatalogSnapshot,
   type ConfiguredRepository,
   type ListReviewsOutput,
+  type OpenActionTarget,
   type PullRequestSource,
   type ReviewRecord,
+  type StoredAction,
   type StoredOutcome,
 } from "./contracts.ts";
+
+export const AGENT_CONNECTED_MS = 35_000;
 
 const root = join(fileURLToPath(new URL(".", import.meta.url)), "..");
 
@@ -121,6 +125,7 @@ function toSummary(record: ReviewRecord): ListReviewsOutput["reviews"][number] {
     addedAt: record.addedAt,
     base: record.guide.base,
     head: record.guide.head,
+    ...(record.guide.unchaptered ? { unchaptered: true as const } : {}),
   };
   if (!source) return summary;
   return {
@@ -141,6 +146,23 @@ function toSummary(record: ReviewRecord): ListReviewsOutput["reviews"][number] {
       sourceRef: source.sourceRef,
     },
   };
+}
+
+export function agentIsConnected(
+  lastSeen: string | undefined,
+  now = Date.now(),
+): boolean {
+  if (!lastSeen) return false;
+  const seen = Date.parse(lastSeen);
+  return Number.isFinite(seen) && now - seen <= AGENT_CONNECTED_MS;
+}
+
+function sameOpenTarget(a: OpenActionTarget, b: OpenActionTarget): boolean {
+  return pullRequestSyncKey(a) === pullRequestSyncKey(b);
+}
+
+function isInFlight(action: StoredAction): boolean {
+  return action.status === "queued" || action.status === "claimed";
 }
 
 async function appendActive(guide: GuideV1): Promise<{ id: string }> {
@@ -180,7 +202,79 @@ export async function listReviews(): Promise<ListReviewsOutput> {
     reviews: store.reviews.map(toSummary),
     repositories: store.repositories,
     catalog: store.catalog,
+    actions: store.actions,
+    agentConnected: agentIsConnected(store.agentLastSeen),
   };
+}
+
+export async function queueAction(input: unknown): Promise<{ id: string }> {
+  const parsed = tools.queue_action.input.parse(input);
+  const store = await readStore();
+  const existing = store.actions.find(
+    (action) =>
+      action.kind === parsed.kind &&
+      isInFlight(action) &&
+      sameOpenTarget(action.target, parsed.target),
+  );
+  if (existing) return { id: existing.id };
+  const id = crypto.randomUUID();
+  store.actions.push({
+    id,
+    kind: parsed.kind,
+    status: "queued",
+    queuedAt: new Date().toISOString(),
+    target: parsed.target,
+  });
+  await writeStore(store);
+  return { id };
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function waitForAction(input: unknown = {}): Promise<StoredAction | null> {
+  const parsed = tools.wait_for_action.input.parse(input ?? {});
+  const timeoutMs = parsed.timeoutMs ?? 25_000;
+  const deadline = Date.now() + timeoutMs;
+  // ponytail: 50ms poll, fine for one waiting agent; evented wait if that changes
+  for (;;) {
+    const store = await readStore();
+    store.agentLastSeen = new Date().toISOString();
+    const claimed = store.actions.find((action) => action.status === "claimed");
+    if (claimed) {
+      await writeStore(store);
+      return claimed;
+    }
+    const queued = store.actions.find((action) => action.status === "queued");
+    if (queued) {
+      queued.status = "claimed";
+      queued.claimedAt = store.agentLastSeen;
+      await writeStore(store);
+      return queued;
+    }
+    await writeStore(store);
+    if (Date.now() >= deadline) return null;
+    await sleep(50);
+  }
+}
+
+export async function completeAction(input: unknown): Promise<{ ok: true }> {
+  const parsed = tools.complete_action.input.parse(input);
+  const store = await readStore();
+  const action = store.actions.find((row) => row.id === parsed.id);
+  if (!action) {
+    throw Object.assign(new Error(`unknown action ${parsed.id}`), { status: 404 });
+  }
+  if (!isInFlight(action)) {
+    throw Object.assign(new Error(`action ${parsed.id} is not in flight`), { status: 409 });
+  }
+  action.status = parsed.status;
+  action.completedAt = new Date().toISOString();
+  if (parsed.status === "succeeded") action.reviewId = parsed.reviewId;
+  if (parsed.status === "failed") action.error = parsed.error;
+  await writeStore(store);
+  return { ok: true };
 }
 
 export async function replaceCatalog(input: unknown): Promise<{ ok: true }> {

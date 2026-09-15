@@ -26,15 +26,23 @@ import {
 import { findingCounts, selectReviewOutcome } from "./review-outcome.ts";
 import type {
   CatalogSnapshot,
+  OpenActionTarget,
   ReviewSummary,
   SpecFinding,
   StandardsFinding,
+  StoredAction,
   StoredOutcome,
 } from "./contracts.ts";
 import {
   HOME_PATH,
+  guidePresentsWalkthrough,
+  homeCardAction,
+  hostActionHint,
+  inFlightOpenCopy,
+  latestOpenAction,
   projectHomeOverview,
   resolveOverviewView,
+  reviewLandingTab,
   reviewPath,
   type HomeCard,
   type OverviewView,
@@ -86,6 +94,7 @@ type Guide = {
   deletions?: number;
   chapters: Chapter[];
   omitted?: { path: string; reason: string; note?: string }[];
+  unchaptered?: boolean;
   source?: {
     kind: string;
     provider: string;
@@ -134,6 +143,9 @@ type Tab = "guide" | "diff" | "review";
 let highlighter: Highlighter | null = null;
 let reviews: ReviewSummary[] = [];
 let catalog: CatalogSnapshot[] = [];
+let actions: StoredAction[] = [];
+let agentConnected = false;
+let pendingOpenId: string | null = null;
 let view: OverviewView = { kind: "home" };
 let activeId: string | null = null;
 let guide: Guide | null = null;
@@ -908,14 +920,29 @@ function homeCardHtml(card: HomeCard): string {
   const ado = card.webUrl
     ? `<a class="icon-btn ado-link" href="${esc(card.webUrl)}" target="_blank" rel="noreferrer" aria-label="Open in Azure DevOps" title="Open in Azure DevOps">${ADO_MARK}</a>`
     : "";
-  const status = card.hasGuide
-    ? `<span class="home-card-status is-ready">Guide</span>`
-    : `<span class="home-card-status">No guide</span>`;
+  const latest = latestOpenAction(card, actions);
+  const inflight = latest ? inFlightOpenCopy(latest.status) : undefined;
+  const failed = latest?.status === "failed" ? latest.error?.message : undefined;
+  const status = inflight
+    ? `<span class="home-card-status">${esc(inflight)}</span>`
+    : failed
+      ? `<span class="home-card-status is-failed">${esc(failed)}</span>`
+      : card.hasGuide
+        ? `<span class="home-card-status is-ready">Guide</span>`
+        : `<span class="home-card-status">No guide</span>`;
   const body = `<span class="home-card-title">${esc(card.title)}</span>${badge}${range}`;
-  const open = card.reviewId
-    ? `<a class="home-card-open" href="${esc(reviewPath(card.reviewId))}" data-open-review="${esc(card.reviewId)}">${body}</a>`
-    : `<div class="home-card-open">${body}</div>`;
-  return `<div class="home-card${card.hasGuide ? "" : " is-pending"}">${open}<div class="home-card-aside">${status}${ado}</div></div>`;
+  const kind = homeCardAction(card, agentConnected);
+  const busy = Boolean(inflight);
+  let open: string;
+  if (kind === "open-saved" && card.reviewId) {
+    open = `<a class="home-card-open" href="${esc(reviewPath(card.reviewId))}" data-open-review="${esc(card.reviewId)}">${body}</a>`;
+  } else if (kind === "queue-open" && card.openTarget && !busy) {
+    open = `<button type="button" class="home-card-open" data-queue-open data-open-target="${esc(JSON.stringify(card.openTarget))}">${body}</button>`;
+  } else {
+    open = `<div class="home-card-open">${body}</div>`;
+  }
+  const pending = kind === "disabled-host" || busy;
+  return `<div class="home-card${pending ? " is-pending" : ""}">${open}<div class="home-card-aside">${status}${ado}</div></div>`;
 }
 
 function formatLastSynced(iso: string): string {
@@ -934,6 +961,10 @@ function renderHome(app: HTMLElement): void {
   const synced = overview.lastSynced
     ? `<p class="home-meta">Last synced ${esc(formatLastSynced(overview.lastSynced))}</p>`
     : "";
+  const disconnected = hostActionHint(agentConnected);
+  const disconnectNote = disconnected
+    ? `<p class="home-error">${esc(disconnected)}</p>`
+    : "";
   const errors = overview.catalogErrors
     .map(
       (entry) =>
@@ -947,8 +978,8 @@ function renderHome(app: HTMLElement): void {
     )
     .join("");
   const list =
-    groups || errors || synced
-      ? `${synced}${errors}${groups}`
+    groups || errors || synced || disconnectNote
+      ? `${synced}${disconnectNote}${errors}${groups}`
       : `<p class="boot">No reviews yet. Add one from MCP or paste JSON.</p>`;
   document.title = "Home · Guided review";
   app.dataset.view = "home";
@@ -995,7 +1026,10 @@ function render(opts?: { restoreScroll?: boolean }) {
     rows,
   );
 
-  const guideBody = chapters.map((ch, i) => renderSection(ch, i, chapters.length)).join("");
+  const walkthrough = guidePresentsWalkthrough(guide);
+  const guideBody = walkthrough
+    ? chapters.map((ch, i) => renderSection(ch, i, chapters.length)).join("")
+    : `<div class="outcome-empty"><h2>Generate guide</h2><p>This review is a Diff. Generate a reading-order guide when you want one.</p><button type="button" class="ghost" disabled>Generate guide</button></div>`;
   const diffBody = rows.map((file, i) => renderFile(file, diffFileId(i))).join("");
   const selection = selectReviewOutcome(guide.base, guide.head, outcomes);
   const exact = selection.status === "exact" ? selection.record.outcome : null;
@@ -1014,7 +1048,9 @@ function render(opts?: { restoreScroll?: boolean }) {
     : `<div class="outcome-empty"><h2>No code-review outcome</h2><p>Run /code-review on this base and head. After the chat report it attaches here when exactly one saved guide matches.</p></div>`;
   const mainInner =
     tab === "guide"
-      ? `<div class="guide-doc">${guideBody}</div>`
+      ? walkthrough
+        ? `<div class="guide-doc">${guideBody}</div>`
+        : guideBody
       : tab === "diff"
         ? `${diffBody}<p class="hint">j / k jump files · drag rail edges · ⌘B split · viewed stays collapsed on Diff</p>`
         : reviewBody;
@@ -1037,11 +1073,11 @@ function render(opts?: { restoreScroll?: boolean }) {
         ? `<nav aria-label="Code Review">${sideHandle}<div class="nav-label">Code Review</div>${reviewNavSide}</nav>`
         : "";
   const tocAnchor =
-    tab === "guide"
+    tab === "guide" && walkthrough
       ? `<aside class="toc-anchor" data-toc-anchor><div class="toc-hotzone"><div class="toc-rail" aria-label="Guide files">${toc.rail}</div></div><nav class="toc-panel" id="guide-toc" aria-label="Guide sections"><div class="nav-label">Sections</div>${toc.nav}</nav></aside>`
       : "";
-  app.innerHTML = `<header><div class="header-bar"><div class="header-left">${BRAND_MARK}${BACK_HOME}<h1>${esc(guide.title)}</h1>${statsHtml(gs)}</div><div class="header-actions">${sourceHeader(guide)}${display}</div></div>${tabs}</header>${filesRail}<main><div class="main-inner${tab === "guide" ? " is-guide" : ""}">${mainInner}</div></main>${tocAnchor}${pasteModal()}`;
-  if (tab === "guide") applyTocOpen(tocOpen);
+  app.innerHTML = `<header><div class="header-bar"><div class="header-left">${BRAND_MARK}${BACK_HOME}<h1>${esc(guide.title)}</h1>${statsHtml(gs)}</div><div class="header-actions">${sourceHeader(guide)}${display}</div></div>${tabs}</header>${filesRail}<main><div class="main-inner${tab === "guide" && walkthrough ? " is-guide" : ""}">${mainInner}</div></main>${tocAnchor}${pasteModal()}`;
+  if (tab === "guide" && walkthrough) applyTocOpen(tocOpen);
   else applyTocOpen(false);
   bindChrome(app);
   observeMain();
@@ -1208,6 +1244,13 @@ function bindChrome(app: HTMLElement) {
       if (id) void navigate(reviewPath(id));
     });
   });
+  app.querySelectorAll("[data-queue-open]").forEach((el) => {
+    el.addEventListener("click", () => {
+      const raw = el.getAttribute("data-open-target");
+      if (!raw) return;
+      void queueOpen(JSON.parse(raw) as OpenActionTarget);
+    });
+  });
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -1217,16 +1260,39 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+async function queueOpen(target: OpenActionTarget): Promise<void> {
+  const created = await fetchJson<{ id: string }>("/api/actions", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ kind: "open", target }),
+  });
+  pendingOpenId = created.id;
+  await loadActive(true);
+}
+
 async function loadActive(force = false): Promise<void> {
   const pathAtStart = location.pathname;
   const listed = await fetchJson<{
     reviews: ReviewSummary[];
     activeId: string | null;
     catalog?: CatalogSnapshot[];
+    actions?: StoredAction[];
+    agentConnected?: boolean;
   }>("/api/reviews");
   if (location.pathname !== pathAtStart) return;
   reviews = listed.reviews;
   catalog = listed.catalog ?? [];
+  actions = listed.actions ?? [];
+  agentConnected = listed.agentConnected === true;
+  if (pendingOpenId) {
+    const pending = actions.find((action) => action.id === pendingOpenId);
+    if (pending?.status === "succeeded" && pending.reviewId) {
+      pendingOpenId = null;
+      await navigate(reviewPath(pending.reviewId));
+      return;
+    }
+    if (pending?.status === "failed") pendingOpenId = null;
+  }
   const nextView = resolveOverviewView(
     location.pathname,
     reviews.map((row) => row.id),
@@ -1268,6 +1334,7 @@ async function loadActive(force = false): Promise<void> {
   lastPayloadKey = key;
   if (switched) {
     hydrateViewed(id);
+    tab = reviewLandingTab(payload.guide);
     if (tab === "diff") collapsed = collapsedOnDiff(viewed, collapsed);
     selectedGuidePath = null;
   }
