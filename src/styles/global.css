@@ -1135,18 +1135,27 @@ main {
   top: var(--header);
   bottom: 0;
   z-index: 14;
-  width: 28px;
+  display: flex;
+  align-items: center;
+  width: 48px;
+  pointer-events: none;
+}
+
+.toc-cluster {
+  position: relative;
+  width: 48px;
+  max-height: calc(100% - 32px);
+  overflow: visible;
+  pointer-events: auto;
 }
 
 .toc-hotzone {
-  position: absolute;
-  top: 16px;
-  bottom: 16px;
-  left: 0;
+  position: relative;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  width: 28px;
+  justify-content: flex-start;
+  width: 48px;
+  max-height: inherit;
   overflow: hidden;
 }
 
@@ -1157,7 +1166,8 @@ main {
   flex-direction: column;
   justify-content: flex-start;
   align-items: center;
-  width: 100%;
+  align-self: flex-start;
+  width: 28px;
   height: auto;
   max-height: 100%;
   padding: 4px 0;
@@ -1206,9 +1216,9 @@ main {
 
 .toc-panel {
   position: fixed;
-  left: 50%;
-  top: calc(var(--header) + 16px);
-  width: min(280px, calc(100vw - 48px));
+  left: 10px;
+  top: calc((var(--header) + 100vh) / 2);
+  width: min(280px, calc(100vw - 24px));
   max-height: calc(100vh - var(--header) - 32px);
   overflow: auto;
   padding: 10px 0 12px;
@@ -1218,26 +1228,26 @@ main {
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
   opacity: 0;
   pointer-events: none;
-  transform: translateX(-50%) translateY(-6px);
+  transform: translateY(-50%) translateX(-6px);
   transition: opacity 120ms ease, transform 120ms ease;
 }
 
-.toc-anchor:hover:not([data-suppress]) .toc-panel,
-#app[data-toc="open"] .toc-anchor:not([data-suppress]) .toc-panel {
+.toc-cluster:hover:not([data-suppress]) .toc-panel,
+#app[data-toc="open"] .toc-cluster:not([data-suppress]) .toc-panel {
   opacity: 1;
   pointer-events: auto;
-  transform: translateX(-50%);
+  transform: translateY(-50%);
 }
 
-.toc-anchor:hover:not([data-suppress]) .toc-rail,
-#app[data-toc="open"] .toc-anchor:not([data-suppress]) .toc-rail {
+.toc-cluster:hover:not([data-suppress]) .toc-rail,
+#app[data-toc="open"] .toc-cluster:not([data-suppress]) .toc-rail {
   opacity: 0;
 }
 
-.toc-anchor[data-suppress] .toc-panel {
+.toc-cluster[data-suppress] .toc-panel {
   opacity: 0;
   pointer-events: none;
-  transform: translateX(-50%) translateY(-6px);
+  transform: translateY(-50%) translateX(-6px);
 }
 
 .guide-why {

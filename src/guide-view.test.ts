@@ -19,6 +19,7 @@ import {
   stepGuide,
   parseDiffLayout,
   selectGuidePath,
+  guideSpyFileIndex,
   shownDiffCounts,
   formatCopy,
 } from "./guide-view.ts";
@@ -325,6 +326,17 @@ test("selectGuidePath uses the first file when every path is viewed", () => {
   const files = [{ path: "a.ts" }, { path: "b.ts" }];
   assert.equal(selectGuidePath(files, null, new Set(["a.ts", "b.ts"])), "a.ts");
   assert.equal(selectGuidePath([], null, new Set()), null);
+});
+
+test("guideSpyFileIndex snaps to the last file at the end of the scroller", () => {
+  const files = [
+    { top: 0, bottom: 800 },
+    { top: 800, bottom: 900 },
+  ];
+  assert.equal(guideSpyFileIndex(files, 16, false), 0);
+  assert.equal(guideSpyFileIndex(files, 16, true), 1);
+  assert.equal(guideSpyFileIndex(files, 820, false), 1);
+  assert.equal(guideSpyFileIndex([], 16, true), -1);
 });
 
 test("shownDiffCounts omits a side when its count is zero", () => {

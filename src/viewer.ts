@@ -16,6 +16,7 @@ import {
   stepGuide,
   parseDiffLayout,
   selectGuidePath,
+  guideSpyFileIndex,
   shownDiffCounts,
   formatCopy,
   type Lined,
@@ -700,7 +701,7 @@ function renderGuideToc(chapters: Chapter[]): { nav: string; rail: string } {
         const reviewed = viewed.has(file.path);
         const { name } = pathParts(file.path);
         ticks.push(
-          `<button type="button" class="toc-tick${reviewed ? " is-reviewed" : ""}" data-jump="${esc(id)}" data-chapter="${esc(ch.id)}" data-path="${esc(file.path)}" title="${esc(file.path)}" aria-label="${esc(name)}" aria-current="${current ? "true" : "false"}"></button>`,
+          `<button type="button" class="toc-tick${reviewed ? " is-reviewed" : ""}" data-jump="${esc(id)}" data-chapter="${esc(ch.id)}" data-path="${esc(file.path)}" aria-label="${esc(name)}" aria-current="${current ? "true" : "false"}"></button>`,
         );
         return `<button type="button" class="toc-file${reviewed ? " viewed-link" : ""}" data-jump="${esc(id)}" data-chapter="${esc(ch.id)}" data-path="${esc(file.path)}" title="${esc(file.path)}" aria-current="${current ? "true" : "false"}"><span class="toc-file-name">${esc(name)}</span></button>`;
       })
@@ -883,13 +884,19 @@ function syncGuideSpy(): void {
   if (tab !== "guide") return;
   const main = document.querySelector("main");
   if (!main) return;
-  const probe = main.getBoundingClientRect().top + 16;
-  const files = main.querySelectorAll<HTMLElement>(".file.stage");
-  let file: HTMLElement | null = null;
-  for (const el of files) {
-    if (el.getBoundingClientRect().top <= probe) file = el;
-  }
-  if (!file) file = files[0] ?? null;
+  const mainRect = main.getBoundingClientRect();
+  const probe = mainRect.top + Math.min(120, mainRect.height * 0.4);
+  const files = [...main.querySelectorAll<HTMLElement>(".file.stage")];
+  const atEnd = main.scrollTop + main.clientHeight >= main.scrollHeight - 8;
+  const idx = guideSpyFileIndex(
+    files.map((el) => {
+      const box = el.getBoundingClientRect();
+      return { top: box.top, bottom: box.bottom };
+    }),
+    probe,
+    atEnd,
+  );
+  const file = idx >= 0 ? files[idx] : null;
   if (file) {
     const section = file.closest(".guide-section");
     if (section?.id.startsWith("section-")) {
@@ -1170,7 +1177,7 @@ function render(opts?: { restoreScroll?: boolean }) {
         ? `${diffBody}<p class="hint">j / k jump files · drag rail edges · ⌘B split · viewed stays collapsed on Diff</p>`
         : reviewBody;
   const layout = currentDiffLayout();
-  const tabs = `<div class="view-tabs main-tabs" role="tablist"><button type="button" role="tab" data-tab="guide" aria-selected="${tab === "guide" ? "true" : "false"}">Guide</button><button type="button" role="tab" data-tab="diff" aria-selected="${tab === "diff" ? "true" : "false"}">Diff</button><button type="button" role="tab" data-tab="review" aria-selected="${tab === "review" ? "true" : "false"}">Code Review</button></div>`;
+  const tabs = `<div class="view-tabs main-tabs" role="tablist"><button type="button" role="tab" data-tab="diff" aria-selected="${tab === "diff" ? "true" : "false"}">Diff</button><button type="button" role="tab" data-tab="guide" aria-selected="${tab === "guide" ? "true" : "false"}">Guide</button><button type="button" role="tab" data-tab="review" aria-selected="${tab === "review" ? "true" : "false"}">Code Review</button></div>`;
   const summary = reviews.find((row) => row.id === activeId);
   const warning = summary ? reviewOutdatedWarning(summary, catalog) : undefined;
   const banner = warning
@@ -1194,7 +1201,7 @@ function render(opts?: { restoreScroll?: boolean }) {
         : "";
   const tocAnchor =
     tab === "guide" && walkthrough
-      ? `<aside class="toc-anchor" data-toc-anchor><div class="toc-hotzone"><div class="toc-rail" aria-label="Guide files">${toc.rail}</div></div><nav class="toc-panel" id="guide-toc" aria-label="Guide sections"><div class="nav-label">Sections</div>${toc.nav}</nav></aside>`
+      ? `<aside class="toc-anchor"><div class="toc-cluster" data-toc-anchor><div class="toc-hotzone"><div class="toc-rail" aria-label="Guide files">${toc.rail}</div></div><nav class="toc-panel" id="guide-toc" aria-label="Guide sections"><div class="nav-label">Sections</div>${toc.nav}</nav></div></aside>`
       : "";
   app.innerHTML = `<header><div class="header-bar"><div class="header-left">${BRAND_MARK}${BACK_HOME}<h1>${esc(guide.title)}</h1>${statsHtml(gs)}</div><div class="header-actions">${sourceHeader(guide)}${display}</div></div>${tabs}${banner}</header>${filesRail}<main><div class="main-inner${tab === "guide" && walkthrough ? " is-guide" : ""}">${mainInner}</div></main>${tocAnchor}${pasteModal()}`;
   if (tab === "guide" && walkthrough) applyTocOpen(tocOpen);
@@ -1271,6 +1278,9 @@ function bindChrome(app: HTMLElement) {
   tocAnchorEl?.addEventListener("pointerenter", () => {
     applyTocOpen(true);
     revealCurrentToc();
+  });
+  tocAnchorEl?.addEventListener("pointerleave", () => {
+    applyTocOpen(false);
   });
   app.querySelectorAll("[data-reviewed-chapter]").forEach((input) => {
     input.addEventListener("click", (event) => event.stopPropagation());

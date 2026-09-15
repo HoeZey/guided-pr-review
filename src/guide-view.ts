@@ -159,6 +159,22 @@ export function selectGuidePath(
   return files.find((file) => !viewed.has(file.path))?.path || files[0]?.path || null;
 }
 
+export function guideSpyFileIndex(
+  files: { top: number; bottom: number }[],
+  probe: number,
+  atEnd: boolean,
+): number {
+  if (!files.length) return -1;
+  if (atEnd) return files.length - 1;
+  let idx = 0;
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    if (file.top <= probe && file.bottom > probe) return i;
+    if (file.top <= probe) idx = i;
+  }
+  return idx;
+}
+
 export function shownDiffCounts(s: { additions: number; deletions: number }): {
   additions?: number;
   deletions?: number;
