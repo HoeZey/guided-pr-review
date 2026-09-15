@@ -1,11 +1,12 @@
 ---
 status: todo
 blocked_by:
-  - 01-lock-architecture-boundaries
+  - 01-lock-sveltekit-migration
 blocks:
   - 03-introduce-repositories
-  - 04-introduce-services-and-adapters
-  - 05-split-browser-client
+  - 04-introduce-services-and-ports
+  - 06-build-svelte-review-shell
+  - 08-build-code-view-primitives
 ---
 
 # Split shared contracts and pure domain rules
@@ -21,11 +22,12 @@ modules without importing a root contracts or view-helper monolith.
 
 **Scope (in):**
 
-- Split contracts.ts by guide/file changes, pull-request provenance,
+- Move/split contracts.ts under lib/shared/contracts by guide/file changes,
+  pull-request provenance,
   catalog/actions, outcomes, persistence formats, and MCP tool inputs.
 - Move overview, Guide/Diff, and outcome projections from overview.ts,
   guide-view.ts, and review-outcome.ts into capability modules under
-  shared/domain.
+  lib/shared/domain without behavior rewrites.
 - Separate browser/server-neutral runtime schemas from transport-only tool
   declarations.
 - Keep one intentional shared export surface and update imports to owning
@@ -46,15 +48,16 @@ src/review-outcome.ts, related tests, new src/shared modules
 **Acceptance criteria:**
 
 - [ ] Schema families have one owner and no circular imports.
-- [ ] shared imports no pages, client, server, Astro, Node IO, or provider code.
+- [ ] lib/shared imports no routes, Svelte, SvelteKit, client, server, Node IO,
+  or provider code.
 - [ ] Existing schema rejection and pure-projection tests still pass.
 - [ ] Browser and server can import required types without duplicate Guide
   shapes.
 - [ ] No visible behavior or persisted shape changes.
 - [ ] Architecture check passes.
 
-**Blocked by:** 01 Lock architecture boundaries and regression baseline
+**Blocked by:** 01 Lock the SvelteKit migration and regression baseline
 
-**Blocks:** 03 repositories, 04 services, and 05 browser client
+**Blocks:** 03 repositories and 06 Svelte review shell
 
 **Parallel-eligible:** no

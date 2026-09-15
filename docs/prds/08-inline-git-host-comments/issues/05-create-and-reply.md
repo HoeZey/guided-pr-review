@@ -7,6 +7,7 @@ blocked_by:
 blocks:
   - 06-edit-and-delete
   - 07-deliver-discussion-tab
+  - 08-integrate-inline-comments
 ---
 
 # Create comments and replies from both views
@@ -38,8 +39,9 @@ Guide and Diff without duplicate sends or lost drafts.
 - Resolve/reactivate
 - Local-range review comments
 
-**Touches:** client composer/delivery state, CommentService create/reply, ADO/
-GitHub adapters, local pending storage if needed, styles/tests
+**Touches:** Svelte composer/delivery state and code-view slots,
+CommentService create/reply, ADO/GitHub adapters, local pending storage if
+needed, styles/tests
 
 **Acceptance criteria:**
 
@@ -55,6 +57,6 @@ GitHub adapters, local pending storage if needed, styles/tests
 
 **Blocked by:** 02, 03, and 04
 
-**Blocks:** 06 and 07
+**Blocks:** 06, 07, and 08
 
 **Parallel-eligible:** no

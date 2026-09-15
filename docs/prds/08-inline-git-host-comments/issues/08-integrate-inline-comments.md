@@ -27,8 +27,9 @@ with complete ADO/GitHub parity and no obsolete transport.
   not reset or replay commits already integrated.
 - Use feature/post-ado-comments at 90a7111 as read-only behavior reference.
 - Reconstruct useful delivery/anchor/UI behavior; transplant no old transport.
-- Resolve provider/client overlap once.
-- Run full tests/build and authorized live ADO/GitHub acceptance.
+- Resolve provider/Svelte component-state overlap once.
+- Run full Node/Svelte tests, svelte-check, production build, and authorized
+  live ADO/GitHub acceptance.
 - Record fixed base/head Standards and Spec integration review.
 - After accepted develop/main promotion, retire old worktree/branch only with
   user approval.
@@ -44,7 +45,7 @@ with complete ADO/GitHub parity and no obsolete transport.
 - [ ] Every prerequisite story has accepted independent review.
 - [ ] No production code invokes ADO MCP, az rest, gh api, or an agent for
   comments.
-- [ ] Full tests/build pass.
+- [ ] Node/Svelte tests, svelte-check, and production build pass.
 - [ ] Manual ADO and GitHub checks cover line/range/file/PR-wide display,
   create, reply, edit, delete, auth Retry, ambiguous send, tab parity, and
   stale anchors.

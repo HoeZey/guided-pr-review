@@ -7,6 +7,7 @@ blocked_by:
   - 06-refresh-catalogs
 blocks:
   - 08-retire-agent-actions
+  - 09-integrate-provider-automation
 ---
 
 # Open and update Diff without an agent
@@ -40,8 +41,8 @@ one app request even when no agent is connected.
 - Provider patch-only diffs
 - Persisted job queue or progress stream
 
-**Touches:** review service, provider/cache/repository ports, Open/Update routes,
-Home/review client state, tests
+**Touches:** review service, provider/cache/repository ports, SvelteKit
+Open/Update handlers, Home/review Svelte state/components, tests
 
 **Acceptance criteria:**
 

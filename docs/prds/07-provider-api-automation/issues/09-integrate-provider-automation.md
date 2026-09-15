@@ -30,7 +30,8 @@ containing every accepted provider story before develop or main moves.
   dependency order; do not reset or replay commits already integrated.
 - Resolve shared provider/service/repository/client overlap once.
 - Remove obsolete deterministic action paths.
-- Run full automated/build checks and authorized ADO/GitHub manual acceptance.
+- Run full Node/Svelte tests, svelte-check, production build, and authorized
+  ADO/GitHub manual acceptance.
 - Record fixed base/head Standards and Spec integration review.
 
 **Scope (out):**
@@ -45,7 +46,7 @@ containing every accepted provider story before develop or main moves.
 - [ ] Every prerequisite issue has independent accepted review.
 - [ ] Integration includes one accepted commit per story plus explained overlap
   commit only when required.
-- [ ] Full tests and build pass.
+- [ ] Node/Svelte tests, svelte-check, and production build pass.
 - [ ] Manual ADO and GitHub checks cover connect, refresh, add/remove
   repository, Open, Update, unchanged-current skip, and auth recovery.
 - [ ] Existing pre-07 store fixture loads without data loss or manual repair.

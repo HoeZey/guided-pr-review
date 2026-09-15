@@ -5,6 +5,7 @@ blocked_by:
   - 03-read-github-pull-requests
 blocks:
   - 06-refresh-catalogs
+  - 09-integrate-provider-automation
 ---
 
 # Manage explicit configured repositories
@@ -41,8 +42,8 @@ list, including current origin, without a waiting agent or hidden account scan.
 - Selecting multiple identities
 - Opening Diff in this story
 
-**Touches:** configured repository contracts/repository/service, Home controls,
-HTTP routes, tests
+**Touches:** configured repository contracts/repository/service, Svelte Home
+controls/state, SvelteKit +server.ts handlers, tests
 
 **Acceptance criteria:**
 
@@ -54,7 +55,7 @@ HTTP routes, tests
 - [ ] Existing Store v1 fixture with no repository configuration loads with no
   lost reviews, catalog, actions, or outcomes.
 - [ ] Any persisted-shape migration is automatic, idempotent, and tested.
-- [ ] Browser calls service directly without agent actions.
+- [ ] Svelte UI calls the thin SvelteKit handler without agent actions.
 - [ ] Tests use fake provider readers.
 
 **Blocked by:** 02 ADO and 03 GitHub readers

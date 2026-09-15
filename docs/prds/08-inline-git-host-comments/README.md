@@ -11,8 +11,8 @@ blocked_by:
 The old ADO comment branch renders provider discussion above the Diff and
 couples delivery to az-rest/MCP-era code. A long comment block separates
 discussion from the lines it concerns. It is absent from Guide, conflicts with
-recent viewer changes, and cannot support GitHub through the phase 07 provider
-services.
+the post-06 Svelte component model, and cannot support GitHub through the phase
+07 provider services.
 
 Rebasing that branch after structural and provider work would create a large,
 low-signal merge across viewer, Guide helpers, CSS, and transport. Replaying
@@ -68,14 +68,15 @@ through provider-neutral services without leaving the app.
 
 ADO and GitHub payloads and anchor fields remain inside their adapters. Remote
 comments are not repositories: provider is source of truth. Repositories may
-store local draft/pending state only if browser storage is insufficient.
+store local draft/pending state only if Svelte/browser storage is
+insufficient.
 
 ## Placement and interaction
 
 - A current-side line/range thread renders immediately after its matching diff
   line block in Unified and Split layouts.
 - Guide and Diff map against the same file/hunk identities and share one thread
-  collection.
+  collection in review-scoped Svelte state.
 - A file-level thread renders below the matching file header before first hunk.
 - A deleted-line comment falls back to file level unless exact mapping is
   proved. Never fake a right-side line.
@@ -124,17 +125,18 @@ Discard or rewrite:
 - comments.ts transport and any az-rest/MCP subprocess code
 - MCP framing commit 70ef428
 - old comments route when it conflicts with phase 07 route/service conventions
-- viewer/CSS patches that overwrite post-06 modules
+- viewer/CSS patches that overwrite post-06 Svelte components
 
 Do not cherry-pick feature commits wholesale. Reconstruct behavior under
-post-07 services and client modules. Keep old worktree until 08 integration is
+post-07 services and Svelte modules. Keep old worktree until 08 integration is
 accepted; remove only with user approval.
 
 ## Testing / seams
 
 **Seams:** normalized comment contracts; provider comment adapters; comment
 service with stored review provenance; anchor-to-visible-slot projection;
-delivery state reducer; browser thread store and per-view projection.
+delivery state reducer; review-scoped Svelte thread state and per-view
+projection.
 
 **Good checks:**
 

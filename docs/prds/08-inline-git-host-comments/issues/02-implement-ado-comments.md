@@ -5,6 +5,7 @@ blocked_by:
 blocks:
   - 05-create-and-reply
   - 06-edit-and-delete
+  - 08-integrate-inline-comments
 ---
 
 # Implement ADO comment adapter
@@ -37,7 +38,7 @@ delete ADO PR comments through direct REST.
 - Exact deleted-line placement without valid provider coordinates
 - UI
 
-**Touches:** server/providers/ado comments capability, fixtures, provider
+**Touches:** lib/server/providers/ado comments capability, fixtures, provider
 contract tests
 
 **Acceptance criteria:**
@@ -52,6 +53,6 @@ contract tests
 
 **Blocked by:** 01 Define comment service
 
-**Blocks:** 05 and 06
+**Blocks:** 05, 06, and 08
 
-**Parallel-eligible:** yes, with 03, 04, and 07
+**Parallel-eligible:** yes, with 03 and 04

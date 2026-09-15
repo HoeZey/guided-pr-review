@@ -6,6 +6,7 @@ blocks:
   - 04-manage-repositories
   - 06-refresh-catalogs
   - 07-open-and-update-diff
+  - 09-integrate-provider-automation
 ---
 
 # Read repositories and pull requests through GitHub REST
@@ -38,8 +39,8 @@ and PR records from GitHub as from ADO.
 - Account-wide repository discovery
 - GitHub Enterprise unless separately proved compatible
 
-**Touches:** server/providers/github, shared provider contracts, provider
-fixtures and tests
+**Touches:** lib/server/providers/github, lib/shared provider contracts,
+provider fixtures and tests
 
 **Acceptance criteria:**
 

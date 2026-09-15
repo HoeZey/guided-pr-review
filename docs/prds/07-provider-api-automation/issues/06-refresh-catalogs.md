@@ -6,6 +6,7 @@ blocked_by:
   - 04-manage-repositories
 blocks:
   - 07-open-and-update-diff
+  - 09-integrate-provider-automation
 ---
 
 # Refresh configured PR catalogs
@@ -39,8 +40,8 @@ focus, or manual request without a waiting agent.
 - Comment refresh
 - Deleting saved reviews
 
-**Touches:** catalog service/repository, provider readers, Home client/API,
-overview projection, tests
+**Touches:** catalog service/repository, provider readers, SvelteKit server
+lifecycle/handler, Svelte Home state/components, overview projection, tests
 
 **Acceptance criteria:**
 

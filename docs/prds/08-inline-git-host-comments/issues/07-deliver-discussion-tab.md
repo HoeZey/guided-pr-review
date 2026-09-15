@@ -14,8 +14,8 @@ blocks:
 
 **From PRD:** [08 Inline git-host comments](../)
 
-**Seam(s):** PR-wide/unmappable thread projection; shared thread state;
-Discussion tab renderer
+**Seam(s):** PR-wide/unmappable thread projection; review-scoped Svelte thread
+state; Discussion tab component
 
 **What it delivers:** General PR conversation remains available without
 pushing line comments into an always-open block above Diff.
@@ -35,8 +35,8 @@ pushing line comments into an always-open block above Diff.
 - Reactions, status changes, review summaries, votes, or merge
 - Separate top-of-Diff comment stack
 
-**Touches:** review tabs, Discussion renderer, shared thread projection/state,
-styles/tests
+**Touches:** Svelte review tabs and Discussion components, shared thread
+projection/state, styles/tests
 
 **Acceptance criteria:**
 

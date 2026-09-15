@@ -66,8 +66,9 @@ Guide generation and code-review remain the only agent tasks.
 - A managed git adapter keeps bare caches, fetches exact immutable commits, and
   computes local unified diffs.
 - Review services own Open Diff and Update Diff.
-- Browser API calls are asynchronous, but server use cases complete in the
-  request. In-flight operations are deduplicated.
+- Hydrated Svelte components call thin SvelteKit +server.ts handlers, but
+  server use cases complete in the request. In-flight operations are
+  deduplicated.
 - guided-pr-review only chapters an existing Diff. code-review remains a
   separate report and outcome publisher.
 
@@ -97,8 +98,8 @@ Guide generation and code-review remain the only agent tasks.
 - Open and Update Diff upsert an unchaptered Guide payload using stable
   provider/host/repository/PR identity. An unchanged source commit avoids
   unnecessary update. Failure leaves the saved review intact.
-- Browser shows scoped Connecting, Refreshing, Opening, Updating, and recovery
-  states while stale/saved content stays usable.
+- Svelte state/components show scoped Connecting, Refreshing, Opening,
+  Updating, and recovery states while SSR/stale/saved content stays usable.
 - Remove Open, Update Diff, Refresh, and Add repository from agent action
   ownership. Keep Generate Guide queue/claim/complete because chaptering is an
   agent task.
@@ -109,7 +110,8 @@ Guide generation and code-review remain the only agent tasks.
 
 **Seams:** credential command runner; provider HTTP transport; ADO/GitHub
 normalizers; configured repository and catalog repositories; managed git cache
-process/filesystem adapter; refresh/Open/Update services; browser API state.
+process/filesystem adapter; refresh/Open/Update services; Svelte operation
+state and components.
 
 **Good checks:**
 
@@ -121,7 +123,7 @@ process/filesystem adapter; refresh/Open/Update services; browser API state.
 - Local fixture remotes prove cache creation, exact fetch, no checkout,
   unchanged skip, corruption recovery, and complete diff.
 - Open/Update failure never changes the saved review.
-- Tests never contact a private host or inspect Astro internals.
+- Tests never contact a private host or inspect SvelteKit internals.
 - Manual acceptance uses one authorized ADO PR and one authorized GitHub PR.
 
 ## Trade-offs (decided)

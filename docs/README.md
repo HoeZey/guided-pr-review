@@ -41,6 +41,10 @@ Runtime review data stays local and is not committed.
 - [Epics 06–08 execution plan](EXECUTION.md)
 - [Grok coordinator kickoff](GROK_KICKOFF.md)
 
+Deferred roadmap: assess Svelte UI polish only after 06 preserves parity.
+Isolated components should make that a normal follow-up; do not reserve PRD 09
+or expand the migration until concrete polish requirements exist.
+
 ## Git
 
 Story branches use feature/04-03-open-selected-pr-as-diff. Prefix feature/,

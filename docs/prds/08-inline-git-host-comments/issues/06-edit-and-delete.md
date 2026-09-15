@@ -6,6 +6,7 @@ blocked_by:
   - 04-render-inline-threads
   - 05-create-and-reply
 blocks:
+  - 07-deliver-discussion-tab
   - 08-integrate-inline-comments
 ---
 
@@ -15,8 +16,8 @@ blocks:
 
 **From PRD:** [08 Inline git-host comments](../)
 
-**Seam(s):** normalized ownership; CommentService update/delete; client
-optimistic state and rollback
+**Seam(s):** normalized ownership; CommentService update/delete;
+review-scoped Svelte optimistic state and rollback
 
 **What it delivers:** Connected user can correct or remove their ADO/GitHub
 comments while other authors remain read-only.
@@ -37,8 +38,8 @@ comments while other authors remain read-only.
 - Resolve/reactivate thread
 - Bulk deletion, reactions, or moderation
 
-**Touches:** CommentService, ADO/GitHub adapters, shared client thread state,
-thread controls/styles/tests
+**Touches:** CommentService, ADO/GitHub adapters, shared Svelte thread state,
+thread controls/components/styles/tests
 
 **Acceptance criteria:**
 
@@ -52,6 +53,6 @@ thread controls/styles/tests
 
 **Blocked by:** 02, 03, 04, and 05
 
-**Blocks:** 08 integration
+**Blocks:** 07 Discussion and 08 integration
 
 **Parallel-eligible:** no

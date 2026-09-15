@@ -6,12 +6,19 @@ status: signed
 
 ## Problem
 
-The app is still one Astro process, but its source no longer has clear
-boundaries. viewer.ts mixes browser state, HTTP, navigation, Home, Guide,
-Diff, Code Review, keyboard behavior, and rendering. store.ts mixes JSON IO,
-review commands, catalog reconciliation, actions, and summaries. contracts.ts
-contains every schema family and MCP tool declaration. Astro routes and MCP
-reach these modules directly.
+The app uses Astro as a Node HTTP/file router around a homemade single-page
+application. Its two .astro pages emit the same Loading shell, then viewer.ts
+interprets location.pathname, calls history.pushState, fetches JSON, builds
+HTML strings, replaces app.innerHTML, and binds interactions. It does not use
+Astro layouts, components, islands, or ClientRouter.
+
+The source also lacks server boundaries. viewer.ts mixes browser state, HTTP,
+navigation, Home, Guide, Diff, Code Review, keyboard behavior, and rendering.
+store.ts mixes JSON IO, review commands, catalog reconciliation, actions, and
+summaries. contracts.ts contains every schema family and MCP tool declaration.
+Astro routes and MCP reach these modules directly. Astro also reserves
+src/actions.ts for its Actions entrypoint, so the current domain module name
+breaks the production build by not exporting Astro's expected server object.
 
 Adding two git hosts, authenticated API calls, managed git caches, and inline
 comments on this shape would grow the same hotspots and make later changes
@@ -20,20 +27,24 @@ add deployment cost without fixing dependency direction.
 
 ## Goal
 
-Keep one Astro application while separating client presentation, server use
-cases, persistence, provider IO, and shared pure logic behind explicit
+Replace Astro and the homemade SPA with one SvelteKit Node application.
+Server-render the initial Home or review page, then hydrate it for interaction
+and client navigation. Separate Svelte presentation, server use cases,
+persistence, provider IO, and shared pure TypeScript behind explicit
 dependencies. Phase 07 and 08 can add provider and comment capabilities
-without moving the app again.
+without moving the app or rewriting framework-neutral TypeScript again.
 
 ## Non-goals
 
 - New provider, authentication, repository, refresh, diff, or comment behavior
 - A separate frontend and backend deployment
 - A DI framework, generic BaseRepository, or class for every schema
-- Visual redesign
+- Visual redesign, opportunistic polish, or a component library
 - Changing Guide chaptering or code-review behavior
 - SQLite now
 - Preserving every private TypeScript or browser HTTP shape
+- Keeping Astro as a permanent shell around one Svelte island
+- Turning Guide, Diff, Code Review, or Discussion tabs into separate routes
 
 ## User stories
 
@@ -45,6 +56,10 @@ without moving the app again.
   JSON details so a later SQLite adapter does not change service callers.
 - As a maintainer, I want provider, auth, and git boundaries established before
   direct host APIs land.
+- As a reviewer, I want a filled Home or review page on first response instead
+  of an empty shell that waits for client JavaScript and a second data request.
+- As a maintainer, I want framework-neutral TypeScript moved rather than
+  rewritten so the migration stays reviewable.
 - As a maintainer, I want each structural story to leave runnable checks so a
   large file move cannot silently change product behavior.
 
@@ -52,25 +67,37 @@ without moving the app again.
 
 ```text
 src/
-  pages/                  Astro pages and HTTP route adapters only
-  client/
-    api/
-    home/
-    review/
-    state/
-  server/
-    services/
-    repositories/
-      json/
-    providers/
-      ado/
-      github/
-    auth/
-    git/
-    mcp/
-  shared/
-    contracts/
-    domain/
+  routes/
+    +layout.svelte
+    +page.server.ts
+    +page.svelte
+    reviews/[id]/
+      +page.server.ts
+      +page.svelte
+    api/.../+server.ts
+    mcp/+server.ts
+  lib/
+    client/
+      components/
+        home/
+        review/
+        guide/
+        diff/
+        outcomes/
+      state/
+      browser/
+    server/
+      services/
+      repositories/json/
+      providers/
+        ado/
+        github/
+      auth/
+      git/
+      mcp/
+    shared/
+      contracts/
+      domain/
 ```
 
 Feature names inside a layer describe app capabilities: reviews, catalog,
@@ -79,17 +106,20 @@ deployments.
 
 ## Dependency rules
 
-- shared imports no Astro, client, server, browser, filesystem, subprocess, or
-  provider code.
-- client imports shared and browser-safe client modules only.
+- lib/shared imports no Svelte, SvelteKit, client, server, browser, filesystem,
+  subprocess, or provider code.
+- lib/client imports Svelte, lib/shared, and browser-safe client modules only.
+- Svelte components use TypeScript and built-in Svelte 5 state. No external
+  client state library.
 - server services depend on shared contracts and narrow ports. They do not
   know JSON layout or raw provider payloads.
 - repositories implement app-shaped persistence operations. Callers do not
   know file names, Store v1 layout, cache strategy, or future SQLite schema.
 - provider adapters translate provider payloads behind capability-specific
   ports. There is no god GitHost interface.
-- pages parse transport input, call one service, and map one response. Business
-  rules do not live in Astro routes.
+- +page.server.ts loaders call services for initial Home/review data.
+  +server.ts handlers parse transport input, call one service, and map one
+  response. Business rules do not live in routes.
 - MCP calls the same services as HTTP.
 - Functions and narrow interfaces are preferred over framework-managed classes.
 
@@ -111,40 +141,103 @@ deployments.
 - Move GitHostAdapter and ChapteringAdapter into explicit server ports. Add
   credential-source, provider, and git-cache ports needed by 07 without
   implementing direct host behavior.
-- Split viewer.ts into browser API, state, navigation/boot, Home, review shell,
-  Guide/Diff, and outcome modules. Preserve localStorage keys and visible
-  behavior.
-- Keep global CSS unless a split clearly follows client module ownership.
+- Add SvelteKit, Svelte 5, Vite, and the official Node adapter. Use default SSR
+  plus hydration; do not disable SSR for the app.
+- During story migration, keep Astro on default npm run dev and localhost:8765.
+  Run Svelte work through temporary dev:svelte/build:svelte commands and
+  isolated ports 8766+. Integration switches dev, build, start, and port 8765
+  to SvelteKit/adapter-node, then removes the temporary aliases and Astro.
+- Preserve /, /reviews/:id, all existing /api paths, and /mcp. Home and review
+  become real SvelteKit routes. Guide, Diff, Code Review, and later Discussion
+  remain internal review tabs so scroll, selection, and drafts stay alive.
+- +page.server.ts calls feature services directly for initial data. Hydration
+  must reuse serialized page data rather than issue the current duplicate
+  first-load fetch.
+- Replace viewer.ts HTML-string rendering and manual History API routing with
+  typed Svelte components and SvelteKit navigation. Extract reusable pure
+  calculations before deleting the old renderer.
+- Keep localStorage keys for theme, selected tab, Diff layouts, panel widths,
+  hidden unchanged lines, and viewed files. Read browser-only values after
+  hydration without changing server/client DOM shape unexpectedly.
+- Reuse global CSS for visual parity. Move rules beside components only when
+  mechanical and behavior-neutral. Do not adopt a design system.
+- Preserve syntax highlighting, keyboard navigation, resizable rails,
+  sticky/collapsible Diff behavior, reviewed state, and accessible controls.
 - Private TypeScript APIs and browser-only HTTP payloads may change in lockstep.
   Review URLs, persisted user data, MCP tool names/payloads, Guide payloads,
   and visible behavior must work at epic integration.
+- Remove Astro, its Node adapter/configuration, duplicate page shells, and
+  reserved src/actions.ts collision only after SvelteKit routes pass parity.
 - Intermediate commits may be incomplete. Every issue ends green before its
   integration commit is accepted.
+
+## TypeScript reuse map
+
+Move or split; do not rewrite behavior:
+
+- contracts.ts schemas and inferred types into lib/shared/contracts
+- guide-view.ts Diff/Guide projections into lib/shared/domain
+- overview.ts grouping, route resolution inputs, and Home projection into
+  lib/shared/domain
+- review-outcome.ts selection/count logic into lib/shared/domain
+- store.ts persistence and adoption behavior into repository/domain owners
+- actions.ts orchestration into server services
+- mcp.ts protocol/dispatch behavior behind the SvelteKit /mcp route
+- seed.ts behavior behind server startup/repository ownership
+- existing focused Node tests for all modules above
+
+Rewrite at framework boundaries:
+
+- viewer.ts rendering, mutable globals, event delegation, manual navigation,
+  boot, and polling become Svelte components/state/browser effects
+- index.astro and reviews/[id].astro become SvelteKit pages/loaders
+- Astro API route files become behavior-equivalent +server.ts adapters
+- astro.config.mjs and Astro dependencies become SvelteKit/Vite configuration
+
+Delete only after caller migration:
+
+- duplicate Guide/FileChange types in viewer.ts
+- manual navigate/loadActive first-load routing
+- duplicate Loading page shells
+- compatibility barrels with no remaining callers
 
 ## Testing / seams
 
 **Seams:** shared contracts and domain functions; feature services with
-injected repositories and ports; JSON repository compatibility loader; thin
-route and MCP adapters; browser API/state modules.
+injected repositories and ports; JSON repository compatibility loader;
+SvelteKit server loaders/routes; typed Svelte component props and shared review
+state; browser-only effects.
 
 **Why these seams:** They establish the dependency direction that later
-provider and comment work relies on, without coupling tests to Astro internals
-or live hosts.
+provider and comment work relies on, while testing migrated presentation at
+component and browser boundaries rather than HTML-string internals.
 
 **Good checks:**
 
-- Existing npm test and npm run build pass before and after integration.
-- An architecture check fails when shared imports server/client code, client
-  imports Node-only code, or pages contain service logic.
+- Record that the starting npm test has 102 passing checks and the Astro build
+  fails because src/actions.ts does not export the reserved server object.
+- Existing Node tests remain; focused Vitest checks cover Svelte state and
+  component behavior; one Playwright smoke covers SSR, hydration, and
+  navigation.
+- An architecture check fails when shared imports Svelte/server/client code,
+  client imports Node-only code, or routes contain service logic.
 - Existing Store v1 fixtures load through the JSON repository; any migration
   is automatic and lossless.
-- HTTP and MCP adapters invoke the same service behavior.
-- Browser API tests assert route and error mapping without DOM snapshots.
-- Manual isolated-port smoke covers Home, saved review navigation, Guide/Diff,
-  Code Review history, and Generate Guide handoff.
+- SvelteKit HTTP, server loaders, and MCP adapters invoke the same services.
+- svelte-check, npm test, focused UI tests, and the SvelteKit production build
+  pass.
+- Playwright and manual isolated-port smoke cover filled first response,
+  hydration, Home/navigation, Guide/Diff, Code Review history, preferences,
+  deep reload, and Generate Guide handoff.
 
 ## Trade-offs (decided)
 
+- SvelteKit with its Node adapter, not Astro around a homemade SPA.
+- Direct cutover inside epic 06, not a permanent or staged hybrid architecture.
+- Default SSR plus hydration, not client-only Loading-first SPA.
+- One review URL with internal tabs, not one route per display mode.
+- Existing visual design and CSS first, not migration-time polish or a
+  component library.
 - One layered monolith, not separate frontend/backend apps.
 - Conventional client/server/shared boundaries, not a full repeated
   domain/application/infrastructure tree for each capability.
@@ -155,18 +248,29 @@ or live hosts.
 
 ## Success criteria
 
-- Source follows the documented target boundaries and import direction.
-- viewer.ts, store.ts, and contracts.ts no longer own unrelated client, server,
-  and schema responsibilities.
-- Astro routes and MCP are thin adapters over shared feature services.
+- / and /reviews/:id return server-rendered Home/review data and hydrate into
+  an interactive app without a duplicate first-load data request.
+- Existing /api and /mcp URLs, methods, payloads, and error behavior continue
+  to work through thin SvelteKit adapters over shared services.
+- Source follows the documented SvelteKit/lib target boundaries and import
+  direction.
+- viewer.ts is removed. store.ts and contracts.ts no longer own unrelated
+  persistence, command, and schema responsibilities.
+- Astro packages/config/pages are removed and the production build passes.
+- npm run dev serves the SvelteKit app at http://localhost:8765 and the
+  existing POST /mcp endpoint remains at the same origin.
+- npm start runs the adapter-node production build with the same default
+  host/port and supports an isolated HOST/PORT override for checks.
 - JSON persistence is hidden behind repository operations shaped around app
   needs.
 - Provider, credential, git-cache, and Guide chaptering ports have explicit
   ownership without direct provider implementation.
 - Existing reviews.json data loads or migrates automatically with no lost
   guides, catalog entries, actions, or outcomes.
-- Home, Guide, Diff, Code Review, and Generate Guide behavior pass automated
-  and manual integration checks.
+- Home, navigation, Guide, Diff, Code Review, Generate Guide, syntax
+  highlighting, keyboard controls, reviewed state, layouts, rails, and saved
+  preferences preserve behavior and appearance through automated/manual
+  checks.
 - No phase 07 or 08 product behavior lands in this PRD.
 
 ## Out of scope
@@ -175,15 +279,22 @@ or live hosts.
   automation](../07-provider-api-automation/))
 - Host comments ([08 Inline git-host
   comments](../08-inline-git-host-comments/))
+- Svelte UI polish after parity; capture requirements later without reserving
+  PRD 09 now
 - Webhooks, remote hosting, multi-user auth, analytics, search, votes, or merge
 
 ## References
 
 - [01 Guided PR review](../done/01-guided-pr-review/)
 - [04 Pull request overview](../done/04-pull-request-overview/)
+- [SvelteKit migration research](research.md)
+- [SvelteKit routing](https://svelte.dev/docs/kit/routing)
+- [SvelteKit page options](https://svelte.dev/docs/kit/page-options)
+- [SvelteKit Node adapter](https://svelte.dev/docs/kit/adapter-node)
+- [Svelte TypeScript](https://svelte.dev/docs/svelte/typescript)
 - Current hotspots: src/viewer.ts, src/store.ts, src/contracts.ts, src/actions.ts
-- Wayfinder decisions: layered monolith, service/repository seams, flexible
-  private contracts, develop integration, stable main
+- Grill decisions: direct SvelteKit cutover, SSR then hydration, internal
+  review tabs, behavior/visual parity, no UI library
 
 ## integration-review
 

@@ -113,7 +113,7 @@ unavailable model silently.
     Merged NN-MM: Issue title.
 11. Mark issue done only after that commit is on epic integration branch.
 
-Integration issues are special: 06-06, 07-09, and 08-08 run directly in the
+Integration issues are special: 06-13, 07-09, and 08-08 run directly in the
 epic integration worktree/branch, not a separate story branch. Mark them doing
 on the epic branch and done after accepted integration review.
 
@@ -161,9 +161,20 @@ absent.
 
 Pinned base: develop at epic start.
 
+Runtime handoff:
+
+- 06-01 adds temporary dev:svelte/build:svelte commands.
+- Through 06-12, default npm run dev remains Astro on localhost:8765. Svelte
+  story/manual checks use dev:svelte on unique ports 8766+; never proxy or
+  mount one framework inside the other.
+- 06-13 makes SvelteKit the only default dev/build/start runtime, restores the
+  product at http://localhost:8765 including POST /mcp, keeps HOST/PORT
+  overrides for isolated checks, and removes Astro plus temporary migration
+  commands.
+
 ### Wave 1
 
-- 06-01 Lock architecture boundaries and regression baseline
+- 06-01 Lock the SvelteKit migration and regression baseline
 
 ### Wave 2
 
@@ -172,24 +183,55 @@ Pinned base: develop at epic start.
 ### Wave 3, parallel
 
 - 06-03 Introduce app-shaped repositories and JSON adapter
-- 06-05 Split the browser client by responsibility
+- 06-06 Build the Svelte review shell and shared state
 
 Both branch from accepted 06-02 head or an epic-base branch containing 06-01
-and 06-02. They may overlap imports, but integration resolves paths.
+and 06-02. Shared contracts accepted in 06-02 are fixed inputs.
 
 ### Wave 4
 
-- 06-04 Introduce feature services and thin adapters
+- 06-04 Introduce feature services and provider ports
 
-Start after 06-03. Reconcile client route changes with accepted 06-05 during
-integration, not by merging story worktrees into each other.
+Start after 06-03 while accepted 06-06 remains on the epic branch.
+
+### Wave 5
+
+- 06-05 Preserve HTTP, MCP, and SSR data in SvelteKit
+
+Start after 06-04. It uses the scaffold from 06-01 and preserves all public
+transport contracts while adding server page data.
+
+### Wave 6, parallel
+
+- 06-07 Render Home through SvelteKit SSR
+- 06-08 Build shared Svelte code-view primitives
+- 06-11 Port Code Review and Guide handoff
+
+All branch from the epic head containing accepted 06-05 and 06-06.
+
+### Wave 7, parallel
+
+- 06-09 Port Guide to Svelte components
+- 06-10 Port Diff to Svelte components
+
+Both require accepted 06-08 code-view primitives.
+
+### Wave 8
+
+- 06-12 Restore cross-view interaction parity
+
+Start only after 06-07, 06-09, 06-10, and 06-11 are accepted.
 
 ### Integration
 
-- 06-06 Integrate and verify app structure
+- 06-13 Integrate the SvelteKit cutover and remove Astro
 
-Required gates: full tests, build, architecture check, old-store compatibility,
-isolated Home/review/Guide/Diff/Code Review/Generate Guide smoke.
+Required gates: Node/Svelte tests, svelte-check, production build, architecture
+check, route/MCP contracts, old-store compatibility, filled SSR/hydration, and
+isolated Home/review/Guide/Diff/Code Review/Generate Guide/navigation/
+preference/keyboard/rail smoke. Astro, viewer.ts, and the reserved actions
+entrypoint collision are gone. npm start launches the adapter-node build and
+passes isolated GET page plus POST /mcp smoke.
 
 ## Phase 07 reconciliation
 
@@ -197,7 +239,7 @@ Do not start from roadmap-planning assumptions blindly. After 06 reaches
 develop:
 
 1. Ask graft for actual service, repository, provider, credential, git-cache,
-   route, and client API symbols.
+   SvelteKit route, Svelte state, and client operation symbols.
 2. Coordinator updates 07 issue technical paths/interface names only before
    launching 07 story branches.
 3. Confirm PRD behavior unchanged.
@@ -258,7 +300,8 @@ acceptance pending; do not invent credentials or block unrelated work.
 After 07 reaches develop:
 
 1. Coordinator updates comment issue paths/ports against actual provider
-   clients and client modules before launching 08 story branches.
+   clients, Svelte state, code-view primitives, and components before launching
+   08 story branches.
 2. Pin new develop SHA.
 3. Keep feature/post-ado-comments at 90a7111 and its worktree read-only.
 4. Do not rebase, merge, or wholesale cherry-pick it.

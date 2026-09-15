@@ -3,8 +3,9 @@ status: todo
 blocked_by:
   - 02-split-shared-contracts-and-domain
 blocks:
-  - 04-introduce-services-and-adapters
-  - 06-integrate-app-structure
+  - 04-introduce-services-and-ports
+  - 05-preserve-http-mcp-and-ssr
+  - 13-integrate-sveltekit-cutover
 ---
 
 # Introduce app-shaped repositories and JSON adapter
@@ -25,7 +26,7 @@ outcomes without knowing reviews.json or Store v1 layout.
   upsert/remove review, set active, replace catalog snapshot, queue/claim/
   complete action, append outcome, and seed when empty.
 - Move data-file resolution, cache, read/write, compatibility parsing, and
-  atomic mutation into server/repositories/json.
+  atomic mutation into lib/server/repositories/json.
 - Keep local-review adoption and catalog merge rules in a pure domain or
   service owner rather than generic JSON code.
 - Preserve action claim and completion concurrency semantics.
@@ -56,6 +57,6 @@ and JSON adapter modules
 
 **Blocked by:** 02 Split shared contracts and pure domain rules
 
-**Blocks:** 04 services and 06 integration
+**Blocks:** 04 services, 05 routes/loaders, and 13 integration
 
-**Parallel-eligible:** yes, with 05 after 02
+**Parallel-eligible:** yes, with 06 after 02

@@ -19,7 +19,8 @@ From the coordinator worktree, read:
 1. docs/README.md
 2. docs/EXECUTION.md
 3. docs/prds/06-app-structure/README.md
-4. docs/prds/06-app-structure/issues/README.md
+4. docs/prds/06-app-structure/research.md
+5. docs/prds/06-app-structure/issues/README.md
 
 Then execute docs/EXECUTION.md exactly. Continue through 06, 07, and 08 while
 their gates permit. Do not redesign PRDs.
@@ -47,6 +48,17 @@ Rules:
   issue/PRD docs.
 - ADO/GitHub CLI sessions may provide tokens only. Product operations use
   direct provider REST.
+- Epic 06 directly replaces Astro/the homemade viewer SPA with
+  SvelteKit/adapter-node using SSR then hydration. Move framework-neutral
+  TypeScript per the reuse map; do not rewrite it gratuitously.
+- Follow the 06 runtime handoff exactly: temporary dev:svelte on isolated
+  8766+ ports through story 12; story 13 moves default npm run dev and
+  localhost:8765 to SvelteKit.
+- Preserve current visual behavior/CSS and internal review tabs. No design
+  system, UI redesign, or migration-time polish.
+- The pinned develop baseline has passing tests but a known Astro build failure
+  from reserved src/actions.ts. Prove and record that baseline; every accepted
+  SvelteKit story must satisfy its own stated build/check gate.
 - No live comment mutation is authorized. Complete fixture/fake-based work and
   mark live checks pending unless I explicitly name authorized test PRs.
 - feature/post-ado-comments at 90a7111 is read-only reference. Never rebase,

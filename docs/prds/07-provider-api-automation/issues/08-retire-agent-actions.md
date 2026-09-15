@@ -39,8 +39,9 @@ code-review publication, not host or git work.
 - OAuth implementation
 - Comment actions
 
-**Touches:** action contracts/repository/services, src/mcp, API routes,
-src/overview, client operation copy, SKILL.md, tests
+**Touches:** action contracts/repository/services, lib/server MCP,
+SvelteKit handlers, shared overview domain, Svelte operation state/copy,
+SKILL.md, tests
 
 **Acceptance criteria:**
 

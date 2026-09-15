@@ -6,6 +6,7 @@ blocks:
   - 02-implement-ado-comments
   - 03-implement-github-comments
   - 04-render-inline-threads
+  - 07-deliver-discussion-tab
 ---
 
 # Define provider-neutral comment services and contracts
@@ -27,7 +28,8 @@ comment vocabulary without leaking provider payloads or browser-selected URLs.
 - Define capability-specific provider port for list/create/reply/update/delete.
 - Define CommentService that loads stored review provenance, validates request
   identity/path/anchor, dispatches provider, and normalizes errors.
-- Define thin same-origin HTTP routes and client interface.
+- Define thin same-origin SvelteKit +server.ts routes and typed Svelte client
+  interface.
 - Define stale/unmappable handling and current-user ownership rules.
 - Define opaque client operation id carried through pending create/reply
   reconciliation without persisting it as provider identity.
@@ -40,8 +42,8 @@ comment vocabulary without leaking provider payloads or browser-selected URLs.
 - Remote thread persistence repository
 - Resolve/reactivate
 
-**Touches:** shared comment contracts/domain, server comment service/port,
-routes, client API types, fakes/tests
+**Touches:** lib/shared comment contracts/domain, lib/server comment
+service/port, SvelteKit routes, Svelte client API types, fakes/tests
 
 **Acceptance criteria:**
 
@@ -59,6 +61,6 @@ routes, client API types, fakes/tests
 
 **Blocked by:** 07 integration
 
-**Blocks:** 02, 03, and 04
+**Blocks:** 02, 03, 04, and 07
 
 **Parallel-eligible:** no

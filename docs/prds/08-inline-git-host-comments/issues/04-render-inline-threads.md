@@ -4,6 +4,8 @@ blocked_by:
   - 01-define-comment-service
 blocks:
   - 05-create-and-reply
+  - 06-edit-and-delete
+  - 08-integrate-inline-comments
 ---
 
 # Render existing threads inline in Guide and Diff
@@ -12,8 +14,8 @@ blocks:
 
 **From PRD:** [08 Inline git-host comments](../)
 
-**Seam(s):** anchor-to-visible-slot projection; shared client thread store;
-Guide/Diff thread renderer
+**Seam(s):** anchor-to-visible-slot projection; review-scoped Svelte thread
+state; Guide/Diff thread components and code-view slots
 
 **What it delivers:** Existing provider discussions appear once at the code
 they concern in both review modes instead of one block above Diff.
@@ -38,8 +40,8 @@ they concern in both review modes instead of one block above Diff.
 - PR-wide Discussion tab
 - Pixel-perfect reuse of old viewer patches
 
-**Touches:** shared anchor projection, client thread state, Guide/Diff
-renderers, styles, tests
+**Touches:** lib/shared anchor projection, Svelte review thread state,
+Guide/Diff/code-view components, styles, tests
 
 **Acceptance criteria:**
 
@@ -56,6 +58,6 @@ renderers, styles, tests
 
 **Blocked by:** 01 Define comment service
 
-**Blocks:** 05 Create comments and replies
+**Blocks:** 05 Create comments and replies, 06 edit/delete, and 08 integration
 
 **Parallel-eligible:** yes, with 02 and 03

@@ -4,6 +4,7 @@ blocked_by:
   - 01-connect-cli-identities
 blocks:
   - 07-open-and-update-diff
+  - 09-integrate-provider-automation
 ---
 
 # Fetch exact commits through managed bare caches
@@ -36,8 +37,8 @@ without a local clone or checkout.
 - Automatic cache retention/eviction
 - Private network in CI
 
-**Touches:** server/git, local app-data configuration, process/filesystem
-fakes, diff fixtures, tests
+**Touches:** lib/server/git, local app-data configuration, process/filesystem
+fakes, Diff fixtures, tests
 
 **Acceptance criteria:**
 

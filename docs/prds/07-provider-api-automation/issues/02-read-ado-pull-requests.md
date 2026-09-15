@@ -6,6 +6,7 @@ blocks:
   - 04-manage-repositories
   - 06-refresh-catalogs
   - 07-open-and-update-diff
+  - 09-integrate-provider-automation
 ---
 
 # Read repositories and pull requests through ADO REST
@@ -38,8 +39,8 @@ PR metadata through direct REST without Cursor/ADO MCP or az host commands.
 - Creating/updating PRs or votes
 - Live network in CI
 
-**Touches:** server/providers/ado, shared provider contracts, provider fixtures
-and tests
+**Touches:** lib/server/providers/ado, lib/shared provider contracts, provider
+fixtures and tests
 
 **Acceptance criteria:**
 

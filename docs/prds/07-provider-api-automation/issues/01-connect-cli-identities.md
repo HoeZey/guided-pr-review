@@ -1,7 +1,7 @@
 ---
 status: todo
 blocked_by:
-  - ../../06-app-structure/issues/06-integrate-app-structure
+  - ../../06-app-structure/issues/13-integrate-sveltekit-cutover
 blocks:
   - 02-read-ado-pull-requests
   - 03-read-github-pull-requests
@@ -36,8 +36,8 @@ existing gh identity without accepting or persisting credentials itself.
 - Native OAuth or multiple accounts per provider
 - Repository or PR network calls
 
-**Touches:** server/auth, provider connection service, client connection state,
-tests
+**Touches:** lib/server/auth, provider connection service, Svelte connection
+state/components, tests
 
 **Acceptance criteria:**
 
