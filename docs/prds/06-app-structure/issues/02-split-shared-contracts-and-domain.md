@@ -1,0 +1,60 @@
+---
+status: todo
+blocked_by:
+  - 01-lock-architecture-boundaries
+blocks:
+  - 03-introduce-repositories
+  - 04-introduce-services-and-adapters
+  - 05-split-browser-client
+---
+
+# Split shared contracts and pure domain rules
+
+**Type:** Story
+
+**From PRD:** [06 App structure](../)
+
+**Seam(s):** shared/contracts export surface; shared/domain pure functions
+
+**What it delivers:** Server and client consume small schema and pure-rule
+modules without importing a root contracts or view-helper monolith.
+
+**Scope (in):**
+
+- Split contracts.ts by guide/file changes, pull-request provenance,
+  catalog/actions, outcomes, persistence formats, and MCP tool inputs.
+- Move overview, Guide/Diff, and outcome projections from overview.ts,
+  guide-view.ts, and review-outcome.ts into capability modules under
+  shared/domain.
+- Separate browser/server-neutral runtime schemas from transport-only tool
+  declarations.
+- Keep one intentional shared export surface and update imports to owning
+  modules.
+- Move focused tests beside their owning shared modules or document the chosen
+  test convention.
+
+**Scope (out):**
+
+- Service orchestration or persistence
+- ADO/GitHub payloads
+- Browser rendering changes
+- Rewriting working pure algorithms
+
+**Touches:** src/contracts.ts, src/overview.ts, src/guide-view.ts,
+src/review-outcome.ts, related tests, new src/shared modules
+
+**Acceptance criteria:**
+
+- [ ] Schema families have one owner and no circular imports.
+- [ ] shared imports no pages, client, server, Astro, Node IO, or provider code.
+- [ ] Existing schema rejection and pure-projection tests still pass.
+- [ ] Browser and server can import required types without duplicate Guide
+  shapes.
+- [ ] No visible behavior or persisted shape changes.
+- [ ] Architecture check passes.
+
+**Blocked by:** 01 Lock architecture boundaries and regression baseline
+
+**Blocks:** 03 repositories, 04 services, and 05 browser client
+
+**Parallel-eligible:** no

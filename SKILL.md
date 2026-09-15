@@ -358,7 +358,7 @@ review URL from the skill.
    same model, not OUTPUT.
    ```
 4. **Build a Guide v1 object** matching the Zod GuideV1 contract (see
-   src/contracts.ts and docs/prds/done/guided-pr-review/). Line content has no
+   src/contracts.ts and docs/prds/done/01-guided-pr-review/). Line content has no
    leading + / - / space. Chapter ids unique kebab-case. Omit source.
 5. **Ensure the instance is up** on http://localhost:8765
 
