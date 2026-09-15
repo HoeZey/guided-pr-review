@@ -1,5 +1,5 @@
 import { zodToJsonSchema } from "zod-to-json-schema";
-import { tools } from "./contracts.ts";
+import { tools } from "./lib/shared/contracts/tools.ts";
 import {
   addReviewFromTool,
   completeAction,

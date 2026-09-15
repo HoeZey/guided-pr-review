@@ -22,7 +22,7 @@ Cursor mcp.json docs). The skill starts `npm run dev` if nothing is listening.
 
 ## Contracts
 
-Zod in `src/contracts.ts` is the source of truth (Guide v1 + Store v1 + tool
-I/O). Persistence: `data/reviews.json` (gitignored).
+Zod in src/lib/shared/contracts is the source of truth (Guide v1 + Store v1 +
+tool I/O). Persistence: data/reviews.json (gitignored).
 
 Docs: [docs/](docs/)

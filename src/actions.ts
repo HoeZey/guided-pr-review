@@ -1,10 +1,7 @@
-import {
-  GuideV1,
-  type FileChange,
-  type OpenActionTarget,
-  type PullRequestSource,
-} from "./contracts.ts";
-import { filesForDiff } from "./guide-view.ts";
+import type { OpenActionTarget } from "./lib/shared/contracts/catalog.ts";
+import { GuideV1, type FileChange } from "./lib/shared/contracts/guide.ts";
+import type { PullRequestSource } from "./lib/shared/contracts/provenance.ts";
+import { filesForDiff } from "./lib/shared/domain/guide-view.ts";
 import { completeAction, getReview, listReviews, upsertReview } from "./store.ts";
 
 export type GitHostAdapter = {

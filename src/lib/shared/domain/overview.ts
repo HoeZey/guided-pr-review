@@ -1,11 +1,11 @@
 import {
-  pullRequestSyncKey,
   type CatalogPullRequest,
   type CatalogSnapshot,
   type OpenActionTarget,
-  type ReviewSummary,
   type StoredAction,
-} from "./contracts.ts";
+} from "../contracts/catalog.ts";
+import type { ReviewSummary } from "../contracts/persistence.ts";
+import { pullRequestSyncKey } from "../contracts/provenance.ts";
 
 export type HomeCard = {
   id: string;

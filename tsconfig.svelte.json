@@ -3,7 +3,8 @@
   "compilerOptions": {
     "strict": true,
     "skipLibCheck": true,
-    "moduleResolution": "bundler"
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true
   },
   "include": [
     ".svelte-kit/ambient.d.ts",
@@ -17,6 +18,7 @@
   ],
   "exclude": [
     "src/pages",
+    "src/lib/**/*.test.ts",
     "src/routes/**/*.svelte.test.ts",
     "src/routes/**/*.ssr.test.ts"
   ]

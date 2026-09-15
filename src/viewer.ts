@@ -23,21 +23,19 @@ import {
   type SplitRow,
   type DiffLayout,
   type FileTreeNode,
-} from "./guide-view.ts";
+} from "./lib/shared/domain/guide-view.ts";
 import {
   findingCounts,
   selectReviewOutcome,
   type OutcomeHistoryEntry,
-} from "./review-outcome.ts";
+} from "./lib/shared/domain/outcomes.ts";
 import type {
   CatalogSnapshot,
   OpenActionTarget,
-  ReviewSummary,
-  SpecFinding,
-  StandardsFinding,
   StoredAction,
-  StoredOutcome,
-} from "./contracts.ts";
+} from "./lib/shared/contracts/catalog.ts";
+import type { SpecFinding, StandardsFinding, StoredOutcome } from "./lib/shared/contracts/outcomes.ts";
+import type { ReviewSummary } from "./lib/shared/contracts/persistence.ts";
 import {
   HOME_PATH,
   generateGuideHint,
@@ -59,7 +57,7 @@ import {
   type HomeCard,
   type HomeGroup,
   type OverviewView,
-} from "./overview.ts";
+} from "./lib/shared/domain/overview.ts";
 
 const BRAND_MARK = `<a class="brand-link" href="${HOME_PATH}" data-home><img class="brand" src="/logo.svg" width="28" height="28" alt=""></a>`;
 const BACK_HOME = `<a class="back-link icon-btn" href="${HOME_PATH}" data-home aria-label="Back to Home" title="Back to Home"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg></a>`;

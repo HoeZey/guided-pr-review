@@ -1,4 +1,4 @@
-import type { CodeReviewOutcome, StoredOutcome } from "./contracts.ts";
+import type { CodeReviewOutcome, StoredOutcome } from "../contracts/outcomes.ts";
 
 export type OutcomeHistoryEntry = {
   id: string;

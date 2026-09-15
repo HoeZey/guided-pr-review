@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { GuideV1 } from "./contracts.ts";
+import { GuideV1 } from "../contracts/guide.ts";
 import {
   collapsedOnDiff,
   filesForDiff,

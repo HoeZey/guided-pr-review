@@ -4,9 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { completeGenerateGuideAction, completeOpenAction, completeUpdateDiffAction, type ChapteringAdapter, type GitHostAdapter } from "./actions.ts";
-import type { FileChange, OpenActionTarget, PullRequestSource } from "./contracts.ts";
-import { filesForDiff } from "./guide-view.ts";
-import { guidePresentsWalkthrough, reviewLandingTab } from "./overview.ts";
+import type { OpenActionTarget } from "./lib/shared/contracts/catalog.ts";
+import { GuideV1, type FileChange } from "./lib/shared/contracts/guide.ts";
+import type { PullRequestSource } from "./lib/shared/contracts/provenance.ts";
+import { filesForDiff } from "./lib/shared/domain/guide-view.ts";
+import { guidePresentsWalkthrough, reviewLandingTab } from "./lib/shared/domain/overview.ts";
 import {
   addReview,
   getReview,
@@ -15,7 +17,6 @@ import {
   resetStoreCache,
   waitForAction,
 } from "./store.ts";
-import { GuideV1 } from "./contracts.ts";
 
 const SOURCE = "1111111111111111111111111111111111111111";
 const TARGET = "2222222222222222222222222222222222222222";

@@ -1,4 +1,4 @@
-import { GuideV1 } from "./contracts.ts";
+import { GuideV1 } from "./lib/shared/contracts/guide.ts";
 import { seedIfEmpty } from "./store.ts";
 import sample from "../examples/sample-guide.json";
 

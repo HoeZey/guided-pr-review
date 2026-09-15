@@ -2,22 +2,25 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  CodeReviewOutcome,
-  emptyStore,
-  GuideV1,
-  pullRequestSyncKey,
-  PullRequestSource,
-  StoreV1,
-  tools,
   type CatalogPullRequest,
   type CatalogSnapshot,
   type ConfiguredRepository,
-  type ListReviewsOutput,
   type OpenActionTarget,
-  type ReviewRecord,
   type StoredAction,
+} from "./lib/shared/contracts/catalog.ts";
+import { GuideV1 } from "./lib/shared/contracts/guide.ts";
+import {
+  CodeReviewOutcome,
   type StoredOutcome,
-} from "./contracts.ts";
+} from "./lib/shared/contracts/outcomes.ts";
+import {
+  emptyStore,
+  StoreV1,
+  type ListReviewsOutput,
+  type ReviewRecord,
+} from "./lib/shared/contracts/persistence.ts";
+import { PullRequestSource, pullRequestSyncKey } from "./lib/shared/contracts/provenance.ts";
+import { tools } from "./lib/shared/contracts/tools.ts";
 
 export const AGENT_CONNECTED_MS = 35_000;
 

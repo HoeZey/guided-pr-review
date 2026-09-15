@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { CodeReviewOutcome, type StoredOutcome } from "./contracts.ts";
-import { findingCounts, selectReviewOutcome } from "./review-outcome.ts";
+import { CodeReviewOutcome, type StoredOutcome } from "../contracts/outcomes.ts";
+import { findingCounts, selectReviewOutcome } from "./outcomes.ts";
 
 const BASE = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const HEAD = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";

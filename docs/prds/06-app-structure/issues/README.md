@@ -28,7 +28,7 @@ reconciles browser-wide behavior only after those views exist.
 ## Status
 
 - [01 Lock the SvelteKit migration and regression baseline](01-lock-sveltekit-migration.md) — done
-- [02 Split shared contracts and pure domain rules](02-split-shared-contracts-and-domain.md) — todo
+- [02 Split shared contracts and pure domain rules](02-split-shared-contracts-and-domain.md) — done
 - [03 Introduce app-shaped repositories and JSON adapter](03-introduce-repositories.md) — todo
 - [04 Introduce feature services and provider ports](04-introduce-services-and-ports.md) — todo
 - [05 Preserve HTTP, MCP, and SSR data in SvelteKit](05-preserve-http-mcp-and-ssr.md) — todo

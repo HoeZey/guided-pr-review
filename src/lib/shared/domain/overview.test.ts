@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { CatalogPullRequest, CatalogSnapshot, ReviewSummary } from "./contracts.ts";
+import type { CatalogPullRequest, CatalogSnapshot } from "../contracts/catalog.ts";
+import type { ReviewSummary } from "../contracts/persistence.ts";
 import {
   HOME_PATH,
   generateGuideHint,

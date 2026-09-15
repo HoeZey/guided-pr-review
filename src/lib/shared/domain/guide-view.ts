@@ -1,4 +1,4 @@
-import type { FileChange, GuideV1, Hunk } from "./contracts.ts";
+import type { FileChange, GuideV1, Hunk } from "../contracts/guide.ts";
 
 type GuideFiles = Pick<GuideV1, "chapters" | "omitted">;
 

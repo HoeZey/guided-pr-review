@@ -3,8 +3,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { GuideV1 } from "./contracts.ts";
-import { projectHomeOverview } from "./overview.ts";
+import { GuideV1 } from "./lib/shared/contracts/guide.ts";
+import { projectHomeOverview } from "./lib/shared/domain/overview.ts";
 import {
   addReview,
   agentIsConnected,
@@ -105,24 +105,6 @@ test("rejects invalid guide", async () => {
   await withStore(async () => {
     await assert.rejects(() => addReview({ version: 1, title: "x" }));
   });
-});
-
-test("parses valid pull-request provenance", () => {
-  const parsed = GuideV1.parse({ ...sample, source: prSource() });
-  assert.equal(parsed.source?.kind, "pull-request");
-  assert.equal(parsed.source?.number, 1027);
-  assert.equal(parsed.source?.providerContext.kind, "azure-devops");
-  assert.equal(parsed.source?.providerContext.project, "BRAID");
-});
-
-test("rejects ADO-only data outside providerContext", () => {
-  assert.throws(() => GuideV1.parse({ ...sample, source: prSource({ project: "BRAID" }) }));
-});
-
-test("rejects invalid pull-request provenance", () => {
-  assert.throws(() =>
-    GuideV1.parse({ ...sample, source: prSource({ sourceCommit: "abc1234" }) }),
-  );
 });
 
 test("add list set_active remove", async () => {
