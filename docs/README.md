@@ -38,7 +38,7 @@ Story branches: feature/04-03-open-selected-pr-as-diff. Prefix feature/,
 bugfix/, hotfix/, or chore/. Then two-digit epic from Features above, two-digit
 story from issues/NN-slug.md, then a lowercase slug.
 
-Squash onto dev as Merged 04-03: Open the selected PR as Diff. Title is the
-issue title. Fast-forward when the branch is already a straight line on dev.
+Squash onto develop as Merged 04-03: Open the selected PR as Diff. Title is the
+issue title. Fast-forward when the branch is already a straight line on develop.
 Promote a stable cut to main by fast-forward when the user asks. Do not
 merge epic 03 (Git-host) onto main until that PRD's remaining story is done.
