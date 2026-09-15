@@ -12,5 +12,6 @@
     "jsx": "preserve",
     "types": ["node"]
   },
-  "include": ["src/**/*", "astro.config.mjs"]
+  "include": ["src/**/*", "astro.config.mjs", "scripts/**/*.ts"],
+  "exclude": ["src/routes", "src/app.d.ts", "scripts/architecture-fixtures"]
 }

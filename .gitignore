@@ -1,9 +1,13 @@
 node_modules/
 dist/
+build/
+.svelte-kit/
 data/
 .astro/
 .DS_Store
 *.log
+playwright-report/
+test-results/
 
 # graft's local graph cache — regenerable, not committed (run graft build).
 graft/

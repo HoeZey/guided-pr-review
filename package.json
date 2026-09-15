@@ -5,27 +5,35 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev --host localhost --port 8765",
+    "dev:svelte": "vite dev --config vite.svelte.config.ts --host localhost --port 8766",
     "build": "astro build",
+    "build:svelte": "vite build --config vite.svelte.config.ts",
     "start": "HOST=localhost PORT=8765 node dist/server/entry.mjs",
-    "test": "tsx --test src/store.test.ts src/guide-view.test.ts src/review-outcome.test.ts src/overview.test.ts src/actions.test.ts"
+    "test": "tsx --test src/store.test.ts src/guide-view.test.ts src/review-outcome.test.ts src/overview.test.ts src/actions.test.ts",
+    "test:svelte": "vitest run && vitest run --config vitest.ssr.config.ts",
+    "check:architecture": "tsx --test scripts/check-architecture.test.ts",
+    "check:svelte": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.svelte.json"
   },
   "dependencies": {
     "@astrojs/node": "^9.4.4",
     "@modelcontextprotocol/sdk": "^1.18.2",
-    "astro": "^5.13.7",
-    "zod": "^3.24.2",
-    "zod-to-json-schema": "^3.24.6"
-  },
-  "dependencies": {
-    "@astrojs/node": "^9.4.4",
+    "@sveltejs/adapter-node": "^5.5.4",
+    "@sveltejs/kit": "^2.65.1",
     "astro": "^5.13.7",
     "shiki": "^3.12.2",
+    "svelte": "^5.56.3",
     "zod": "^3.24.2",
     "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "@sveltejs/vite-plugin-svelte": "^5.1.1",
     "@types/node": "^22.18.1",
+    "jsdom": "^26.1.0",
+    "svelte-check": "^4.4.6",
     "tsx": "^4.20.5",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "vite": "^6.4.2",
+    "vitest": "^4.1.8"
   }
 }
