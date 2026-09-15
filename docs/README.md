@@ -10,7 +10,7 @@ vertical slices.
 - [Review screen polish](prds/done/review-screen-polish/) — implemented
 - [Git-host guided reviews](prds/git-host-guided-reviews/) — in progress
 - [Pull request overview](prds/pull-request-overview/) — in progress
-- [Code-review outcomes](prds/code-review-outcomes/) — in progress
+- [Code-review outcomes](prds/done/code-review-outcomes/) — implemented
 
 ## Status
 

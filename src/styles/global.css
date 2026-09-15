@@ -789,6 +789,44 @@ main {
   font-variant-numeric: tabular-nums;
 }
 
+.outcome-history {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 8px 12px;
+  color: var(--faint);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.outcome-history select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.outcome-stale {
+  margin: 0 0 20px;
+  padding: 12px 14px;
+  border: 1px solid var(--removed-text);
+  border-radius: 8px;
+  background: var(--removed-bg);
+  color: var(--removed-text);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
 .nav-empty,
 .outcome-empty {
   padding: 8px 16px;

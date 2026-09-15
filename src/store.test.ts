@@ -197,6 +197,20 @@ test("repeat runs at one head remain distinct", async () => {
   });
 });
 
+test("removing a review removes all of its outcome history", async () => {
+  await withStore(async () => {
+    const { id } = await addReview(sample);
+    const other = await addReview(GuideV1.parse({ ...sample, title: "Two" }));
+    await publishReviewOutcome(id, sampleOutcome());
+    await publishReviewOutcome(id, sampleOutcome());
+    await publishReviewOutcome(other.id, sampleOutcome());
+    await removeReview(id);
+    await assert.rejects(() => getReview(id), /unknown review/);
+    const leftover = await getReview(other.id);
+    assert.equal(leftover.outcomes.length, 1);
+  });
+});
+
 test("unknown review id or invalid outcome is rejected", async () => {
   await withStore(async () => {
     const { id } = await addReview(sample);

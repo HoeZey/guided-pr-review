@@ -1,5 +1,5 @@
 ---
-status: in_progress
+status: implemented
 ---
 
 # PRD: Code-review outcomes
@@ -188,8 +188,8 @@ status, and returns empty when no outcomes exist. Do not test Astro internals.
 
 ## References
 
-- [PRD: Guided PR review](../done/guided-pr-review/)
-- [PRD: Git-host guided reviews](../git-host-guided-reviews/)
+- [PRD: Guided PR review](../guided-pr-review/)
+- [PRD: Git-host guided reviews](../../git-host-guided-reviews/)
 - Grill decisions in the planning chat (independent producer, personal tool
   GitHub repo as product source, append-only history, stale warning, explicit
   finding contract, store plus pure selection test seam)

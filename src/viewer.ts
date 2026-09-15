@@ -23,7 +23,11 @@ import {
   type DiffLayout,
   type FileTreeNode,
 } from "./guide-view.ts";
-import { findingCounts, selectReviewOutcome } from "./review-outcome.ts";
+import {
+  findingCounts,
+  selectReviewOutcome,
+  type OutcomeHistoryEntry,
+} from "./review-outcome.ts";
 import type {
   CatalogSnapshot,
   OpenActionTarget,
@@ -174,6 +178,7 @@ let collapsedDirs = new Set<string>();
 let selectedDiffPath: string | null = null;
 let selectedGuidePath: string | null = null;
 let selectedOutcomeSection: string | null = null;
+let selectedOutcomeId: string | null = null;
 let tocOpen = false;
 let displayOpen = false;
 let spyMain: Element | null = null;
@@ -644,6 +649,25 @@ function renderOutcome(outcome: StoredOutcome["outcome"]): string {
   return `${renderAxis("outcome-standards", "Standards", outcome.standards.findings, "No Standards findings.")}${renderAxis("outcome-spec", "Spec", outcome.spec.findings, "No Spec findings.")}`;
 }
 
+function outcomeRunLabel(entry: OutcomeHistoryEntry): string {
+  // ponytail: UTC YYYY-MM-DD HH:MM from addedAt, not the viewer's locale.
+  // Upgrade to Intl.DateTimeFormat if reviewers need local time.
+  return `${entry.addedAt.slice(0, 10)} ${entry.addedAt.slice(11, 16)} · ${entry.shortHead}`;
+}
+
+function renderOutcomeHistory(
+  history: readonly OutcomeHistoryEntry[],
+  selectedId: string,
+): string {
+  const options = history
+    .map(
+      (row) =>
+        `<option value="${esc(row.id)}"${row.id === selectedId ? " selected" : ""}>${esc(outcomeRunLabel(row))}</option>`,
+    )
+    .join("");
+  return `<label class="outcome-history">History <select data-outcome-run aria-label="Code-review run history">${options}</select></label>`;
+}
+
 function pasteModal(): string {
   if (!pasteOpen) return `<div class="modal hidden" id="paste-modal"></div>`;
   return `<div class="modal" id="paste-modal"><div class="modal-card"><p>Paste a Guide v1 JSON object.</p><textarea id="paste-json"></textarea><div class="modal-actions"><button type="button" class="ghost" data-paste-cancel>Cancel</button><button type="button" class="ghost" data-paste-save>Add</button></div></div></div>`;
@@ -1106,20 +1130,36 @@ function render(opts?: { restoreScroll?: boolean }) {
     ? chapters.map((ch, i) => renderSection(ch, i, chapters.length)).join("")
     : `<div class="outcome-empty"><h2>Generate guide</h2><p>This review is a Diff. Generate a reading-order guide when you want one.</p>${generateNotes}${generateCta}</div>`;
   const diffBody = rows.map((file, i) => renderFile(file, diffFileId(i))).join("");
-  const selection = selectReviewOutcome(guide.base, guide.head, outcomes);
-  const exact = selection.status === "exact" ? selection.record.outcome : null;
-  const counts = exact ? findingCounts(exact) : { standards: 0, spec: 0 };
+  if (
+    selectedOutcomeId &&
+    !outcomes.some((row) => row.id === selectedOutcomeId)
+  ) {
+    selectedOutcomeId = null;
+  }
+  const selection = selectReviewOutcome(
+    guide.base,
+    guide.head,
+    outcomes,
+    selectedOutcomeId,
+  );
+  const shown = selection.status === "empty" ? null : selection.record.outcome;
+  const counts = shown ? findingCounts(shown) : { standards: 0, spec: 0 };
   if (
     selectedOutcomeSection !== "outcome-standards" &&
     selectedOutcomeSection !== "outcome-spec"
   ) {
     selectedOutcomeSection = "outcome-standards";
   }
-  const reviewNavSide = exact
-    ? `<button type="button" class="file-link" data-jump="outcome-standards" aria-current="${selectedOutcomeSection === "outcome-standards" ? "true" : "false"}">Standards <span class="axis-count">${counts.standards}</span></button><button type="button" class="file-link" data-jump="outcome-spec" aria-current="${selectedOutcomeSection === "outcome-spec" ? "true" : "false"}">Spec <span class="axis-count">${counts.spec}</span></button>`
-    : `<p class="nav-empty">No matching run</p>`;
-  const reviewBody = exact
-    ? `${renderOutcome(exact)}<p class="hint">j / k jump axes · run /code-review to publish another snapshot</p>`
+  const staleWarning =
+    selection.status === "outdated"
+      ? `<aside class="outcome-stale" role="status">Outdated. This run does not match the current guide base and head.</aside>`
+      : "";
+  const reviewNavSide =
+    selection.status === "empty"
+      ? `<p class="nav-empty">No runs</p>`
+      : `${renderOutcomeHistory(selection.history, selection.record.id)}<button type="button" class="file-link" data-jump="outcome-standards" aria-current="${selectedOutcomeSection === "outcome-standards" ? "true" : "false"}">Standards <span class="axis-count">${counts.standards}</span></button><button type="button" class="file-link" data-jump="outcome-spec" aria-current="${selectedOutcomeSection === "outcome-spec" ? "true" : "false"}">Spec <span class="axis-count">${counts.spec}</span></button>`;
+  const reviewBody = shown
+    ? `${staleWarning}${renderOutcome(shown)}<p class="hint">j / k jump axes · run /code-review to publish another snapshot</p>`
     : `<div class="outcome-empty"><h2>No code-review outcome</h2><p>Run /code-review on this base and head. After the chat report it attaches here when exactly one saved guide matches.</p></div>`;
   const mainInner =
     tab === "guide"
@@ -1197,6 +1237,12 @@ function bindChrome(app: HTMLElement) {
       const next = btn.getAttribute("data-tab");
       if (next === "guide" || next === "diff" || next === "review") setTab(next);
     });
+  });
+  app.querySelector("[data-outcome-run]")?.addEventListener("change", (event) => {
+    const el = event.target;
+    if (!(el instanceof HTMLSelectElement)) return;
+    selectedOutcomeId = el.value;
+    render({ restoreScroll: true });
   });
   app.querySelectorAll("[data-diff-mode]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -1421,6 +1467,7 @@ async function loadActive(force = false): Promise<void> {
     activeId = listed.activeId;
     guide = null;
     outcomes = [];
+    selectedOutcomeId = null;
     const key = JSON.stringify({ view: "home", listed });
     if (!force && key === lastPayloadKey) return;
     lastPayloadKey = key;
@@ -1449,6 +1496,7 @@ async function loadActive(force = false): Promise<void> {
     tab = reviewLandingTab(payload.guide);
     if (tab === "diff") collapsed = collapsedOnDiff(viewed, collapsed);
     selectedGuidePath = null;
+    selectedOutcomeId = null;
   }
   if (switched || !guide.chapters.some((ch) => ch.id === selectedChapterId)) {
     const opened = guide.chapters.find((ch) => ch.open);
