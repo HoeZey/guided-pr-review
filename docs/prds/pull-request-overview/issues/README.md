@@ -25,5 +25,5 @@ parallel with 02.
 - [04 Refresh outdated and closed PRs](04-refresh-outdated-and-closed-prs.md) — done
 - [05 Add another repository to the overview](05-add-another-repository.md) — todo
 - [06 Open a PR without a local clone](06-generate-without-local-clone.md) — todo
-- [07 Generate the reading-order guide on request](07-generate-guide-on-request.md) — todo
+- [07 Generate the reading-order guide on request](07-generate-guide-on-request.md) — done
 - [08 Show Home range as target into source](08-show-home-range-as-target-into-source.md) — done

@@ -3,9 +3,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { completeOpenAction, completeUpdateDiffAction, type ChapteringAdapter, type GitHostAdapter } from "./actions.ts";
+import { completeGenerateGuideAction, completeOpenAction, completeUpdateDiffAction, type ChapteringAdapter, type GitHostAdapter } from "./actions.ts";
 import type { FileChange, OpenActionTarget, PullRequestSource } from "./contracts.ts";
-import { reviewLandingTab } from "./overview.ts";
+import { filesForDiff } from "./guide-view.ts";
+import { guidePresentsWalkthrough, reviewLandingTab } from "./overview.ts";
 import {
   addReview,
   getReview,
@@ -240,6 +241,132 @@ test("Update Diff refreshes the snapshot through upsert without requiring chapte
     assert.equal(listed.actions[1].kind, "update-diff");
     assert.equal(listed.actions[1].status, "succeeded");
     assert.equal(listed.actions[1].reviewId, opened.reviewId);
+  });
+});
+
+function fakeChaptering(): { adapter: ChapteringAdapter; calls: number } {
+  const state = { adapter: {} as ChapteringAdapter, calls: 0 };
+  state.adapter = {
+    chapter: async ({ title, files, source }) => {
+      state.calls += 1;
+      return GuideV1.parse({
+        version: 1,
+        title,
+        base: source.targetCommit,
+        head: source.sourceCommit,
+        range: "develop...feature/review-me",
+        repo: source.repository.name,
+        chapters: [
+          {
+            id: "core",
+            kind: "core",
+            title: "Behavior",
+            why: "The reading-order walkthrough of this diff.",
+            open: true,
+            files,
+          },
+        ],
+        source,
+      });
+    },
+  };
+  return state;
+}
+
+test("the waiting agent chapters in place and keeps the same review id", async () => {
+  await withStore(async () => {
+    const opened = await queueAction({ kind: "open", target: openTarget() });
+    await waitForAction({ timeoutMs: 0 });
+    const { reviewId } = await completeOpenAction(opened.id, fakeHost());
+    const queued = await queueAction({ kind: "generate-guide", reviewId });
+    const claimed = await waitForAction({ timeoutMs: 0 });
+    assert.equal(claimed?.id, queued.id);
+    assert.equal(claimed?.kind, "generate-guide");
+    const chaptering = fakeChaptering();
+    const result = await completeGenerateGuideAction(queued.id, chaptering.adapter);
+    assert.equal(result.reviewId, reviewId);
+    assert.equal(chaptering.calls, 1);
+    const listed = await listReviews();
+    assert.equal(listed.actions.at(-1)?.status, "succeeded");
+    assert.equal(listed.actions.at(-1)?.reviewId, reviewId);
+    assert.equal(listed.reviews.length, 1);
+    assert.equal(listed.reviews[0].id, reviewId);
+    const got = await getReview(reviewId);
+    assert.equal(got.guide.unchaptered, undefined);
+    assert.equal(got.guide.chapters[0].id, "core");
+    assert.equal(got.guide.source?.number, 1101);
+  });
+});
+
+test("after success the Guide tab shows the walkthrough and Diff still lists each path", async () => {
+  await withStore(async () => {
+    const opened = await queueAction({ kind: "open", target: openTarget() });
+    await waitForAction({ timeoutMs: 0 });
+    const { reviewId } = await completeOpenAction(opened.id, fakeHost());
+    const queued = await queueAction({ kind: "generate-guide", reviewId });
+    await waitForAction({ timeoutMs: 0 });
+    await completeGenerateGuideAction(queued.id, fakeChaptering().adapter);
+    const got = await getReview(reviewId);
+    assert.equal(guidePresentsWalkthrough(got.guide), true);
+    assert.equal(reviewLandingTab(got.guide), "guide");
+    assert.deepEqual(
+      filesForDiff(got.guide).map((file) => file.path),
+      ["src/open.ts"],
+    );
+  });
+});
+
+test("a failed Generate guide reports a structured error and leaves the Diff openable", async () => {
+  await withStore(async () => {
+    const opened = await queueAction({ kind: "open", target: openTarget() });
+    await waitForAction({ timeoutMs: 0 });
+    const { reviewId } = await completeOpenAction(opened.id, fakeHost());
+    const queued = await queueAction({ kind: "generate-guide", reviewId });
+    await waitForAction({ timeoutMs: 0 });
+    const chaptering: ChapteringAdapter = {
+      chapter: async () => {
+        throw new Error("chaptering timed out");
+      },
+    };
+    await assert.rejects(
+      () => completeGenerateGuideAction(queued.id, chaptering),
+      /chaptering timed out/,
+    );
+    const listed = await listReviews();
+    assert.equal(listed.actions.at(-1)?.status, "failed");
+    assert.equal(listed.actions.at(-1)?.error?.code, "generate-guide-failed");
+    assert.equal(listed.actions.at(-1)?.error?.message, "chaptering timed out");
+    const got = await getReview(reviewId);
+    assert.equal(got.guide.unchaptered, true);
+    assert.equal(reviewLandingTab(got.guide), "diff");
+    assert.deepEqual(
+      filesForDiff(got.guide).map((file) => file.path),
+      ["src/open.ts"],
+    );
+  });
+});
+
+test("Open of a different PR can still run after Generate guide completes", async () => {
+  await withStore(async () => {
+    const opened = await queueAction({ kind: "open", target: openTarget(1101) });
+    await waitForAction({ timeoutMs: 0 });
+    const { reviewId } = await completeOpenAction(opened.id, fakeHost(1101));
+    const generate = await queueAction({ kind: "generate-guide", reviewId });
+    await waitForAction({ timeoutMs: 0 });
+    await completeGenerateGuideAction(generate.id, fakeChaptering().adapter);
+    const idle = await waitForAction({ timeoutMs: 0 });
+    assert.equal(idle, null);
+    const second = await queueAction({ kind: "open", target: openTarget(1102) });
+    const claimed = await waitForAction({ timeoutMs: 0 });
+    assert.equal(claimed?.id, second.id);
+    assert.equal(claimed?.kind, "open");
+    const next = await completeOpenAction(second.id, fakeHost(1102));
+    assert.notEqual(next.reviewId, reviewId);
+    const listed = await listReviews();
+    assert.equal(listed.reviews.length, 2);
+    assert.equal(listed.activeId, next.reviewId);
+    const first = await getReview(reviewId);
+    assert.equal(guidePresentsWalkthrough(first.guide), true);
   });
 });
 

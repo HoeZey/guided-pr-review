@@ -35,13 +35,17 @@ import type {
 } from "./contracts.ts";
 import {
   HOME_PATH,
+  generateGuideHint,
   guidePresentsWalkthrough,
   homeCardAction,
   hostActionHint,
   inFlightActionCopy,
+  inFlightGenerateGuideCopy,
   inFlightOpenCopy,
   latestAction,
+  latestGenerateGuideAction,
   latestOpenAction,
+  offersGenerateGuide,
   projectHomeOverview,
   resolveOverviewView,
   reviewLandingTab,
@@ -931,23 +935,33 @@ function homeCardHtml(card: HomeCard): string {
   const inflight =
     (latestOpen ? inFlightOpenCopy(latestOpen.status) : undefined) ||
     (latestUpdate ? inFlightActionCopy("update-diff", latestUpdate.status) : undefined);
+  const generateLatest = card.reviewId
+    ? latestGenerateGuideAction(card.reviewId, actions)
+    : undefined;
+  const generateInflight = generateLatest
+    ? inFlightGenerateGuideCopy(generateLatest.status)
+    : undefined;
   const failed =
-    latestOpen?.status === "failed"
-      ? latestOpen.error?.message
-      : latestUpdate?.status === "failed"
-        ? latestUpdate.error?.message
-        : undefined;
-  const status = inflight
-    ? `<span class="home-card-status">${esc(inflight)}</span>`
-    : failed
-      ? `<span class="home-card-status is-failed">${esc(failed)}</span>`
-      : card.outdated
-        ? `<span class="home-card-status is-outdated">Outdated</span>`
-        : card.archived
-          ? `<span class="home-card-status">Archived</span>`
-          : card.hasGuide
-            ? `<span class="home-card-status is-ready">Guide</span>`
-            : `<span class="home-card-status">No guide</span>`;
+    generateLatest?.status === "failed"
+      ? generateLatest.error?.message
+      : latestOpen?.status === "failed"
+        ? latestOpen.error?.message
+        : latestUpdate?.status === "failed"
+          ? latestUpdate.error?.message
+          : undefined;
+  const status = generateInflight
+    ? `<span class="home-card-status">${esc(generateInflight)}</span>`
+    : inflight
+      ? `<span class="home-card-status">${esc(inflight)}</span>`
+      : failed
+        ? `<span class="home-card-status is-failed">${esc(failed)}</span>`
+        : card.outdated
+          ? `<span class="home-card-status is-outdated">Outdated</span>`
+          : card.archived
+            ? `<span class="home-card-status">Archived</span>`
+            : card.hasGuide
+              ? `<span class="home-card-status is-ready">Guide</span>`
+              : `<span class="home-card-status">No guide</span>`;
   const body = `<span class="home-card-title">${esc(card.title)}</span>${badge}${range}`;
   const kind = homeCardAction(card, agentConnected);
   const busy = Boolean(inflight);
@@ -969,8 +983,15 @@ function homeCardHtml(card: HomeCard): string {
   } else {
     open = `<div class="home-card-open">${body}</div>`;
   }
+  const offerGuide = offersGenerateGuide(card);
+  const generateBusy = Boolean(generateInflight);
+  const generateBtn = offerGuide
+    ? card.reviewId && agentConnected && !generateBusy
+      ? `<button type="button" class="ghost" data-queue-generate="${esc(card.reviewId)}">Generate guide</button>`
+      : `<button type="button" class="ghost" disabled>Generate guide</button>`
+    : "";
   const pending = kind === "disabled-host" || busy;
-  return `<div class="home-card${pending ? " is-pending" : ""}">${open}<div class="home-card-aside">${status}${updateBtn}${card.outdated && !card.archived ? savedLink : ""}${ado}</div></div>`;
+  return `<div class="home-card${pending ? " is-pending" : ""}">${open}<div class="home-card-aside">${status}${updateBtn}${generateBtn}${card.outdated && !card.archived ? savedLink : ""}${ado}</div></div>`;
 }
 
 function homeGroupHtml(group: HomeGroup): string {
@@ -1065,9 +1086,25 @@ function render(opts?: { restoreScroll?: boolean }) {
   );
 
   const walkthrough = guidePresentsWalkthrough(guide);
+  const generateLatest = latestGenerateGuideAction(activeId ?? "", actions);
+  const generateCopy = generateLatest
+    ? inFlightGenerateGuideCopy(generateLatest.status)
+    : undefined;
+  const generateFailed =
+    generateLatest?.status === "failed" ? generateLatest.error?.message : undefined;
+  const generateDisconnected = generateGuideHint(agentConnected);
+  const canGenerate =
+    Boolean(guide.unchaptered) && Boolean(activeId) && agentConnected && !generateCopy;
+  const generateCta = `<button type="button" class="ghost"${canGenerate ? ` data-queue-generate="${esc(activeId ?? "")}"` : " disabled"}>${esc(generateCopy ?? "Generate guide")}</button>`;
+  const generateNotes = [
+    generateDisconnected && !generateCopy
+      ? `<p>${esc(generateDisconnected)}</p>`
+      : "",
+    generateFailed ? `<p>${esc(generateFailed)}</p>` : "",
+  ].join("");
   const guideBody = walkthrough
     ? chapters.map((ch, i) => renderSection(ch, i, chapters.length)).join("")
-    : `<div class="outcome-empty"><h2>Generate guide</h2><p>This review is a Diff. Generate a reading-order guide when you want one.</p><button type="button" class="ghost" disabled>Generate guide</button></div>`;
+    : `<div class="outcome-empty"><h2>Generate guide</h2><p>This review is a Diff. Generate a reading-order guide when you want one.</p>${generateNotes}${generateCta}</div>`;
   const diffBody = rows.map((file, i) => renderFile(file, diffFileId(i))).join("");
   const selection = selectReviewOutcome(guide.base, guide.head, outcomes);
   const exact = selection.status === "exact" ? selection.record.outcome : null;
@@ -1307,6 +1344,12 @@ function bindChrome(app: HTMLElement) {
   app.querySelector("[data-queue-refresh]")?.addEventListener("click", () => {
     void queueHostAction({ kind: "refresh" });
   });
+  app.querySelectorAll("[data-queue-generate]").forEach((el) => {
+    el.addEventListener("click", () => {
+      const id = el.getAttribute("data-queue-generate");
+      if (id) void queueGenerateGuide(id);
+    });
+  });
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -1327,6 +1370,15 @@ async function queueHostAction(
     body: JSON.stringify(payload),
   });
   if (payload.kind !== "refresh") pendingActionId = created.id;
+  await loadActive(true);
+}
+
+async function queueGenerateGuide(reviewId: string): Promise<void> {
+  await fetchJson<{ id: string }>("/api/actions", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ kind: "generate-guide", reviewId }),
+  });
   await loadActive(true);
 }
 

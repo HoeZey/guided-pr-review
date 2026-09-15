@@ -631,6 +631,32 @@ test("waitForAction claims a queued Open and marks the agent connected", async (
   });
 });
 
+test("queueing Generate guide for a chaptered review is rejected", async () => {
+  await withStore(async () => {
+    const saved = await addReview(sample);
+    await assert.rejects(
+      () => queueAction({ kind: "generate-guide", reviewId: saved.id }),
+      /unchaptered/,
+    );
+    const listed = await listReviews();
+    assert.equal(listed.actions.length, 0);
+  });
+});
+
+test("queueing Generate guide for an unchaptered review dedupes in flight", async () => {
+  await withStore(async () => {
+    const saved = await addReview(GuideV1.parse({ ...sample, unchaptered: true }));
+    const first = await queueAction({ kind: "generate-guide", reviewId: saved.id });
+    const second = await queueAction({ kind: "generate-guide", reviewId: saved.id });
+    assert.equal(second.id, first.id);
+    const listed = await listReviews();
+    assert.equal(listed.actions.length, 1);
+    assert.equal(listed.actions[0].kind, "generate-guide");
+    assert.equal(listed.actions[0].status, "queued");
+    assert.equal(listed.actions[0].reviewId, saved.id);
+  });
+});
+
 test("a missing or stale heartbeat is disconnected", () => {
   assert.equal(agentIsConnected(undefined), false);
   assert.equal(agentIsConnected(new Date(Date.now() - 40_000).toISOString()), false);

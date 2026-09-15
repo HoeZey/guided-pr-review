@@ -61,11 +61,18 @@ export function guidePresentsWalkthrough(guide: { unchaptered?: boolean }): bool
 export const AGENT_DISCONNECTED_HINT =
   "The guided-review skill must be running to open or refresh a pull request from the host.";
 
+export const GENERATE_GUIDE_DISCONNECTED_HINT =
+  "The guided-review skill must be running to generate a reading-order guide.";
+
 export const OUTDATED_WARNING =
   "This saved review is outdated. The pull request has new commits.";
 
 export function hostActionHint(agentConnected: boolean): string | undefined {
   return agentConnected ? undefined : AGENT_DISCONNECTED_HINT;
+}
+
+export function generateGuideHint(agentConnected: boolean): string | undefined {
+  return agentConnected ? undefined : GENERATE_GUIDE_DISCONNECTED_HINT;
 }
 
 export function reviewOutdatedWarning(
@@ -86,13 +93,23 @@ export function inFlightOpenCopy(
   return inFlightActionCopy("open", status) as "Waiting" | "Opening" | undefined;
 }
 
+export function inFlightGenerateGuideCopy(
+  status: StoredAction["status"],
+): "Waiting" | "Generating guide" | undefined {
+  return inFlightActionCopy("generate-guide", status) as
+    | "Waiting"
+    | "Generating guide"
+    | undefined;
+}
+
 export function inFlightActionCopy(
   kind: StoredAction["kind"],
   status: StoredAction["status"],
-): "Waiting" | "Opening" | "Refreshing" | undefined {
+): "Waiting" | "Opening" | "Refreshing" | "Generating guide" | undefined {
   if (status === "queued") return "Waiting";
   if (status !== "claimed") return undefined;
   if (kind === "refresh") return "Refreshing";
+  if (kind === "generate-guide") return "Generating guide";
   return "Opening";
 }
 
@@ -106,9 +123,10 @@ export function latestAction(
     .find((action) => {
       if (action.kind !== kind) return false;
       if (!target) return true;
-      return Boolean(
-        action.target && pullRequestSyncKey(action.target) === pullRequestSyncKey(target),
-      );
+      if (action.kind === "open" || action.kind === "update-diff") {
+        return pullRequestSyncKey(action.target) === pullRequestSyncKey(target);
+      }
+      return false;
     });
 }
 
@@ -130,6 +148,23 @@ export function latestOpenAction(
 ): StoredAction | undefined {
   if (!card.openTarget) return undefined;
   return latestAction(actions, "open", card.openTarget);
+}
+
+export function latestGenerateGuideAction(
+  reviewId: string,
+  actions: readonly StoredAction[],
+): StoredAction | undefined {
+  return [...actions]
+    .reverse()
+    .find(
+      (action) => action.kind === "generate-guide" && action.reviewId === reviewId,
+    );
+}
+
+export function offersGenerateGuide(
+  card: Pick<HomeCard, "reviewId" | "hasGuide" | "repository">,
+): boolean {
+  return Boolean(card.reviewId) && !card.hasGuide && Boolean(card.repository);
 }
 
 export function resolveOverviewView(

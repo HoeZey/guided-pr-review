@@ -231,12 +231,17 @@ function isInFlight(action: StoredAction): boolean {
 
 function sameQueuedAction(
   existing: StoredAction,
-  parsed: { kind: StoredAction["kind"]; target?: OpenActionTarget },
+  parsed: { kind: StoredAction["kind"]; target?: OpenActionTarget; reviewId?: string },
 ): boolean {
   if (!isInFlight(existing) || existing.kind !== parsed.kind) return false;
   if (parsed.kind === "refresh") return true;
+  if (parsed.kind === "generate-guide") {
+    return existing.kind === "generate-guide" && existing.reviewId === parsed.reviewId;
+  }
   return Boolean(
-    existing.target && parsed.target && sameOpenTarget(existing.target, parsed.target),
+    (existing.kind === "open" || existing.kind === "update-diff") &&
+      parsed.target &&
+      sameOpenTarget(existing.target, parsed.target),
   );
 }
 
@@ -285,17 +290,45 @@ export async function listReviews(): Promise<ListReviewsOutput> {
 export async function queueAction(input: unknown): Promise<{ id: string }> {
   const parsed = tools.queue_action.input.parse(input);
   const store = await readStore();
+  if (parsed.kind === "generate-guide") {
+    const found = store.reviews.find((review) => review.id === parsed.reviewId);
+    if (!found) {
+      throw Object.assign(new Error(`unknown review ${parsed.reviewId}`), { status: 404 });
+    }
+    if (!found.guide.unchaptered) {
+      throw Object.assign(new Error("Generate guide is only for an unchaptered review"), {
+        status: 400,
+      });
+    }
+  }
   const existing = store.actions.find((action) => sameQueuedAction(action, parsed));
   if (existing) return { id: existing.id };
   const id = crypto.randomUUID();
-  const queued: StoredAction = {
-    id,
-    kind: parsed.kind,
-    status: "queued",
-    queuedAt: new Date().toISOString(),
-  };
-  if (parsed.kind !== "refresh") queued.target = parsed.target;
-  store.actions.push(queued);
+  const queuedAt = new Date().toISOString();
+  if (parsed.kind === "generate-guide") {
+    store.actions.push({
+      id,
+      kind: "generate-guide",
+      status: "queued",
+      queuedAt,
+      reviewId: parsed.reviewId,
+    });
+  } else if (parsed.kind === "refresh") {
+    store.actions.push({
+      id,
+      kind: "refresh",
+      status: "queued",
+      queuedAt,
+    });
+  } else {
+    store.actions.push({
+      id,
+      kind: parsed.kind,
+      status: "queued",
+      queuedAt,
+      target: parsed.target,
+    });
+  }
   await writeStore(store);
   return { id };
 }
@@ -342,11 +375,11 @@ export async function completeAction(input: unknown): Promise<{ ok: true }> {
   }
   if (
     parsed.status === "succeeded" &&
-    (action.kind === "open" || action.kind === "update-diff") &&
+    action.kind !== "refresh" &&
     !parsed.reviewId
   ) {
     throw Object.assign(
-      new Error("reviewId required when Open or Update Diff succeeds"),
+      new Error("reviewId required when Open, Update Diff, or Generate guide succeeds"),
       { status: 400 },
     );
   }

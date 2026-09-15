@@ -3,11 +3,15 @@ import { test } from "node:test";
 import type { CatalogPullRequest, CatalogSnapshot, ReviewSummary } from "./contracts.ts";
 import {
   HOME_PATH,
+  generateGuideHint,
   guidePresentsWalkthrough,
   homeCardAction,
   hostActionHint,
+  inFlightGenerateGuideCopy,
   inFlightOpenCopy,
   inFlightActionCopy,
+  latestGenerateGuideAction,
+  offersGenerateGuide,
   projectHomeCards,
   projectHomeOverview,
   resolveOverviewView,
@@ -516,6 +520,59 @@ test("the Guide tab does not present a placeholder walkthrough for an unchaptere
   assert.equal(reviewLandingTab({}), "guide");
 });
 
+test("Generate guide is offered only for an unchaptered saved review", () => {
+  const unchaptered = projectHomeCards([
+    summary({
+      id: "saved-1101",
+      title: "Needs review",
+      unchaptered: true,
+      pullRequest: {
+        provider: "azure-devops",
+        host: "dev.azure.com",
+        repository: {
+          id: "repo-1",
+          owner: "braidteam/BRAID",
+          name: "braid-connection-designer",
+        },
+        number: 1101,
+        webUrl:
+          "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1101",
+        targetRef: "develop",
+        sourceRef: "feature/review-me",
+      },
+    }),
+  ])[0];
+  const chaptered = projectHomeCards([
+    summary({
+      id: "saved-1101",
+      title: "Needs review",
+      pullRequest: {
+        provider: "azure-devops",
+        host: "dev.azure.com",
+        repository: {
+          id: "repo-1",
+          owner: "braidteam/BRAID",
+          name: "braid-connection-designer",
+        },
+        number: 1101,
+        webUrl:
+          "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1101",
+        targetRef: "develop",
+        sourceRef: "feature/review-me",
+      },
+    }),
+  ])[0];
+  const catalogOnly = projectHomeOverview([], [originSnapshot([catalogItem()])]).groups[0]
+    .cards[0];
+  const local = projectHomeCards([
+    summary({ id: "local-1", title: "Local", unchaptered: true }),
+  ])[0];
+  assert.equal(offersGenerateGuide(unchaptered), true);
+  assert.equal(offersGenerateGuide(chaptered), false);
+  assert.equal(offersGenerateGuide(catalogOnly), false);
+  assert.equal(offersGenerateGuide(local), false);
+});
+
 test("catalog cards without a saved review expose an Open target", () => {
   const overview = projectHomeOverview([], [originSnapshot([catalogItem()])]);
   const card = overview.groups[0].cards[0];
@@ -542,6 +599,44 @@ test("host-backed actions explain that the skill must be running when disconnect
   assert.equal(inFlightActionCopy("refresh", "queued"), "Waiting");
   assert.equal(inFlightActionCopy("refresh", "claimed"), "Refreshing");
   assert.equal(inFlightActionCopy("update-diff", "claimed"), "Opening");
+});
+
+test("Generate guide shows Waiting, Generating guide, and a disconnected hint", () => {
+  assert.equal(inFlightGenerateGuideCopy("queued"), "Waiting");
+  assert.equal(inFlightGenerateGuideCopy("claimed"), "Generating guide");
+  assert.equal(inFlightGenerateGuideCopy("succeeded"), undefined);
+  assert.equal(generateGuideHint(true), undefined);
+  assert.match(generateGuideHint(false) ?? "", /skill must be running/);
+  const latest = latestGenerateGuideAction("rev-1", [
+    {
+      id: "open-1",
+      kind: "open",
+      status: "failed",
+      queuedAt: "2026-09-15T00:00:00.000Z",
+      target: {
+        provider: "azure-devops",
+        host: "dev.azure.com",
+        repository: {
+          id: "repo-1",
+          owner: "braidteam/BRAID",
+          name: "braid-connection-designer",
+          webUrl: "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer",
+        },
+        number: 1101,
+      },
+      error: { code: "open-failed", message: "ignored" },
+    },
+    {
+      id: "gen-1",
+      kind: "generate-guide",
+      status: "failed",
+      queuedAt: "2026-09-15T00:01:00.000Z",
+      reviewId: "rev-1",
+      error: { code: "generate-guide-failed", message: "chaptering timed out" },
+    },
+  ]);
+  assert.equal(latest?.id, "gen-1");
+  assert.equal(latest?.error?.message, "chaptering timed out");
 });
 
 test("current saved reviews remain openable while disconnected", () => {

@@ -310,30 +310,80 @@ export const ActionError = z
   })
   .strict();
 
-export const ActionKind = z.enum(["open", "refresh", "update-diff"]);
+const ActionStatus = z.enum(["queued", "claimed", "succeeded", "failed"]);
 
-export const StoredAction = z
+const storedActionBase = {
+  id: z.string().min(1),
+  status: ActionStatus,
+  queuedAt: z.string().min(1),
+  claimedAt: z.string().min(1).optional(),
+  completedAt: z.string().min(1).optional(),
+  error: ActionError.optional(),
+};
+
+export const StoredOpenAction = z
   .object({
-    id: z.string().min(1),
-    kind: ActionKind,
-    status: z.enum(["queued", "claimed", "succeeded", "failed"]),
-    queuedAt: z.string().min(1),
-    claimedAt: z.string().min(1).optional(),
-    completedAt: z.string().min(1).optional(),
-    target: OpenActionTarget.optional(),
+    ...storedActionBase,
+    kind: z.literal("open"),
+    target: OpenActionTarget,
     reviewId: z.string().min(1).optional(),
-    error: ActionError.optional(),
   })
-  .strict()
-  .superRefine((value, ctx) => {
-    if (value.kind !== "refresh" && !value.target) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "target required unless the action is Refresh",
-        path: ["target"],
-      });
-    }
-  });
+  .strict();
+
+export const StoredUpdateDiffAction = z
+  .object({
+    ...storedActionBase,
+    kind: z.literal("update-diff"),
+    target: OpenActionTarget,
+    reviewId: z.string().min(1).optional(),
+  })
+  .strict();
+
+export const StoredRefreshAction = z
+  .object({
+    ...storedActionBase,
+    kind: z.literal("refresh"),
+    reviewId: z.string().min(1).optional(),
+  })
+  .strict();
+
+export const StoredGenerateGuideAction = z
+  .object({
+    ...storedActionBase,
+    kind: z.literal("generate-guide"),
+    reviewId: z.string().min(1),
+  })
+  .strict();
+
+export const StoredAction = z.discriminatedUnion("kind", [
+  StoredOpenAction,
+  StoredUpdateDiffAction,
+  StoredRefreshAction,
+  StoredGenerateGuideAction,
+]);
+
+export const QueueOpenInput = z
+  .object({
+    kind: z.literal("open"),
+    target: OpenActionTarget,
+  })
+  .strict();
+
+export const QueueUpdateDiffInput = z
+  .object({
+    kind: z.literal("update-diff"),
+    target: OpenActionTarget,
+  })
+  .strict();
+
+export const QueueRefreshInput = z.object({ kind: z.literal("refresh") }).strict();
+
+export const QueueGenerateGuideInput = z
+  .object({
+    kind: z.literal("generate-guide"),
+    reviewId: z.string().min(1),
+  })
+  .strict();
 
 export const StoreV1 = z
   .object({
@@ -350,7 +400,9 @@ export const StoreV1 = z
 export type StoreV1 = z.infer<typeof StoreV1>;
 export type ReviewRecord = z.infer<typeof ReviewRecord>;
 export type StoredAction = z.infer<typeof StoredAction>;
-export type ActionKind = z.infer<typeof ActionKind>;
+export type StoredOpenAction = z.infer<typeof StoredOpenAction>;
+export type StoredGenerateGuideAction = z.infer<typeof StoredGenerateGuideAction>;
+export type ActionKind = StoredAction["kind"];
 export type OpenActionTarget = z.infer<typeof OpenActionTarget>;
 export type ActionError = z.infer<typeof ActionError>;
 
@@ -404,19 +456,10 @@ export const tools = {
   },
   queue_action: {
     input: z.discriminatedUnion("kind", [
-      z
-        .object({
-          kind: z.literal("open"),
-          target: OpenActionTarget,
-        })
-        .strict(),
-      z
-        .object({
-          kind: z.literal("update-diff"),
-          target: OpenActionTarget,
-        })
-        .strict(),
-      z.object({ kind: z.literal("refresh") }).strict(),
+      QueueOpenInput,
+      QueueUpdateDiffInput,
+      QueueRefreshInput,
+      QueueGenerateGuideInput,
     ]),
     output: z.object({ id: z.string() }).strict(),
   },

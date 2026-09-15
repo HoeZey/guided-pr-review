@@ -4,7 +4,8 @@ import {
   type OpenActionTarget,
   type PullRequestSource,
 } from "./contracts.ts";
-import { completeAction, listReviews, upsertReview } from "./store.ts";
+import { filesForDiff } from "./guide-view.ts";
+import { completeAction, getReview, listReviews, upsertReview } from "./store.ts";
 
 export type GitHostAdapter = {
   fetchOpen: (target: OpenActionTarget) => Promise<{
@@ -59,7 +60,7 @@ async function completeHostDiffAction(
 ): Promise<{ reviewId: string }> {
   const listed = await listReviews();
   const action = listed.actions.find((row) => row.id === id);
-  if (!action || action.kind !== kind || !action.target) {
+  if (!action || action.kind !== kind) {
     throw Object.assign(new Error(`unknown action ${id}`), { status: 404 });
   }
   const failCode = kind === "open" ? "open-failed" : "update-failed";
@@ -93,4 +94,44 @@ export async function completeUpdateDiffAction(
   _chaptering?: ChapteringAdapter,
 ): Promise<{ reviewId: string }> {
   return completeHostDiffAction(id, "update-diff", host);
+}
+
+export async function completeGenerateGuideAction(
+  id: string,
+  chaptering: ChapteringAdapter,
+): Promise<{ reviewId: string }> {
+  const listed = await listReviews();
+  const action = listed.actions.find((row) => row.id === id);
+  if (!action || action.kind !== "generate-guide") {
+    throw Object.assign(new Error(`unknown action ${id}`), { status: 404 });
+  }
+  try {
+    const { guide } = await getReview(action.reviewId);
+    if (!guide.unchaptered) {
+      throw new Error("Generate guide is only for an unchaptered review");
+    }
+    if (!guide.source) {
+      throw new Error("review has no pull-request source");
+    }
+    const chaptered = await chaptering.chapter({
+      title: guide.title,
+      files: filesForDiff(guide),
+      source: guide.source,
+    });
+    const { id: reviewId } = await upsertReview({
+      ...chaptered,
+      source: guide.source,
+      unchaptered: undefined,
+    });
+    await completeAction({ id, status: "succeeded", reviewId });
+    return { reviewId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await completeAction({
+      id,
+      status: "failed",
+      error: { code: "generate-guide-failed", message },
+    }).catch(() => undefined);
+    throw err;
+  }
 }

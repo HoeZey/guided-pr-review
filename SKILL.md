@@ -26,8 +26,8 @@ Skill root is the directory that contains this SKILL.md (this git repo).
 - Explicit SHA, branch, or git range → **Local range** (add_review).
 - Neither → **Home**. Sync current-origin PR metadata, then open
   http://localhost:8765/. Do not chapter a guide. Then wait for Open,
-  Update Diff, and Refresh actions. Do not call add_review until an Open
-  or Update Diff action is claimed.
+  Update Diff, Refresh, and Generate guide actions. Do not call add_review
+  until an Open or Update Diff action is claimed.
 
 Do not switch the user's working tree on either review path. Do not git checkout,
 git switch, git reset, or git worktree add unless the user asked.
@@ -96,11 +96,13 @@ is generated until the reviewer selects a named PR, SHA, branch, or range.
    - If action.kind is open: handle **Open as Diff** below, then loop.
    - If action.kind is update-diff: handle **Update Diff** below, then loop.
    - If action.kind is refresh: handle **Refresh** below, then loop.
+   - If action.kind is generate-guide: handle **Generate guide** below, then
+     loop.
    - Any other kind: tools/call complete_action with status failed and
      error { "code": "unsupported-action", "message": "this session handles
-     Open, Update Diff, and Refresh" }. Then loop.
+     Open, Update Diff, Refresh, and Generate guide" }. Then loop.
 
-   Do not Generate guide or Add repository from this loop.
+   Do not Add repository from this loop.
 
 ## Open as Diff
 
@@ -166,6 +168,34 @@ upsert. Do not delete saved reviews. Do not chapter.
 
 There is no timer. Refresh runs at bare skill startup (Home steps 1–8) and
 when the reviewer queues this action.
+
+## Generate guide
+
+Claimed Generate guide means the reviewer asked for reading order on an
+already-open unchaptered review. Chapter in place. Keep the same review id.
+Do not checkout.
+
+1. **Load the saved review.** tools/call get_review with action.reviewId.
+   If the guide is not unchaptered, complete_action failed, error
+   { "code": "generate-guide-failed", "message": "review already has a guide" },
+   then return to the wait loop. Do not upsert.
+2. **Chapter without checkout.** Use the stored base and head and the files
+   already on the guide. Assign hunks with Local range steps 3–4. Do not
+   fetch again unless the stored files are empty. Empty files: complete_action
+   failed, error { "code": "empty-diff", "message": "no changes to chapter" },
+   then return to the wait loop. Do not upsert.
+3. **Build a chaptered Guide v1.** Keep title, base, head, range, repo, and
+   source from the saved review. Omit unchaptered. Real chapter ids, not
+   unchaptered. Do not drop paths that were on the Diff.
+4. **Push via upsert_review**, then complete_action status succeeded with
+   the same reviewId. HTTP: PUT http://localhost:8765/api/reviews then
+   POST http://localhost:8765/api/actions/{id}/complete. On any chaptering
+   failure: complete_action status failed with
+   { "code": "generate-guide-failed", "message": "<short reason>" }. Leave
+   the unchaptered Diff in place. Then return to the wait loop.
+
+The app fills the Guide tab. Diff still lists each path. Do not open a
+review URL from the skill.
 
 ## Named ADO PR
 
@@ -365,9 +395,9 @@ when the reviewer queues this action.
 - Do not post ADO comments from this skill (a later story).
 - Do not chapter or upsert from a bare Home trigger. Catalog sync is
   replace_catalog only.
-- Do not add a second repository or Generate guide from this path (later
-  overview stories). After Home catalog sync, wait for Open, Update Diff, and
-  Refresh.
+- Do not add a second repository from this path (later overview stories).
+  After Home catalog sync, wait for Open, Update Diff, Refresh, and
+  Generate guide.
 
 ## MCP tools
 
@@ -378,14 +408,16 @@ when the reviewer queues this action.
 - replace_catalog { origin, repository, syncedAt?, error?, pullRequests } →
   { ok: true } — catalog snapshot for one repository. Never deletes saved
   reviews. Adopts matching unsourced local-range reviews onto catalog PRs.
-- queue_action { kind: "open" | "update-diff" | "refresh", target? } → { id }
-  — target required for Open and Update Diff. Dedupes an in-flight action of
-  the same kind and target.
+- queue_action { kind: "open" | "update-diff" | "refresh" |
+  "generate-guide", target?, reviewId? } → { id } — target required for Open
+  and Update Diff. reviewId required for Generate guide. Dedupes an in-flight
+  action of the same kind and target, or an in-flight Generate guide for the
+  same review.
 - wait_for_action { timeoutMs? } → { action } — claims the next queued
   action and heartbeats the agent. Null when idle.
 - complete_action { id, status, reviewId?, error? } → { ok: true } —
-  reviewId required when Open or Update Diff succeeds. Refresh success does
-  not send reviewId.
+  reviewId required when Open, Update Diff, or Generate guide succeeds.
+  Refresh success does not send reviewId.
 - add_review { guide } → { id } — new snapshot (local ranges).
 - upsert_review { guide } → { id } — stable id for a named ADO PR.
 - publish_review_outcome { reviewId, outcome } → { id }
@@ -397,4 +429,5 @@ Bare http://localhost:8765/ is Home after catalog sync. The waiting agent
 then long-polls wait_for_action. An explicit add or upsert opens
 http://localhost:8765/reviews/{id}. Open and Update Diff upsert an unchaptered
 review and the app lands on Diff. Refresh replaces catalog snapshots and
-updates Last synced.
+updates Last synced. Generate guide chapters that review in place; Guide
+becomes the walkthrough.

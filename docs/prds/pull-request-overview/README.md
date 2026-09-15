@@ -243,3 +243,34 @@ check covers Open landing on Diff, then Generate guide filling the Guide tab.
 - Azure DevOps: Create a pull request (source left / target right on the
   create form — not used for Home range order)
 - Wayfinder: skipped because the decisions fit one session
+
+## integration-review
+
+Reviewed 15 Sep 2026. This reviews the 04/07 overlap commit
+59176cb386c6c3959726f8aa86d90c790044e951 on top of squashed 03+04.
+
+Base 5823a1fe5bfb4da814add6111613bb56496f8df0
+Head 59176cb386c6c3959726f8aa86d90c790044e951
+
+Standards: 0 major / 0 minor / 0 nit
+
+Spec: 0 missing / 0 partial / 0 scope-creep / 0 incorrect
+
+### Standards
+
+ZERO
+
+### Spec
+
+ZERO
+
+03 Open as Diff holds: unopened catalog cards still queue one Open; Open
+upserts an unchaptered review and does not run a chaptering adapter.
+
+04 Refresh holds: leftover Other saved PRs whose syncKey matches catalog
+still go through catalogCard / sourceCommitMoved, so Outdated still offers
+Update Diff plus Open saved.
+
+07 Generate guide holds: generate-guide still queues only for an unchaptered
+saved review; completeGenerateGuideAction plus ChapteringAdapter still
+chapter in place on the same id.
