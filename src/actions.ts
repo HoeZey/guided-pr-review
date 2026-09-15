@@ -52,16 +52,17 @@ function unchapteredGuide(fetched: {
   });
 }
 
-export async function completeOpenAction(
+async function completeHostDiffAction(
   id: string,
+  kind: "open" | "update-diff",
   host: GitHostAdapter,
-  _chaptering?: ChapteringAdapter,
 ): Promise<{ reviewId: string }> {
   const listed = await listReviews();
   const action = listed.actions.find((row) => row.id === id);
-  if (!action || action.kind !== "open") {
+  if (!action || action.kind !== kind || !action.target) {
     throw Object.assign(new Error(`unknown action ${id}`), { status: 404 });
   }
+  const failCode = kind === "open" ? "open-failed" : "update-failed";
   try {
     const fetched = await host.fetchOpen(action.target);
     const { id: reviewId } = await upsertReview(unchapteredGuide(fetched));
@@ -72,8 +73,24 @@ export async function completeOpenAction(
     await completeAction({
       id,
       status: "failed",
-      error: { code: "open-failed", message },
+      error: { code: failCode, message },
     }).catch(() => undefined);
     throw err;
   }
+}
+
+export async function completeOpenAction(
+  id: string,
+  host: GitHostAdapter,
+  _chaptering?: ChapteringAdapter,
+): Promise<{ reviewId: string }> {
+  return completeHostDiffAction(id, "open", host);
+}
+
+export async function completeUpdateDiffAction(
+  id: string,
+  host: GitHostAdapter,
+  _chaptering?: ChapteringAdapter,
+): Promise<{ reviewId: string }> {
+  return completeHostDiffAction(id, "update-diff", host);
 }

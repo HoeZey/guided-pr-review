@@ -310,19 +310,30 @@ export const ActionError = z
   })
   .strict();
 
+export const ActionKind = z.enum(["open", "refresh", "update-diff"]);
+
 export const StoredAction = z
   .object({
     id: z.string().min(1),
-    kind: z.literal("open"),
+    kind: ActionKind,
     status: z.enum(["queued", "claimed", "succeeded", "failed"]),
     queuedAt: z.string().min(1),
     claimedAt: z.string().min(1).optional(),
     completedAt: z.string().min(1).optional(),
-    target: OpenActionTarget,
+    target: OpenActionTarget.optional(),
     reviewId: z.string().min(1).optional(),
     error: ActionError.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.kind !== "refresh" && !value.target) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "target required unless the action is Refresh",
+        path: ["target"],
+      });
+    }
+  });
 
 export const StoreV1 = z
   .object({
@@ -339,6 +350,7 @@ export const StoreV1 = z
 export type StoreV1 = z.infer<typeof StoreV1>;
 export type ReviewRecord = z.infer<typeof ReviewRecord>;
 export type StoredAction = z.infer<typeof StoredAction>;
+export type ActionKind = z.infer<typeof ActionKind>;
 export type OpenActionTarget = z.infer<typeof OpenActionTarget>;
 export type ActionError = z.infer<typeof ActionError>;
 
@@ -391,12 +403,21 @@ export const tools = {
       .strict(),
   },
   queue_action: {
-    input: z
-      .object({
-        kind: z.literal("open"),
-        target: OpenActionTarget,
-      })
-      .strict(),
+    input: z.discriminatedUnion("kind", [
+      z
+        .object({
+          kind: z.literal("open"),
+          target: OpenActionTarget,
+        })
+        .strict(),
+      z
+        .object({
+          kind: z.literal("update-diff"),
+          target: OpenActionTarget,
+        })
+        .strict(),
+      z.object({ kind: z.literal("refresh") }).strict(),
+    ]),
     output: z.object({ id: z.string() }).strict(),
   },
   wait_for_action: {
@@ -417,13 +438,6 @@ export const tools = {
       })
       .strict()
       .superRefine((value, ctx) => {
-        if (value.status === "succeeded" && !value.reviewId) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: "reviewId required when Open succeeds",
-            path: ["reviewId"],
-          });
-        }
         if (value.status === "failed" && !value.error) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,

@@ -7,10 +7,12 @@ import {
   homeCardAction,
   hostActionHint,
   inFlightOpenCopy,
+  inFlightActionCopy,
   projectHomeCards,
   projectHomeOverview,
   resolveOverviewView,
   reviewLandingTab,
+  reviewOutdatedWarning,
   reviewPath,
 } from "./overview.ts";
 
@@ -537,6 +539,9 @@ test("host-backed actions explain that the skill must be running when disconnect
   assert.match(hostActionHint(false) ?? "", /skill must be running/);
   assert.equal(inFlightOpenCopy("queued"), "Waiting");
   assert.equal(inFlightOpenCopy("claimed"), "Opening");
+  assert.equal(inFlightActionCopy("refresh", "queued"), "Waiting");
+  assert.equal(inFlightActionCopy("refresh", "claimed"), "Refreshing");
+  assert.equal(inFlightActionCopy("update-diff", "claimed"), "Opening");
 });
 
 test("current saved reviews remain openable while disconnected", () => {
@@ -549,4 +554,312 @@ test("current saved reviews remain openable while disconnected", () => {
     .cards[0];
   assert.equal(homeCardAction(catalog, false), "disabled-host");
   assert.equal(homeCardAction(catalog, true), "queue-open");
+});
+
+const SHA_C = "cccccccccccccccccccccccccccccccccccccccc";
+
+test("a changed source commit shows Outdated with Update Diff plus Open saved", () => {
+  const item = catalogItem({ sourceCommit: SHA_C });
+  const overview = projectHomeOverview(
+    [
+      summary({
+        id: "saved-1101",
+        title: "Needs review",
+        syncKey: "azure-devops:dev.azure.com:repo-1:1101",
+        sourceCommit: SHA_A,
+        pullRequest: {
+          provider: "azure-devops",
+          host: "dev.azure.com",
+          repository: {
+            id: "repo-1",
+            owner: "braidteam/BRAID",
+            name: "braid-connection-designer",
+          },
+          number: 1101,
+          webUrl:
+            "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1101",
+          targetRef: "develop",
+          sourceRef: "feature/review-me",
+        },
+      }),
+    ],
+    [originSnapshot([item])],
+  );
+  const card = overview.groups[0].cards[0];
+  assert.equal(card.outdated, true);
+  assert.equal(card.archived, false);
+  assert.equal(card.reviewId, "saved-1101");
+  assert.equal(homeCardAction(card, true), "queue-update-diff");
+  assert.equal(homeCardAction(card, false), "open-saved");
+});
+
+test("Open saved keeps the old review and a persistent Outdated warning", () => {
+  const saved = summary({
+    id: "saved-1101",
+    title: "Needs review",
+    head: SHA_A,
+    syncKey: "azure-devops:dev.azure.com:repo-1:1101",
+    sourceCommit: SHA_A,
+    pullRequest: {
+      provider: "azure-devops",
+      host: "dev.azure.com",
+      repository: {
+        id: "repo-1",
+        owner: "braidteam/BRAID",
+        name: "braid-connection-designer",
+      },
+      number: 1101,
+      webUrl:
+        "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1101",
+      targetRef: "develop",
+      sourceRef: "feature/review-me",
+    },
+  });
+  const catalog = [originSnapshot([catalogItem({ sourceCommit: SHA_C })])];
+  const overview = projectHomeOverview([saved], catalog);
+  assert.equal(overview.groups[0].cards[0].reviewId, "saved-1101");
+  assert.equal(overview.groups[0].cards[0].outdated, true);
+  const warning = reviewOutdatedWarning(saved, catalog);
+  assert.match(warning ?? "", /outdated/i);
+  assert.equal(reviewOutdatedWarning(saved, [originSnapshot([catalogItem()])]), undefined);
+});
+
+function hostedSummary(
+  id: string,
+  number: number,
+  title: string,
+  extra: Partial<ReviewSummary> = {},
+): ReviewSummary {
+  return summary({
+    id,
+    title,
+    syncKey: `azure-devops:dev.azure.com:repo-1:${number}`,
+    sourceCommit: SHA_A,
+    pullRequest: {
+      provider: "azure-devops",
+      host: "dev.azure.com",
+      repository: {
+        id: "repo-1",
+        owner: "braidteam/BRAID",
+        name: "braid-connection-designer",
+      },
+      number,
+      webUrl: `https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/${number}`,
+      targetRef: "develop",
+      sourceRef: "feature/review-me",
+    },
+    ...extra,
+  });
+}
+
+test("a leftover hosted Other saved PR is Outdated with Update Diff when the catalog commit moved", () => {
+  const saved = hostedSummary("saved-other", 1301, "Someone else's PR");
+  const overview = projectHomeOverview(
+    [saved],
+    [
+      originSnapshot([
+        catalogItem({
+          number: 1301,
+          title: "Someone else's PR",
+          webUrl:
+            "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1301",
+          sourceCommit: SHA_C,
+          isReviewer: false,
+          isAuthor: false,
+        }),
+      ]),
+    ],
+  );
+  assert.deepEqual(
+    overview.groups.map((group) => group.id),
+    ["other-saved-prs"],
+  );
+  const card = overview.groups[0].cards[0];
+  assert.equal(card.reviewId, "saved-other");
+  assert.equal(card.outdated, true);
+  assert.equal(card.archived, false);
+  assert.equal(card.openTarget?.number, 1301);
+  assert.equal(homeCardAction(card, true), "queue-update-diff");
+  assert.equal(homeCardAction(card, false), "open-saved");
+});
+
+test("a saved merged or abandoned PR moves to collapsed Archived and stays openable", () => {
+  const merged = hostedSummary("saved-merged", 1201, "Merged work");
+  const abandoned = hostedSummary("saved-abandoned", 1202, "Abandoned work");
+  const overview = projectHomeOverview(
+    [merged, abandoned],
+    [
+      originSnapshot([
+        catalogItem({
+          number: 1201,
+          title: "Merged work",
+          webUrl:
+            "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1201",
+          status: "completed",
+          isReviewer: true,
+        }),
+        catalogItem({
+          number: 1202,
+          title: "Abandoned work",
+          webUrl:
+            "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1202",
+          status: "abandoned",
+          isReviewer: false,
+          isAuthor: true,
+        }),
+      ]),
+    ],
+  );
+  assert.deepEqual(
+    overview.groups.map((group) => ({
+      id: group.id,
+      title: group.title,
+      collapsed: group.collapsed,
+      titles: group.cards.map((card) => card.title),
+    })),
+    [
+      {
+        id: "archived",
+        title: "Archived",
+        collapsed: true,
+        titles: ["Merged work", "Abandoned work"],
+      },
+    ],
+  );
+  const [mergedCard, abandonedCard] = overview.groups[0].cards;
+  assert.equal(mergedCard.archived, true);
+  assert.equal(mergedCard.outdated, false);
+  assert.equal(homeCardAction(mergedCard, true), "open-saved");
+  assert.equal(abandonedCard.archived, true);
+  assert.equal(homeCardAction(abandonedCard, true), "open-saved");
+});
+
+test("a closed unguided catalog item disappears after refresh", () => {
+  const overview = projectHomeOverview(
+    [],
+    [
+      originSnapshot([
+        catalogItem({
+          number: 1201,
+          title: "Merged with no guide",
+          webUrl:
+            "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1201",
+          status: "completed",
+          isReviewer: true,
+        }),
+        catalogItem({
+          number: 1103,
+          title: "Still open",
+          webUrl:
+            "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1103",
+          isReviewer: true,
+          isAuthor: false,
+        }),
+      ]),
+    ],
+  );
+  assert.deepEqual(
+    overview.groups.map((group) => ({
+      id: group.id,
+      titles: group.cards.map((card) => card.title),
+    })),
+    [{ id: "review-requests", titles: ["Still open"] }],
+  );
+});
+
+test("projection covers current, outdated, archived, and removed-unguided catalog cases", () => {
+  const current = hostedSummary("saved-current", 1101, "Current work");
+  const outdated = hostedSummary("saved-outdated", 1102, "Outdated work", {
+    sourceCommit: SHA_A,
+  });
+  const archived = hostedSummary("saved-archived", 1103, "Archived work");
+  const overview = projectHomeOverview(
+    [current, outdated, archived],
+    [
+      originSnapshot([
+        catalogItem({
+          number: 1101,
+          title: "Current work",
+          sourceCommit: SHA_A,
+          isReviewer: true,
+          isAuthor: false,
+        }),
+        catalogItem({
+          number: 1102,
+          title: "Outdated work",
+          webUrl:
+            "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1102",
+          sourceCommit: SHA_C,
+          isReviewer: false,
+          isAuthor: true,
+        }),
+        catalogItem({
+          number: 1103,
+          title: "Archived work",
+          webUrl:
+            "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1103",
+          status: "completed",
+          isReviewer: true,
+        }),
+        catalogItem({
+          number: 1104,
+          title: "Closed unguided",
+          webUrl:
+            "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1104",
+          status: "abandoned",
+          isAuthor: true,
+        }),
+      ]),
+    ],
+  );
+  assert.deepEqual(
+    overview.groups.map((group) => ({
+      id: group.id,
+      collapsed: group.collapsed ?? false,
+      cards: group.cards.map((card) => ({
+        title: card.title,
+        outdated: card.outdated,
+        archived: card.archived,
+        action: homeCardAction(card, true),
+      })),
+    })),
+    [
+      {
+        id: "review-requests",
+        collapsed: false,
+        cards: [
+          {
+            title: "Current work",
+            outdated: false,
+            archived: false,
+            action: "open-saved",
+          },
+        ],
+      },
+      {
+        id: "authored-by-me",
+        collapsed: false,
+        cards: [
+          {
+            title: "Outdated work",
+            outdated: true,
+            archived: false,
+            action: "queue-update-diff",
+          },
+        ],
+      },
+      {
+        id: "archived",
+        collapsed: true,
+        cards: [
+          {
+            title: "Archived work",
+            outdated: false,
+            archived: true,
+            action: "open-saved",
+          },
+        ],
+      },
+    ],
+  );
 });

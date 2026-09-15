@@ -39,7 +39,7 @@ const TOOL_DEFS = [
   {
     name: "queue_action",
     description:
-      "Queue an Open action for a catalog pull request that has no saved review. Dedupes an in-flight Open for the same target.",
+      "Queue an Open, Update Diff, or Refresh action. Dedupes an in-flight action of the same kind and target.",
     inputSchema: schema(tools.queue_action.input),
   },
   {
@@ -51,7 +51,7 @@ const TOOL_DEFS = [
   {
     name: "complete_action",
     description:
-      "Mark a claimed action succeeded or failed. Succeeded Open requires reviewId. Failed requires a structured error.",
+      "Mark a claimed action succeeded or failed. Succeeded Open and Update Diff require reviewId. Refresh success does not. Failed requires a structured error.",
     inputSchema: schema(tools.complete_action.input),
   },
   {

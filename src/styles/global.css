@@ -227,6 +227,69 @@ body {
   color: var(--removed-text);
 }
 
+.home-card-status.is-outdated {
+  color: var(--removed-text);
+}
+
+.home-card-update,
+.home-card-secondary {
+  flex-shrink: 0;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.home-card-secondary {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.home-card-secondary:hover {
+  text-decoration: underline;
+}
+
+.home-group.is-archived {
+  border: 0;
+  padding: 0;
+}
+
+.home-group.is-archived > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.home-group.is-archived > summary::-webkit-details-marker {
+  display: none;
+}
+
+.home-group.is-archived > summary::before {
+  content: "▸";
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.home-group.is-archived[open] > summary::before {
+  content: "▾";
+}
+
+.home-group.is-archived > summary h2 {
+  margin: 0;
+}
+
+.home-group.is-archived .home-grid {
+  margin-top: 10px;
+}
+
+.review-banner {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--removed-bg);
+  color: var(--removed-text);
+  font-size: 12px;
+}
+
 button.home-card-open {
   appearance: none;
   background: none;

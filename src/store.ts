@@ -6,13 +6,14 @@ import {
   emptyStore,
   GuideV1,
   pullRequestSyncKey,
+  PullRequestSource,
   StoreV1,
   tools,
+  type CatalogPullRequest,
   type CatalogSnapshot,
   type ConfiguredRepository,
   type ListReviewsOutput,
   type OpenActionTarget,
-  type PullRequestSource,
   type ReviewRecord,
   type StoredAction,
   type StoredOutcome,
@@ -108,6 +109,69 @@ function findLocalReviewToAdopt(
   return undefined;
 }
 
+const SHA_RE = /^[0-9a-f]{40}$/i;
+
+function projectFromOwner(owner: string): string {
+  const idx = owner.indexOf("/");
+  return idx === -1 ? owner : owner.slice(idx + 1);
+}
+
+function catalogAsSource(
+  item: CatalogPullRequest,
+  sourceCommit: string,
+  targetCommit: string,
+): PullRequestSource {
+  return PullRequestSource.parse({
+    kind: "pull-request",
+    provider: item.provider,
+    host: item.host,
+    repository: item.repository,
+    number: item.number,
+    webUrl: item.webUrl,
+    sourceRef: item.sourceRef,
+    targetRef: item.targetRef,
+    sourceCommit,
+    targetCommit,
+    providerContext: {
+      kind: "azure-devops",
+      project: projectFromOwner(item.repository.owner),
+      // ponytail: catalog has no iteration payload; Update Diff fills changes
+      firstComparingIteration: 0,
+      secondComparingIteration: 0,
+      changes: {},
+    },
+  });
+}
+
+function adoptLocalsFromCatalog(
+  reviews: ReviewRecord[],
+  pullRequests: CatalogPullRequest[],
+): void {
+  for (const item of pullRequests) {
+    const key = pullRequestSyncKey(item);
+    if (
+      reviews.some(
+        (review) => review.guide.source && pullRequestSyncKey(review.guide.source) === key,
+      )
+    ) {
+      continue;
+    }
+    const match = findLocalReviewToAdopt(
+      reviews,
+      catalogAsSource(item, item.sourceCommit, item.targetCommit),
+    );
+    if (!match) continue;
+    match.guide = GuideV1.parse({
+      ...match.guide,
+      source: catalogAsSource(
+        item,
+        SHA_RE.test(match.guide.head) ? match.guide.head : item.sourceCommit,
+        SHA_RE.test(match.guide.base) ? match.guide.base : item.targetCommit,
+      ),
+    });
+  }
+}
+
 function unwrapGuide(body: unknown): GuideV1 {
   return GuideV1.parse(
     body && typeof body === "object" && "guide" in body
@@ -165,6 +229,17 @@ function isInFlight(action: StoredAction): boolean {
   return action.status === "queued" || action.status === "claimed";
 }
 
+function sameQueuedAction(
+  existing: StoredAction,
+  parsed: { kind: StoredAction["kind"]; target?: OpenActionTarget },
+): boolean {
+  if (!isInFlight(existing) || existing.kind !== parsed.kind) return false;
+  if (parsed.kind === "refresh") return true;
+  return Boolean(
+    existing.target && parsed.target && sameOpenTarget(existing.target, parsed.target),
+  );
+}
+
 async function appendActive(guide: GuideV1): Promise<{ id: string }> {
   const store = await readStore();
   const id = crypto.randomUUID();
@@ -210,21 +285,17 @@ export async function listReviews(): Promise<ListReviewsOutput> {
 export async function queueAction(input: unknown): Promise<{ id: string }> {
   const parsed = tools.queue_action.input.parse(input);
   const store = await readStore();
-  const existing = store.actions.find(
-    (action) =>
-      action.kind === parsed.kind &&
-      isInFlight(action) &&
-      sameOpenTarget(action.target, parsed.target),
-  );
+  const existing = store.actions.find((action) => sameQueuedAction(action, parsed));
   if (existing) return { id: existing.id };
   const id = crypto.randomUUID();
-  store.actions.push({
+  const queued: StoredAction = {
     id,
     kind: parsed.kind,
     status: "queued",
     queuedAt: new Date().toISOString(),
-    target: parsed.target,
-  });
+  };
+  if (parsed.kind !== "refresh") queued.target = parsed.target;
+  store.actions.push(queued);
   await writeStore(store);
   return { id };
 }
@@ -269,9 +340,19 @@ export async function completeAction(input: unknown): Promise<{ ok: true }> {
   if (!isInFlight(action)) {
     throw Object.assign(new Error(`action ${parsed.id} is not in flight`), { status: 409 });
   }
+  if (
+    parsed.status === "succeeded" &&
+    (action.kind === "open" || action.kind === "update-diff") &&
+    !parsed.reviewId
+  ) {
+    throw Object.assign(
+      new Error("reviewId required when Open or Update Diff succeeds"),
+      { status: 400 },
+    );
+  }
   action.status = parsed.status;
   action.completedAt = new Date().toISOString();
-  if (parsed.status === "succeeded") action.reviewId = parsed.reviewId;
+  if (parsed.status === "succeeded" && parsed.reviewId) action.reviewId = parsed.reviewId;
   if (parsed.status === "failed") action.error = parsed.error;
   await writeStore(store);
   return { ok: true };
@@ -315,6 +396,7 @@ export async function replaceCatalog(input: unknown): Promise<{ ok: true }> {
   }
   store.catalog = store.catalog.filter((entry) => snapshotKey(entry) !== key);
   store.catalog.push(snapshot);
+  if (!parsed.error) adoptLocalsFromCatalog(store.reviews, snapshot.pullRequests);
   await writeStore(store);
   return { ok: true };
 }

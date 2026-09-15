@@ -25,8 +25,9 @@ Skill root is the directory that contains this SKILL.md (this git repo).
 - Named Azure DevOps PR URL or numeric id → **Named ADO PR** (upsert_review).
 - Explicit SHA, branch, or git range → **Local range** (add_review).
 - Neither → **Home**. Sync current-origin PR metadata, then open
-  http://localhost:8765/. Do not chapter a guide. Then wait for Open
-  actions. Do not call add_review until an Open action is claimed.
+  http://localhost:8765/. Do not chapter a guide. Then wait for Open,
+  Update Diff, and Refresh actions. Do not call add_review until an Open
+  or Update Diff action is claimed.
 
 Do not switch the user's working tree on either review path. Do not git checkout,
 git switch, git reset, or git worktree add unless the user asked.
@@ -86,18 +87,20 @@ is generated until the reviewer selects a named PR, SHA, branch, or range.
 8. **Open Home.** http://localhost:8765/. Do not call add_review. Do not
    chapter. Do not open a review URL.
 
-9. **Wait for Open.** Keep the instance running. Loop until the user stops
+9. **Wait for actions.** Keep the instance running. Loop until the user stops
    the skill:
 
    - tools/call name wait_for_action with timeoutMs 25000 (HTTP: POST
      http://localhost:8765/api/actions/wait). That heartbeats the agent.
      Idle returns { "action": null }; loop immediately.
    - If action.kind is open: handle **Open as Diff** below, then loop.
+   - If action.kind is update-diff: handle **Update Diff** below, then loop.
+   - If action.kind is refresh: handle **Refresh** below, then loop.
    - Any other kind: tools/call complete_action with status failed and
-     error { "code": "unsupported-action", "message": "this session only
-     handles Open" }. Then loop.
+     error { "code": "unsupported-action", "message": "this session handles
+     Open, Update Diff, and Refresh" }. Then loop.
 
-   Do not Generate guide, Refresh, or Add repository from this loop.
+   Do not Generate guide or Add repository from this loop.
 
 ## Open as Diff
 
@@ -125,6 +128,44 @@ Fetch exact commits without checkout. Do not chapter.
 
 The app opens Diff. Do not open a review URL from the skill; the viewer
 navigates when the action succeeds.
+
+## Update Diff
+
+Claimed Update Diff means the reviewer wants a fresh snapshot of a saved PR
+whose catalog source commit moved. Same fetch as Open as Diff. Do not chapter.
+
+1. Follow Open as Diff steps 1–4 (authenticate, fetch exact commits without
+   checkout, build an unchaptered Guide v1, upsert_review, complete_action
+   succeeded with reviewId). Empty diff: complete_action failed, error
+   { "code": "empty-diff", "message": "no changes to open" }, then return to
+   the wait loop. Host or git failure: complete_action failed with
+   { "code": "update-failed", "message": "<short reason>" }. Then loop.
+2. upsert_review keeps the same id and replaces the stored snapshot. Do not
+   require chaptering. Then return to the wait loop.
+
+The app opens Diff. Do not open a review URL from the skill.
+
+## Refresh
+
+Claimed Refresh means the reviewer asked to replace catalog snapshots. Do not
+upsert. Do not delete saved reviews. Do not chapter.
+
+1. Repeat Home steps 2–7 (origin, authenticate, resolve repository, list
+   relationship metadata, fill refs and commits, replace_catalog).
+2. Also include saved pull requests that are no longer Active. tools/call
+   list_reviews. For each listed review with pullRequest whose number is
+   missing from the snapshot, repo_pull_request action get (includeChangedFiles
+   false) and append that PR with its host status (active, completed, or
+   abandoned). Skip a get that fails rather than dropping the rest.
+3. Push the combined snapshot with replace_catalog as in Home step 7. The store
+   adopts matching unsourced local-range reviews (exact source branch, else
+   unique ticket key). Do not call upsert_review for Refresh.
+4. complete_action status succeeded. Do not send reviewId. On host failure:
+   complete_action failed with { "code": "refresh-failed", "message": "<short
+   reason>" }. Then return to the wait loop.
+
+There is no timer. Refresh runs at bare skill startup (Home steps 1–8) and
+when the reviewer queues this action.
 
 ## Named ADO PR
 
@@ -324,9 +365,9 @@ navigates when the action succeeds.
 - Do not post ADO comments from this skill (a later story).
 - Do not chapter or upsert from a bare Home trigger. Catalog sync is
   replace_catalog only.
-- Do not add a second repository, Refresh, or Generate guide from this
-  path (later overview stories). After Home catalog sync, wait for Open
-  only.
+- Do not add a second repository or Generate guide from this path (later
+  overview stories). After Home catalog sync, wait for Open, Update Diff, and
+  Refresh.
 
 ## MCP tools
 
@@ -335,12 +376,16 @@ navigates when the action succeeds.
   syncKey, sourceCommit, unchaptered, and pullRequest (provider, host,
   repository, number, webUrl).
 - replace_catalog { origin, repository, syncedAt?, error?, pullRequests } →
-  { ok: true } — current-origin catalog snapshot. Never deletes saved reviews.
-- queue_action { kind: "open", target } → { id } — dedupes an in-flight Open
-  for the same target.
+  { ok: true } — catalog snapshot for one repository. Never deletes saved
+  reviews. Adopts matching unsourced local-range reviews onto catalog PRs.
+- queue_action { kind: "open" | "update-diff" | "refresh", target? } → { id }
+  — target required for Open and Update Diff. Dedupes an in-flight action of
+  the same kind and target.
 - wait_for_action { timeoutMs? } → { action } — claims the next queued
   action and heartbeats the agent. Null when idle.
-- complete_action { id, status, reviewId?, error? } → { ok: true }
+- complete_action { id, status, reviewId?, error? } → { ok: true } —
+  reviewId required when Open or Update Diff succeeds. Refresh success does
+  not send reviewId.
 - add_review { guide } → { id } — new snapshot (local ranges).
 - upsert_review { guide } → { id } — stable id for a named ADO PR.
 - publish_review_outcome { reviewId, outcome } → { id }
@@ -350,5 +395,6 @@ navigates when the action succeeds.
 
 Bare http://localhost:8765/ is Home after catalog sync. The waiting agent
 then long-polls wait_for_action. An explicit add or upsert opens
-http://localhost:8765/reviews/{id}. Open from Home upserts an unchaptered
-review and the app lands on Diff.
+http://localhost:8765/reviews/{id}. Open and Update Diff upsert an unchaptered
+review and the app lands on Diff. Refresh replaces catalog snapshots and
+updates Last synced.

@@ -38,13 +38,17 @@ import {
   guidePresentsWalkthrough,
   homeCardAction,
   hostActionHint,
+  inFlightActionCopy,
   inFlightOpenCopy,
+  latestAction,
   latestOpenAction,
   projectHomeOverview,
   resolveOverviewView,
   reviewLandingTab,
+  reviewOutdatedWarning,
   reviewPath,
   type HomeCard,
+  type HomeGroup,
   type OverviewView,
 } from "./overview.ts";
 
@@ -145,7 +149,7 @@ let reviews: ReviewSummary[] = [];
 let catalog: CatalogSnapshot[] = [];
 let actions: StoredAction[] = [];
 let agentConnected = false;
-let pendingOpenId: string | null = null;
+let pendingActionId: string | null = null;
 let view: OverviewView = { kind: "home" };
 let activeId: string | null = null;
 let guide: Guide | null = null;
@@ -920,21 +924,45 @@ function homeCardHtml(card: HomeCard): string {
   const ado = card.webUrl
     ? `<a class="icon-btn ado-link" href="${esc(card.webUrl)}" target="_blank" rel="noreferrer" aria-label="Open in Azure DevOps" title="Open in Azure DevOps">${ADO_MARK}</a>`
     : "";
-  const latest = latestOpenAction(card, actions);
-  const inflight = latest ? inFlightOpenCopy(latest.status) : undefined;
-  const failed = latest?.status === "failed" ? latest.error?.message : undefined;
+  const latestOpen = latestOpenAction(card, actions);
+  const latestUpdate = card.openTarget
+    ? latestAction(actions, "update-diff", card.openTarget)
+    : undefined;
+  const inflight =
+    (latestOpen ? inFlightOpenCopy(latestOpen.status) : undefined) ||
+    (latestUpdate ? inFlightActionCopy("update-diff", latestUpdate.status) : undefined);
+  const failed =
+    latestOpen?.status === "failed"
+      ? latestOpen.error?.message
+      : latestUpdate?.status === "failed"
+        ? latestUpdate.error?.message
+        : undefined;
   const status = inflight
     ? `<span class="home-card-status">${esc(inflight)}</span>`
     : failed
       ? `<span class="home-card-status is-failed">${esc(failed)}</span>`
-      : card.hasGuide
-        ? `<span class="home-card-status is-ready">Guide</span>`
-        : `<span class="home-card-status">No guide</span>`;
+      : card.outdated
+        ? `<span class="home-card-status is-outdated">Outdated</span>`
+        : card.archived
+          ? `<span class="home-card-status">Archived</span>`
+          : card.hasGuide
+            ? `<span class="home-card-status is-ready">Guide</span>`
+            : `<span class="home-card-status">No guide</span>`;
   const body = `<span class="home-card-title">${esc(card.title)}</span>${badge}${range}`;
   const kind = homeCardAction(card, agentConnected);
   const busy = Boolean(inflight);
+  const savedLink =
+    card.reviewId
+      ? `<a class="home-card-secondary" href="${esc(reviewPath(card.reviewId))}" data-open-review="${esc(card.reviewId)}">Open saved</a>`
+      : "";
+  const updateBtn =
+    kind === "queue-update-diff" && card.openTarget && !busy
+      ? `<button type="button" class="ghost home-card-update" data-queue-update-diff data-open-target="${esc(JSON.stringify(card.openTarget))}">Update Diff</button>`
+      : "";
   let open: string;
-  if (kind === "open-saved" && card.reviewId) {
+  if (card.outdated && card.reviewId && !card.archived) {
+    open = `<div class="home-card-open">${body}</div>`;
+  } else if (kind === "open-saved" && card.reviewId) {
     open = `<a class="home-card-open" href="${esc(reviewPath(card.reviewId))}" data-open-review="${esc(card.reviewId)}">${body}</a>`;
   } else if (kind === "queue-open" && card.openTarget && !busy) {
     open = `<button type="button" class="home-card-open" data-queue-open data-open-target="${esc(JSON.stringify(card.openTarget))}">${body}</button>`;
@@ -942,7 +970,15 @@ function homeCardHtml(card: HomeCard): string {
     open = `<div class="home-card-open">${body}</div>`;
   }
   const pending = kind === "disabled-host" || busy;
-  return `<div class="home-card${pending ? " is-pending" : ""}">${open}<div class="home-card-aside">${status}${ado}</div></div>`;
+  return `<div class="home-card${pending ? " is-pending" : ""}">${open}<div class="home-card-aside">${status}${updateBtn}${card.outdated && !card.archived ? savedLink : ""}${ado}</div></div>`;
+}
+
+function homeGroupHtml(group: HomeGroup): string {
+  const cards = `<div class="home-grid">${group.cards.map(homeCardHtml).join("")}</div>`;
+  if (group.collapsed) {
+    return `<details class="home-group is-archived"><summary><h2>${esc(group.title)}</h2></summary>${cards}</details>`;
+  }
+  return `<section class="home-group"><h2>${esc(group.title)}</h2>${cards}</section>`;
 }
 
 function formatLastSynced(iso: string): string {
@@ -961,22 +997,24 @@ function renderHome(app: HTMLElement): void {
   const synced = overview.lastSynced
     ? `<p class="home-meta">Last synced ${esc(formatLastSynced(overview.lastSynced))}</p>`
     : "";
+  const refresh = latestAction(actions, "refresh");
+  const refreshCopy = refresh ? inFlightActionCopy("refresh", refresh.status) : undefined;
+  const refreshFailed = refresh?.status === "failed" ? refresh.error?.message : undefined;
+  const refreshBtn = refreshCopy
+    ? `<button type="button" class="ghost" disabled>${esc(refreshCopy)}</button>`
+    : `<button type="button" class="ghost" data-queue-refresh${agentConnected ? "" : " disabled"}>Refresh</button>`;
   const disconnected = hostActionHint(agentConnected);
   const disconnectNote = disconnected
     ? `<p class="home-error">${esc(disconnected)}</p>`
     : "";
-  const errors = overview.catalogErrors
-    .map(
+  const errors = [
+    ...overview.catalogErrors.map(
       (entry) =>
         `<p class="home-error">${esc(entry.owner)} / ${esc(entry.name)}: ${esc(entry.message)}</p>`,
-    )
-    .join("");
-  const groups = overview.groups
-    .map(
-      (group) =>
-        `<section class="home-group"><h2>${esc(group.title)}</h2><div class="home-grid">${group.cards.map(homeCardHtml).join("")}</div></section>`,
-    )
-    .join("");
+    ),
+    ...(refreshFailed ? [`<p class="home-error">${esc(refreshFailed)}</p>`] : []),
+  ].join("");
+  const groups = overview.groups.map(homeGroupHtml).join("");
   const list =
     groups || errors || synced || disconnectNote
       ? `${synced}${disconnectNote}${errors}${groups}`
@@ -986,7 +1024,7 @@ function renderHome(app: HTMLElement): void {
   delete app.dataset.tab;
   delete app.dataset.reviews;
   delete app.dataset.toc;
-  app.innerHTML = `<header><div class="header-bar"><div class="header-left">${BRAND_MARK}<h1>Home</h1></div><div class="header-actions"><button type="button" class="ghost" data-open-paste>Add</button>${themeBtn}</div></div></header><main class="home-main"><div class="main-inner">${list}</div></main>${pasteModal()}`;
+  app.innerHTML = `<header><div class="header-bar"><div class="header-left">${BRAND_MARK}<h1>Home</h1></div><div class="header-actions">${refreshBtn}<button type="button" class="ghost" data-open-paste>Add</button>${themeBtn}</div></div></header><main class="home-main"><div class="main-inner">${list}</div></main>${pasteModal()}`;
   bindChrome(app);
   syncHeaderHeight();
 }
@@ -1056,6 +1094,11 @@ function render(opts?: { restoreScroll?: boolean }) {
         : reviewBody;
   const layout = currentDiffLayout();
   const tabs = `<div class="view-tabs main-tabs" role="tablist"><button type="button" role="tab" data-tab="guide" aria-selected="${tab === "guide" ? "true" : "false"}">Guide</button><button type="button" role="tab" data-tab="diff" aria-selected="${tab === "diff" ? "true" : "false"}">Diff</button><button type="button" role="tab" data-tab="review" aria-selected="${tab === "review" ? "true" : "false"}">Code Review</button></div>`;
+  const summary = reviews.find((row) => row.id === activeId);
+  const warning = summary ? reviewOutdatedWarning(summary, catalog) : undefined;
+  const banner = warning
+    ? `<div class="review-banner" role="status">${esc(warning)}</div>`
+    : "";
   const modes = `<div class="display-modes" role="radiogroup" aria-label="Diff layout"><button type="button" class="display-mode" data-diff-mode="unified" aria-selected="${layout === "unified" ? "true" : "false"}">${ICON_UNIFIED} Unified</button><button type="button" class="display-mode" data-diff-mode="split" aria-selected="${layout === "split" ? "true" : "false"}">${ICON_SPLIT} Split</button></div>`;
   const hideBtn = `<button type="button" class="ghost" data-hide-unchanged aria-pressed="${hideUnchanged ? "true" : "false"}">${hideUnchanged ? "Show unchanged" : "Hide unchanged"}</button>`;
   const themeBtn = `<button type="button" class="icon-btn square-toggle theme-toggle" data-theme-next="${nextTheme}" aria-pressed="${currentTheme() === "light" ? "true" : "false"}" aria-label="Switch to ${themeLabel} theme" title="Switch to ${themeLabel} theme">${ICON_SUN}</button>`;
@@ -1076,7 +1119,7 @@ function render(opts?: { restoreScroll?: boolean }) {
     tab === "guide" && walkthrough
       ? `<aside class="toc-anchor" data-toc-anchor><div class="toc-hotzone"><div class="toc-rail" aria-label="Guide files">${toc.rail}</div></div><nav class="toc-panel" id="guide-toc" aria-label="Guide sections"><div class="nav-label">Sections</div>${toc.nav}</nav></aside>`
       : "";
-  app.innerHTML = `<header><div class="header-bar"><div class="header-left">${BRAND_MARK}${BACK_HOME}<h1>${esc(guide.title)}</h1>${statsHtml(gs)}</div><div class="header-actions">${sourceHeader(guide)}${display}</div></div>${tabs}</header>${filesRail}<main><div class="main-inner${tab === "guide" && walkthrough ? " is-guide" : ""}">${mainInner}</div></main>${tocAnchor}${pasteModal()}`;
+  app.innerHTML = `<header><div class="header-bar"><div class="header-left">${BRAND_MARK}${BACK_HOME}<h1>${esc(guide.title)}</h1>${statsHtml(gs)}</div><div class="header-actions">${sourceHeader(guide)}${display}</div></div>${tabs}${banner}</header>${filesRail}<main><div class="main-inner${tab === "guide" && walkthrough ? " is-guide" : ""}">${mainInner}</div></main>${tocAnchor}${pasteModal()}`;
   if (tab === "guide" && walkthrough) applyTocOpen(tocOpen);
   else applyTocOpen(false);
   bindChrome(app);
@@ -1248,8 +1291,21 @@ function bindChrome(app: HTMLElement) {
     el.addEventListener("click", () => {
       const raw = el.getAttribute("data-open-target");
       if (!raw) return;
-      void queueOpen(JSON.parse(raw) as OpenActionTarget);
+      void queueHostAction({ kind: "open", target: JSON.parse(raw) as OpenActionTarget });
     });
+  });
+  app.querySelectorAll("[data-queue-update-diff]").forEach((el) => {
+    el.addEventListener("click", () => {
+      const raw = el.getAttribute("data-open-target");
+      if (!raw) return;
+      void queueHostAction({
+        kind: "update-diff",
+        target: JSON.parse(raw) as OpenActionTarget,
+      });
+    });
+  });
+  app.querySelector("[data-queue-refresh]")?.addEventListener("click", () => {
+    void queueHostAction({ kind: "refresh" });
   });
 }
 
@@ -1260,13 +1316,17 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-async function queueOpen(target: OpenActionTarget): Promise<void> {
+async function queueHostAction(
+  payload:
+    | { kind: "open" | "update-diff"; target: OpenActionTarget }
+    | { kind: "refresh" },
+): Promise<void> {
   const created = await fetchJson<{ id: string }>("/api/actions", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ kind: "open", target }),
+    body: JSON.stringify(payload),
   });
-  pendingOpenId = created.id;
+  if (payload.kind !== "refresh") pendingActionId = created.id;
   await loadActive(true);
 }
 
@@ -1284,14 +1344,14 @@ async function loadActive(force = false): Promise<void> {
   catalog = listed.catalog ?? [];
   actions = listed.actions ?? [];
   agentConnected = listed.agentConnected === true;
-  if (pendingOpenId) {
-    const pending = actions.find((action) => action.id === pendingOpenId);
+  if (pendingActionId) {
+    const pending = actions.find((action) => action.id === pendingActionId);
     if (pending?.status === "succeeded" && pending.reviewId) {
-      pendingOpenId = null;
+      pendingActionId = null;
       await navigate(reviewPath(pending.reviewId));
       return;
     }
-    if (pending?.status === "failed") pendingOpenId = null;
+    if (pending?.status === "failed" || pending?.status === "succeeded") pendingActionId = null;
   }
   const nextView = resolveOverviewView(
     location.pathname,

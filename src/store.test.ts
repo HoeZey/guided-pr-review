@@ -4,9 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { GuideV1 } from "./contracts.ts";
+import { projectHomeOverview } from "./overview.ts";
 import {
   addReview,
   agentIsConnected,
+  completeAction,
   dataFile,
   getReview,
   listReviews,
@@ -589,7 +591,29 @@ test("selecting an unopened PR queues exactly one Open action", async () => {
     assert.equal(listed.actions[0].id, first.id);
     assert.equal(listed.actions[0].kind, "open");
     assert.equal(listed.actions[0].status, "queued");
-    assert.equal(listed.actions[0].target.number, 1101);
+    assert.equal(listed.actions[0].target?.number, 1101);
+  });
+});
+
+test("an in-flight Refresh is reused", async () => {
+  await withStore(async () => {
+    const first = await queueAction({ kind: "refresh" });
+    const second = await queueAction({ kind: "refresh" });
+    assert.equal(second.id, first.id);
+    const listed = await listReviews();
+    assert.equal(listed.actions.length, 1);
+    assert.equal(listed.actions[0].kind, "refresh");
+  });
+});
+
+test("Open success still requires reviewId", async () => {
+  await withStore(async () => {
+    const open = await queueAction({ kind: "open", target: openTarget() });
+    await waitForAction({ timeoutMs: 0 });
+    await assert.rejects(
+      () => completeAction({ id: open.id, status: "succeeded" }),
+      /reviewId required/,
+    );
   });
 });
 
@@ -611,4 +635,156 @@ test("a missing or stale heartbeat is disconnected", () => {
   assert.equal(agentIsConnected(undefined), false);
   assert.equal(agentIsConnected(new Date(Date.now() - 40_000).toISOString()), false);
   assert.equal(agentIsConnected(new Date().toISOString()), true);
+});
+
+test("manual Refresh updates Last synced and replaces catalog snapshots", async () => {
+  await withStore(async () => {
+    await replaceCatalog({
+      origin: true,
+      repository: catalogRepository(),
+      syncedAt: "2026-09-14T12:00:00.000Z",
+      pullRequests: [catalogPullRequest({ number: 1101 })],
+    });
+    const queued = await queueAction({ kind: "refresh" });
+    const claimed = await waitForAction({ timeoutMs: 0 });
+    assert.equal(claimed?.id, queued.id);
+    assert.equal(claimed?.kind, "refresh");
+    assert.equal(claimed?.status, "claimed");
+    await replaceCatalog({
+      origin: true,
+      repository: catalogRepository(),
+      syncedAt: "2026-09-15T08:00:00.000Z",
+      pullRequests: [catalogPullRequest({ number: 1102, title: "Later" })],
+    });
+    await completeAction({ id: queued.id, status: "succeeded" });
+    const listed = await listReviews();
+    assert.equal(listed.actions[0].status, "succeeded");
+    assert.equal(listed.actions[0].reviewId, undefined);
+    assert.equal(listed.catalog[0].syncedAt, "2026-09-15T08:00:00.000Z");
+    assert.equal(listed.catalog[0].pullRequests[0].number, 1102);
+    assert.equal(listed.catalog[0].pullRequests[0].title, "Later");
+  });
+});
+
+test("Refresh never deletes a saved guide", async () => {
+  await withStore(async () => {
+    const saved = await addReview(sample);
+    const queued = await queueAction({ kind: "refresh" });
+    await waitForAction({ timeoutMs: 0 });
+    await replaceCatalog({
+      origin: true,
+      repository: catalogRepository(),
+      syncedAt: "2026-09-15T08:00:00.000Z",
+      pullRequests: [catalogPullRequest({ status: "completed" })],
+    });
+    await completeAction({ id: queued.id, status: "succeeded" });
+    const listed = await listReviews();
+    assert.equal(listed.reviews.length, 1);
+    assert.equal(listed.reviews[0].id, saved.id);
+    assert.equal(listed.reviews[0].title, "One");
+    const got = await getReview(saved.id);
+    assert.equal(got.guide.title, "One");
+    assert.equal(got.guide.chapters[0].id, "core");
+  });
+});
+
+test("Refresh adopts an unsourced local-range review onto a matching catalog PR", async () => {
+  await withStore(async () => {
+    const local = await addReview(
+      GuideV1.parse({ ...sample, range: "develop...feature/review-me" }),
+    );
+    const other = await addReview(
+      GuideV1.parse({ ...sample, title: "Other", range: "develop...feature/other" }),
+    );
+    await replaceCatalog({
+      origin: true,
+      repository: catalogRepository(),
+      syncedAt: "2026-09-15T08:00:00.000Z",
+      pullRequests: [catalogPullRequest()],
+    });
+    const listed = await listReviews();
+    const adopted = listed.reviews.find((row) => row.id === local.id);
+    assert.equal(adopted?.pullRequest?.number, 1101);
+    assert.equal(adopted?.sourceCommit, sample.head);
+    const leftover = listed.reviews.find((row) => row.id === other.id);
+    assert.equal(leftover?.pullRequest, undefined);
+    const got = await getReview(local.id);
+    assert.equal(got.guide.source?.number, 1101);
+    assert.equal(got.guide.chapters[0].id, "core");
+    const overview = projectHomeOverview(listed.reviews, listed.catalog);
+    const localGroup = overview.groups.find((group) => group.id === "local-ranges");
+    assert.deepEqual(
+      localGroup?.cards.map((card) => card.id),
+      [other.id],
+    );
+    const requests = overview.groups.find((group) => group.id === "review-requests");
+    assert.equal(requests?.cards[0].reviewId, local.id);
+  });
+});
+
+test("Refresh adopts a renamed local range when the ticket key is unique", async () => {
+  await withStore(async () => {
+    const local = await addReview(
+      GuideV1.parse({
+        ...sample,
+        range: "develop...feature/tcd-3343-pin-maps",
+        repo: "braid-connection-designer",
+      }),
+    );
+    await replaceCatalog({
+      origin: true,
+      repository: catalogRepository(),
+      syncedAt: "2026-09-15T08:00:00.000Z",
+      pullRequests: [
+        catalogPullRequest({
+          sourceRef: "refs/heads/feature/TCD-3343-pin-output-model-snapshot",
+        }),
+      ],
+    });
+    const listed = await listReviews();
+    assert.equal(listed.reviews.find((row) => row.id === local.id)?.pullRequest?.number, 1101);
+    const overview = projectHomeOverview(listed.reviews, listed.catalog);
+    assert.equal(overview.groups.find((group) => group.id === "local-ranges"), undefined);
+    assert.equal(
+      overview.groups.find((group) => group.id === "review-requests")?.cards[0].reviewId,
+      local.id,
+    );
+  });
+});
+
+test("Refresh leaves two locals with the same ticket in Local ranges", async () => {
+  await withStore(async () => {
+    const a = await addReview(
+      GuideV1.parse({ ...sample, title: "A", range: "develop...feature/tcd-3343-pin-maps" }),
+    );
+    const b = await addReview(
+      GuideV1.parse({
+        ...sample,
+        title: "B",
+        range: "develop...feature/tcd-3343-follow-up",
+      }),
+    );
+    await replaceCatalog({
+      origin: true,
+      repository: catalogRepository(),
+      syncedAt: "2026-09-15T08:00:00.000Z",
+      pullRequests: [
+        catalogPullRequest({
+          sourceRef: "refs/heads/feature/TCD-3343-pin-output-model-snapshot",
+        }),
+      ],
+    });
+    const listed = await listReviews();
+    assert.equal(listed.reviews.find((row) => row.id === a.id)?.pullRequest, undefined);
+    assert.equal(listed.reviews.find((row) => row.id === b.id)?.pullRequest, undefined);
+    const overview = projectHomeOverview(listed.reviews, listed.catalog);
+    assert.deepEqual(
+      overview.groups.find((group) => group.id === "local-ranges")?.cards.map((card) => card.id),
+      [a.id, b.id],
+    );
+    assert.equal(
+      overview.groups.find((group) => group.id === "review-requests")?.cards[0].reviewId,
+      undefined,
+    );
+  });
 });

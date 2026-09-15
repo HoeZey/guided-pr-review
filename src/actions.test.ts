@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { completeOpenAction, type ChapteringAdapter, type GitHostAdapter } from "./actions.ts";
+import { completeOpenAction, completeUpdateDiffAction, type ChapteringAdapter, type GitHostAdapter } from "./actions.ts";
 import type { FileChange, OpenActionTarget, PullRequestSource } from "./contracts.ts";
 import { reviewLandingTab } from "./overview.ts";
 import {
@@ -193,6 +193,53 @@ test("after success the agent waits again and a second Open can fetch another PR
     const listed = await listReviews();
     assert.equal(listed.reviews.length, 2);
     assert.equal(listed.activeId, next.reviewId);
+  });
+});
+
+test("Update Diff refreshes the snapshot through upsert without requiring chaptering", async () => {
+  await withStore(async () => {
+    const queued = await queueAction({ kind: "open", target: openTarget() });
+    await waitForAction({ timeoutMs: 0 });
+    const opened = await completeOpenAction(queued.id, fakeHost());
+    const SHA_NEW = "cccccccccccccccccccccccccccccccccccccccc";
+    const update = await queueAction({ kind: "update-diff", target: openTarget() });
+    await waitForAction({ timeoutMs: 0 });
+    let called = false;
+    const chaptering: ChapteringAdapter = {
+      chapter: async () => {
+        called = true;
+        throw new Error("chaptering must not run for Update Diff");
+      },
+    };
+    const host: GitHostAdapter = {
+      fetchOpen: async (target) => {
+        assert.equal(target.number, 1101);
+        return {
+          title: "PR 1101 updated",
+          files: [
+            {
+              path: "src/newer.ts",
+              language: "typescript",
+              hunks: [{ lines: [{ type: "added", content: "export const n = 2;", newLine: 1 }] }],
+            },
+          ],
+          source: { ...hostSource(), sourceCommit: SHA_NEW },
+        };
+      },
+    };
+    const result = await completeUpdateDiffAction(update.id, host, chaptering);
+    assert.equal(result.reviewId, opened.reviewId);
+    assert.equal(called, false);
+    const got = await getReview(opened.reviewId);
+    assert.equal(got.guide.unchaptered, true);
+    assert.equal(got.guide.title, "PR 1101 updated");
+    assert.equal(got.guide.source?.sourceCommit, SHA_NEW);
+    assert.equal(got.guide.chapters[0].files[0].path, "src/newer.ts");
+    const listed = await listReviews();
+    assert.equal(listed.reviews.length, 1);
+    assert.equal(listed.actions[1].kind, "update-diff");
+    assert.equal(listed.actions[1].status, "succeeded");
+    assert.equal(listed.actions[1].reviewId, opened.reviewId);
   });
 });
 

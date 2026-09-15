@@ -15,21 +15,25 @@ export type HomeCard = {
   webUrl: string | undefined;
   reviewId: string | undefined;
   hasGuide: boolean;
+  outdated: boolean;
+  archived: boolean;
   openTarget?: OpenActionTarget;
 };
 
-export type HomeCardAction = "open-saved" | "queue-open" | "disabled-host";
+export type HomeCardAction = "open-saved" | "queue-open" | "queue-update-diff" | "disabled-host";
 
 export type HomeGroupId =
   | "review-requests"
   | "authored-by-me"
   | "other-saved-prs"
-  | "local-ranges";
+  | "local-ranges"
+  | "archived";
 
 export type HomeGroup = {
   id: HomeGroupId;
   title: string;
   cards: HomeCard[];
+  collapsed?: boolean;
 };
 
 export type HomeOverview = {
@@ -55,24 +59,66 @@ export function guidePresentsWalkthrough(guide: { unchaptered?: boolean }): bool
 }
 
 export const AGENT_DISCONNECTED_HINT =
-  "The guided-review skill must be running to open a pull request from the host.";
+  "The guided-review skill must be running to open or refresh a pull request from the host.";
+
+export const OUTDATED_WARNING =
+  "This saved review is outdated. The pull request has new commits.";
 
 export function hostActionHint(agentConnected: boolean): string | undefined {
   return agentConnected ? undefined : AGENT_DISCONNECTED_HINT;
 }
 
+export function reviewOutdatedWarning(
+  review: Pick<ReviewSummary, "syncKey" | "sourceCommit">,
+  catalog: readonly CatalogSnapshot[],
+): string | undefined {
+  if (!review.syncKey || !review.sourceCommit) return undefined;
+  const item = catalogItemByKey(catalog, review.syncKey);
+  if (!item || item.status !== "active") return undefined;
+  return sourceCommitMoved(review.sourceCommit, item.sourceCommit)
+    ? OUTDATED_WARNING
+    : undefined;
+}
+
 export function inFlightOpenCopy(
   status: StoredAction["status"],
 ): "Waiting" | "Opening" | undefined {
+  return inFlightActionCopy("open", status) as "Waiting" | "Opening" | undefined;
+}
+
+export function inFlightActionCopy(
+  kind: StoredAction["kind"],
+  status: StoredAction["status"],
+): "Waiting" | "Opening" | "Refreshing" | undefined {
   if (status === "queued") return "Waiting";
-  if (status === "claimed") return "Opening";
-  return undefined;
+  if (status !== "claimed") return undefined;
+  if (kind === "refresh") return "Refreshing";
+  return "Opening";
+}
+
+export function latestAction(
+  actions: readonly StoredAction[],
+  kind: StoredAction["kind"],
+  target?: OpenActionTarget,
+): StoredAction | undefined {
+  return [...actions]
+    .reverse()
+    .find((action) => {
+      if (action.kind !== kind) return false;
+      if (!target) return true;
+      return Boolean(
+        action.target && pullRequestSyncKey(action.target) === pullRequestSyncKey(target),
+      );
+    });
 }
 
 export function homeCardAction(
   card: HomeCard,
   agentConnected: boolean,
 ): HomeCardAction {
+  if (card.outdated && card.reviewId && card.openTarget && agentConnected && !card.archived) {
+    return "queue-update-diff";
+  }
   if (card.reviewId) return "open-saved";
   if (card.openTarget && agentConnected) return "queue-open";
   return "disabled-host";
@@ -83,13 +129,7 @@ export function latestOpenAction(
   actions: readonly StoredAction[],
 ): StoredAction | undefined {
   if (!card.openTarget) return undefined;
-  const key = pullRequestSyncKey(card.openTarget);
-  return [...actions]
-    .reverse()
-    .find(
-      (action) =>
-        action.kind === "open" && pullRequestSyncKey(action.target) === key,
-    );
+  return latestAction(actions, "open", card.openTarget);
 }
 
 export function resolveOverviewView(
@@ -119,6 +159,8 @@ export function projectHomeCards(reviews: readonly ReviewSummary[]): HomeCard[] 
     webUrl: review.pullRequest?.webUrl,
     reviewId: review.id,
     hasGuide: !review.unchaptered,
+    outdated: false,
+    archived: false,
   }));
 }
 
@@ -127,14 +169,18 @@ const GROUP_TITLE: Record<HomeGroupId, string> = {
   "authored-by-me": "Authored by me",
   "other-saved-prs": "Other saved PRs",
   "local-ranges": "Local ranges",
+  archived: "Archived",
 };
 
 function catalogCard(
   item: CatalogPullRequest,
   reviews: readonly ReviewSummary[],
+  extra?: { archived?: boolean },
 ): HomeCard {
   const syncKey = pullRequestSyncKey(item);
   const review = reviews.find((row) => row.syncKey === syncKey);
+  const archived = Boolean(extra?.archived);
+  const outdated = !archived && sourceCommitMoved(review?.sourceCommit, item.sourceCommit);
   return {
     id: review?.id ?? syncKey,
     title: item.title,
@@ -146,6 +192,8 @@ function catalogCard(
     webUrl: item.webUrl,
     reviewId: review?.id,
     hasGuide: Boolean(review?.id) && !review?.unchaptered,
+    outdated,
+    archived,
     openTarget: {
       provider: item.provider,
       host: item.host,
@@ -163,16 +211,47 @@ function isAuthoredByMe(item: CatalogPullRequest): boolean {
   return item.status === "active" && item.isAuthor;
 }
 
+function isClosed(item: CatalogPullRequest): boolean {
+  return item.status === "completed" || item.status === "abandoned";
+}
+
+function catalogItemByKey(
+  catalog: readonly CatalogSnapshot[],
+  key: string,
+): CatalogPullRequest | undefined {
+  for (const snapshot of catalog) {
+    const item = snapshot.pullRequests.find((row) => pullRequestSyncKey(row) === key);
+    if (item) return item;
+  }
+  return undefined;
+}
+
+function sourceCommitMoved(
+  reviewCommit: string | undefined,
+  catalogCommit: string,
+): boolean {
+  return Boolean(reviewCommit && reviewCommit.toLowerCase() !== catalogCommit.toLowerCase());
+}
+
 export function projectHomeOverview(
   reviews: readonly ReviewSummary[],
   catalog: readonly CatalogSnapshot[],
 ): HomeOverview {
   const reviewRequests: HomeCard[] = [];
   const authored: HomeCard[] = [];
+  const archived: HomeCard[] = [];
   const placed = new Set<string>();
   for (const snapshot of catalog) {
     for (const item of snapshot.pullRequests) {
       const key = pullRequestSyncKey(item);
+      if (isClosed(item)) {
+        const review = reviews.find((row) => row.syncKey === key);
+        if (review) {
+          archived.push(catalogCard(item, reviews, { archived: true }));
+          placed.add(key);
+        }
+        continue;
+      }
       if (isReviewRequest(item)) {
         reviewRequests.push(catalogCard(item, reviews));
         placed.add(key);
@@ -186,19 +265,30 @@ export function projectHomeOverview(
   const localRanges: HomeCard[] = [];
   for (const review of reviews) {
     if (review.syncKey && placed.has(review.syncKey)) continue;
+    const item = review.syncKey ? catalogItemByKey(catalog, review.syncKey) : undefined;
+    if (item) {
+      otherSaved.push(catalogCard(item, reviews));
+      continue;
+    }
     const [card] = projectHomeCards([review]);
     if (review.pullRequest) otherSaved.push(card);
     else localRanges.push(card);
   }
   const groups: HomeGroup[] = [];
-  const push = (id: HomeGroupId, cards: HomeCard[]) => {
+  const push = (id: HomeGroupId, cards: HomeCard[], collapsed = false) => {
     if (!cards.length) return;
-    groups.push({ id, title: GROUP_TITLE[id], cards });
+    groups.push({
+      id,
+      title: GROUP_TITLE[id],
+      cards,
+      ...(collapsed ? { collapsed: true } : {}),
+    });
   };
   push("review-requests", reviewRequests);
   push("authored-by-me", authored);
   push("other-saved-prs", otherSaved);
   push("local-ranges", localRanges);
+  push("archived", archived, true);
   const lastSynced = catalog
     .map((snapshot) => snapshot.syncedAt)
     .filter((value): value is string => Boolean(value))
