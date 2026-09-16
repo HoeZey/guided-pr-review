@@ -708,3 +708,236 @@ itself a Spec miss.
 No comments posted. No user working tree checkout. No develop merge and
 no main promotion in this review. Localhost attach skipped.
 
+## integration-review (third)
+
+Date: 16 September 2026
+
+Verdict: Pass
+
+base: 0a9ffcd11cc64df218f833c3af425489dee906cf
+head: 591a2dd7e92ceef8a5e3222baaa2db06f29baa1c
+branch: feature/08-inline-git-host-comments
+
+History: Same 08-01 through 08-08 Merged commits as the first review, plus
+the first docs record, the first remediation, the second docs record, and
+one further remediation commit.
+
+- f5da2f55354ef3a6046636a1433b94f797efb0ab Reconcile 08 issue paths with post-07 develop
+- cdfe250b89dcd31ef1e52fcfa6ae2ef5686a140e Merged 08-01: Define provider-neutral comment services and contracts
+- a3993991b27f4a3aa4b3f70c01f72daefb981b16 Merged 08-02: Implement ADO comment adapter
+- a5787ebf167dd7f69dd5f9939250e7b23e8b904b Merged 08-03: Implement GitHub comment adapter
+- 7bd9e0e229df93bc082a99fda01118a85408c528 Merged 08-04: Render existing threads inline in Guide and Diff
+- a0a9c0c8d3068e5fede28e2314c06cb583987871 Merged 08-05: Create comments and replies from both views
+- 1206f48228a8823eee3e0c4cb842cd00de926e61 Merged 08-06: Edit and delete owned comments
+- e32413490700fbc2955cb3c2e27f8040713729cd Merged 08-07: Deliver the PR-wide Discussion tab
+- f4d1a9a515be73262e2cc75fbb36cf5f977f96a1 Merged 08-08: Integrate and verify inline comments
+- 42a33f9347bcc0fca5b98607b85ec5038ba45541 Record 08 integration-review
+- b0d7decd187d9edc6bedfb5f485f1e143b434163 Persist ADO iterations and change tracking on Open Diff
+- e6d13d46be8eec53b2eae873a7b04ae713c748f8 Record 08 second integration-review
+- 591a2dd7e92ceef8a5e3222baaa2db06f29baa1c Forward getCommentContext through pullRequestReader
+
+Remediation-only diff e6d13d4...591a2dd is non-empty (pullRequestReader
+bind of getCommentContext, createAppServices-path test in
+reviews-diff.test.ts, 08-08 note).
+
+The second-review major is cleared. pullRequestReader now forwards
+getCommentContext with bind so the inner adapter keeps its this.
+createAppServices still wraps readers.ado and readers.github before
+createReviewService. runtime.ts still constructs those adapters and
+passes them through createAppServices. syncDiff still calls
+reader.getCommentContext for azure-devops and catalogAsSource stores
+firstComparingIteration, secondComparingIteration, and changes keyed
+without a leading slash. The new test constructs createAppServices with
+createAdoRestAdapter, calls reviews.openDiff, and asserts iterations 1
+and 2 plus src/open.ts changeTrackingId 7. npm test at this HEAD: 201
+pass, including that wrap path.
+
+Known leftovers that do not fail a success criterion on a fresh Open
+Diff through the app:
+
+- catalog adopt via catalogAsSource still stores empty iterations until
+  Open or Update Diff
+- already-saved ADO reviews skip Update Diff when sourceCommit is
+  unchanged, so empty stored changes stay until a non-skip upsert
+- live LIST/create/reply/edit/delete against named host PRs remain
+  unauthorized and are not a Spec miss
+
+Story leftovers from 08-01, 08-04, 08-05, 08-06, and 08-07 still hold
+as minor or nit.
+
+No develop merge and no main promotion in this review. Issue 08 stays
+doing. PRD status stays in_progress.
+
+### Standards
+
+major 0 / minor 5 / nit 6
+
+- severity: minor
+  title: Mutation responses skip the strict comment contract parse
+  location: src/lib/server/services/comments.ts
+  startLine: 106
+  endLine: 162
+  explanation: list runs CommentThreadList.parse. createThread returns
+  normalizeListedThread, and reply and update return a spread message with
+  ownedByCurrentUser overwritten, with no CommentThread or CommentMessage
+  parse. A later adapter can put pullRequestThreadId or node_id on that
+  object and the JSON response will include it. Documented on 08-01; still
+  true.
+
+- severity: minor
+  title: Slot projection rebuilds hunk rows instead of reusing projectHunkLines
+  location: src/lib/shared/domain/comment-slots.ts
+  startLine: 29
+  endLine: 56
+  explanation: visibleHunks still copies pairWordDiff, splitRows,
+  withUnchangedGaps, and the split-row unchanged predicate that
+  projectHunkLines already applies when CodeFile renders. If one side
+  changes hide-unchanged or pairing, afterThreads indexes will not match
+  the rows on screen. Documented on 08-04; still true.
+
+- severity: minor
+  title: Stale focus can list comments twice
+  location: src/lib/client/components/AppShell.svelte
+  startLine: 97
+  endLine: 108
+  explanation: onVisible is still bound to both document visibilitychange
+  and window focus. Returning to the tab commonly fires both while
+  fetchedAt is already stale, so loadReviewThreads starts two overlapping
+  commentsApi.list calls with no in-flight guard. Last write wins and the
+  60-second skip still works, but the hosted review lists twice.
+  Documented on 08-04; still true.
+
+- severity: minor
+  title: Line and range composers are mouse-only clickable divs
+  location: src/lib/client/components/code/UnifiedRow.svelte
+  startLine: 28
+  endLine: 42
+  explanation: UnifiedRow and SplitCell still attach onclick to a static
+  line div and svelte-ignore a11y_click_events_have_key_events and
+  a11y_no_static_element_interactions. Current-side line and shift-click
+  range have no keyboard control. File Comment and Reply remain real
+  buttons. Documented on 08-05; still true.
+
+- severity: minor
+  title: Failed edit leaves the composer and drops the typed draft
+  location: src/lib/client/components/code/CommentStack.svelte
+  startLine: 90
+  endLine: 127
+  explanation: save calls updateOwnedComment, which rolls the thread body
+  back on failure. The catch then sets editingId and draft to empty, so the
+  textarea unmounts and the typed text is gone. confirmDelete likewise
+  clears confirmingId on failure. Create and reply keep composerSession
+  drafts. The original thread is not lost. Documented on 08-06; still true.
+
+- severity: nit
+  title: Reply and owned edits re-list every thread first
+  location: src/lib/server/services/comments.ts
+  startLine: 79
+  endLine: 143
+  explanation: reply and requireOwned call listedThreads, a full provider
+  list, before the mutate. Against a live host that is an extra list
+  round-trip. There is still no ponytail naming that ceiling. Documented
+  on 08-01; still true.
+
+- severity: nit
+  title: Non-numeric ids become unknown-thread or unknown-comment
+  location: src/lib/server/providers/ado-comments.ts
+  startLine: 298
+  endLine: 306
+  explanation: resourceId rejects anything that is not a positive decimal
+  integer, including a cop_ client operation id, as unknown-thread or
+  unknown-comment. CommentService rejectOperationAsResource throws
+  operation-id-as-resource first, so HTTP through the service still fails
+  closed. Direct adapter calls disagree on the code. Documented on 08-02;
+  still true.
+
+- severity: nit
+  title: Content and time reconcile uses a five-minute first-match heuristic with no ponytail comment
+  location: src/lib/shared/domain/comment-delivery.ts
+  startLine: 28
+  endLine: 114
+  explanation: matchingRecentCreate still takes the first listed thread
+  with the same anchor, body, and createdAt within 5 minutes. Two
+  legitimate identical comments in that window can bind the pending send
+  to the wrong row. Documented on 08-05; still true.
+
+- severity: nit
+  title: Client delete guesses GitHub omit versus ADO deleted from thread.provider
+  location: src/lib/client/state/threads.svelte.ts
+  startLine: 185
+  endLine: 206
+  explanation: commentsApi.delete returns { ok: true }. deleteOwnedComment
+  then keeps the optimistic GitHub removal or ADO deleted true from
+  thread.provider instead of a list refetch. Failure restores the
+  snapshot. Documented on 08-06; still true.
+
+- severity: nit
+  title: Stale outdated threads show Outdated twice
+  location: src/lib/client/components/code/CommentStack.svelte
+  startLine: 146
+  endLine: 150
+  explanation: When discussion is true, thread.outdated still renders
+  Outdated, and discussionPlacementLabel for reason outdated also returns
+  Outdated. Documented on 08-07; still true.
+
+- severity: nit
+  title: GitHub issue-reply rule lives in slot projection
+  location: src/lib/shared/domain/comment-slots.ts
+  startLine: 239
+  endLine: 241
+  explanation: allowsNestedReply hard-codes github plus pr. That matches
+  the GitHub adapter, which rejects non-review replies. comment-slots.ts
+  is otherwise Guide and Diff placement. Documented on 08-07; still true.
+
+### Spec
+
+missing 0 / partial 0 / scope-creep 0 / incorrect 0
+
+findings: []
+
+HEAD meets the 08 success criteria graded here.
+
+Quote, PRD success criteria: Existing ADO and GitHub line and range
+threads normalize to current-side anchors and project once after the
+matching visible line in Guide and Diff. File-level threads render below
+the file header. PR-wide and stale or unmappable threads, including
+deleted-line fallbacks, render in Discussion. Deleted-line comments are
+not attached to a fabricated right-side line.
+
+Quote, PRD success criteria: Guide and Diff share one threadSession.
+Tab switching does not refetch. Load runs on review open, stale focus
+after 60 seconds, and manual Retry.
+
+Quote, PRD success criteria: Create, reply, edit, and delete go through
+CommentService and stored provenance. Browser bodies cannot set provider,
+host, repository, number, or URL. Foreign Origin is rejected. Ownership
+is recomputed from the connected login and gates edit and delete on the
+server and in CommentStack. GitHub create, reply, edit, and delete are
+implemented against REST fixtures. ADO reply, edit, delete, and PR-wide
+create are implemented. ADO line, range, and file create read
+changeTrackingId from stored provenance; a fresh Open Diff through
+createAppServices now persists those ids.
+
+Quote, PRD success criteria: Failed create and reply keep
+composerSession drafts. Cancel bumps the in-flight generation and does
+not block Retry. Ambiguous network or unavailable failures list and
+reconcile before resend.
+
+Quote, PRD success criteria: No comment operation uses an agent, MCP, az
+rest, or gh api. Adapters use injected or globalThis.fetch. MCP
+tools/list is still the 07 tool set. createAppServices and runtime.ts
+default to live REST adapters. Tests inject fakes.
+
+Quote, 08-08: Manual ADO and GitHub checks cover line, range, file, and
+PR-wide display, create, reply, edit, delete, auth Retry, ambiguous
+send, tab parity, and stale anchors. The issue records those pending
+because no named test PR was authorized. That live pending note is not
+itself a Spec miss.
+
+Catalog adopt without Open Diff still writes zeros. Already-saved ADO
+reviews skip Update Diff when sourceCommit is unchanged. Those leftovers
+do not make a fresh app Open Diff persist empty changes.
+
+No comments posted. No user working tree checkout. No develop merge and
+no main promotion in this review. Localhost attach skipped.
+
