@@ -1,35 +1,55 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { HOME_PATH, reviewLandingTab } from "$lib/shared/domain/overview";
   import type { HomePageData, ReviewPageData, ReviewTab } from "$lib/shared/page-data";
   import { prefs, setTheme } from "$lib/client/state/preferences.svelte";
-  import { bindReview, session, setTab } from "$lib/client/state/review.svelte";
+  import {
+    adoptReviewPage,
+    bindReview,
+    currentReviewPage,
+    queueGenerateGuide,
+    refreshCurrentReview,
+    session,
+    setTab,
+  } from "$lib/client/state/review.svelte";
   import DiffView from "./diff/DiffView.svelte";
   import GuideView from "./guide/GuideView.svelte";
   import HomeActions from "./home/HomeActions.svelte";
   import HomeView from "./home/HomeView.svelte";
+  import OutcomeBody from "./outcomes/OutcomeBody.svelte";
+  import OutcomeRail from "./outcomes/OutcomeRail.svelte";
 
   let { data }: { data: HomePageData | ReviewPageData } = $props();
 
   const view = $derived(data.kind);
-  const title = $derived(data.kind === "home" ? "Home" : data.title);
+  const review = $derived(data.kind === "review" ? currentReviewPage(data) : null);
+  const title = $derived(data.kind === "home" ? "Home" : review?.title ?? data.title);
   const landingTab = $derived(
-    data.kind === "review" && data.guide ? reviewLandingTab(data.guide) : "guide",
+    review?.guide ? reviewLandingTab(review.guide) : "guide",
   );
   const tab = $derived(
-    data.kind === "review" && session.reviewId === data.reviewId ? session.tab : landingTab,
+    review && session.reviewId === review.reviewId ? session.tab : landingTab,
   );
   const nextTheme = $derived(prefs.theme === "dark" ? "light" : "dark");
   const themeLabel = $derived(nextTheme === "dark" ? "Dark" : "Light");
 
-  $effect(() => {
+  $effect.pre(() => {
     if (data.kind === "review" && data.status === "ok") {
       bindReview(data.reviewId, data.guide ?? {});
+      adoptReviewPage(data);
     }
   });
 
-  function selectTab(next: ReviewTab): void {
+  onMount(() => {
     if (data.kind !== "review") return;
-    if (session.reviewId !== data.reviewId) bindReview(data.reviewId, data.guide ?? {});
+    void refreshCurrentReview();
+    const id = setInterval(() => void refreshCurrentReview(), 2000);
+    return () => clearInterval(id);
+  });
+
+  function selectTab(next: ReviewTab): void {
+    if (!review) return;
+    if (session.reviewId !== review.reviewId) bindReview(review.reviewId, review.guide ?? {});
     setTab(next);
   }
 
@@ -96,29 +116,40 @@
     <p class="err">{data.error}</p>
   {:else if data.kind === "home"}
     <HomeView {data} />
-  {:else}
-    {#if data.guide}
+  {:else if review}
+    {#if review.guide}
       <GuideView
-        guide={data.guide}
-        reviewId={data.reviewId}
-        agentConnected={data.agentConnected}
+        guide={review.guide}
+        reviewId={review.reviewId}
+        agentConnected={review.agentConnected}
+        actions={review.actions}
         hidden={tab !== "guide"}
+        onQueue={queueGenerateGuide}
       />
-      <DiffView guide={data.guide} visible={tab === "diff"} />
+      <DiffView guide={review.guide} visible={tab === "diff"} />
     {/if}
     {#if tab === "review"}
+      <nav aria-label="Code Review">
+        <button type="button" class="col-handle" data-rail="sidebar" aria-label="Resize file list"></button>
+        <div class="nav-label">Code Review</div>
+        {#if review.guide}
+          <OutcomeRail base={review.guide.base} head={review.guide.head} outcomes={review.outcomes} />
+        {/if}
+      </nav>
       <main>
         <div class="main-inner">
-          <div data-tab-panel="review">Fake Code Review</div>
+          {#if review.guide}
+            <OutcomeBody base={review.guide.base} head={review.guide.head} outcomes={review.outcomes} />
+          {/if}
         </div>
       </main>
-    {:else if !data.guide && tab === "guide"}
+    {:else if !review.guide && tab === "guide"}
       <main>
         <div class="main-inner">
           <div data-tab-panel="guide">Fake Guide</div>
         </div>
       </main>
-    {:else if !data.guide && tab === "diff"}
+    {:else if !review.guide && tab === "diff"}
       <main>
         <div class="main-inner">
           <div data-tab-panel="diff">Fake Diff</div>

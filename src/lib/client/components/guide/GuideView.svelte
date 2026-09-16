@@ -1,9 +1,7 @@
 <script lang="ts">
   import type { GuideV1 } from "$lib/shared/contracts/guide";
-  import {
-    generateGuideHint,
-    guidePresentsWalkthrough,
-  } from "$lib/shared/domain/overview";
+  import type { StoredAction } from "$lib/shared/contracts/catalog";
+  import { guidePresentsWalkthrough } from "$lib/shared/domain/overview";
   import {
     guideStops,
     markViewed,
@@ -13,6 +11,7 @@
   } from "$lib/shared/domain/guide-view";
   import { prefs } from "$lib/client/state/preferences.svelte";
   import { persistViewed, session } from "$lib/client/state/review.svelte";
+  import GenerateGuideEmpty from "../outcomes/GenerateGuideEmpty.svelte";
   import GuideChapter from "./GuideChapter.svelte";
   import GuideToc from "./GuideToc.svelte";
   import { chaptersForNav, fileId, readGuideSpy, sectionId } from "./project";
@@ -22,11 +21,15 @@
     reviewId,
     agentConnected = false,
     hidden = false,
+    actions = [],
+    onQueue,
   }: {
     guide: GuideV1;
     reviewId: string;
     agentConnected?: boolean;
     hidden?: boolean;
+    actions?: StoredAction[];
+    onQueue?: (reviewId: string) => void;
   } = $props();
 
   let tocOpen = $state(false);
@@ -42,9 +45,6 @@
       ? selectGuidePath(selectedChapter.files || [], session.selectedGuidePath, session.viewed)
       : null,
   );
-  const canGenerate = $derived(Boolean(guide.unchaptered) && Boolean(reviewId) && agentConnected);
-  const generateHint = $derived(generateGuideHint(agentConnected));
-
   $effect(() => {
     if (!walkthrough || !selectedChapter) return;
     if (session.selectedChapterId !== selectedChapter.id) {
@@ -192,21 +192,12 @@
         {/each}
       </div>
     {:else}
-      <div class="outcome-empty">
-        <h2>Generate guide</h2>
-        <p>This review is a Diff. Generate a reading-order guide when you want one.</p>
-        {#if generateHint && !canGenerate}
-          <p>{generateHint}</p>
-        {/if}
-        <button
-          type="button"
-          class="ghost"
-          data-queue-generate={canGenerate ? reviewId : undefined}
-          disabled={!canGenerate}
-        >
-          Generate guide
-        </button>
-      </div>
+      <GenerateGuideEmpty
+        {reviewId}
+        {actions}
+        {agentConnected}
+        {onQueue}
+      />
     {/if}
   </div>
 </main>

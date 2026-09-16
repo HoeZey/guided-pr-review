@@ -5,8 +5,16 @@ import {
   serializeViewed,
   unmarkViewed,
 } from "$lib/shared/domain/guide-view";
-import { reviewLandingTab } from "$lib/shared/domain/overview";
-import type { ReviewTab } from "$lib/shared/page-data";
+import {
+  inFlightGenerateGuideCopy,
+  latestGenerateGuideAction,
+  reviewLandingTab,
+} from "$lib/shared/domain/overview";
+import type { GuideV1 } from "$lib/shared/contracts/guide";
+import type { ListReviewsOutput } from "$lib/shared/contracts/persistence";
+import type { StoredOutcome } from "$lib/shared/contracts/outcomes";
+import type { ReviewPageData, ReviewTab } from "$lib/shared/page-data";
+import { fetchJson } from "../browser/fetch";
 import {
   TAB_KEY,
   type StorageLike,
@@ -35,6 +43,7 @@ type ReviewSession = {
   selectedOutcomeSection: string | null;
   selectedOutcomeId: string | null;
   ops: UiOp[];
+  page: ReviewPageData | null;
 };
 
 function emptySession(): ReviewSession {
@@ -50,6 +59,7 @@ function emptySession(): ReviewSession {
     selectedOutcomeSection: null,
     selectedOutcomeId: null,
     ops: [],
+    page: null,
   };
 }
 
@@ -68,6 +78,7 @@ export function resetReviewSession(): void {
   session.selectedOutcomeSection = next.selectedOutcomeSection;
   session.selectedOutcomeId = next.selectedOutcomeId;
   session.ops = next.ops;
+  session.page = next.page;
 }
 
 export function bindReview(
@@ -89,6 +100,69 @@ export function bindReview(
   session.selectedOutcomeSection = null;
   session.selectedOutcomeId = null;
   session.ops = session.ops.filter((op) => !op.reviewId || op.reviewId === reviewId);
+}
+
+export function adoptReviewPage(data: ReviewPageData): void {
+  if (session.page?.reviewId === data.reviewId) return;
+  session.page = data;
+}
+
+export function currentReviewPage(ssr: ReviewPageData): ReviewPageData {
+  return session.page?.reviewId === ssr.reviewId ? session.page : ssr;
+}
+
+export function generateGuidePending(page: ReviewPageData): boolean {
+  const latest = latestGenerateGuideAction(page.reviewId, page.actions);
+  if (latest && inFlightGenerateGuideCopy(latest.status)) return true;
+  return session.ops.some(
+    (op) =>
+      op.kind === "generate-guide" &&
+      op.reviewId === page.reviewId &&
+      op.status === "pending",
+  );
+}
+
+export async function refreshCurrentReview(force = false): Promise<void> {
+  const page = session.page;
+  if (!page || page.kind !== "review") return;
+  if (session.reviewId !== page.reviewId) return;
+  if (!force && !generateGuidePending(page)) return;
+  try {
+    const listed = await fetchJson<ListReviewsOutput>("/api/reviews");
+    const payload = await fetchJson<{ guide: GuideV1; outcomes?: StoredOutcome[] }>(
+      `/api/reviews/${page.reviewId}`,
+    );
+    session.page = {
+      ...page,
+      title: payload.guide.title,
+      guide: payload.guide,
+      outcomes: payload.outcomes ?? [],
+      actions: listed.actions,
+      catalog: listed.catalog,
+      agentConnected: listed.agentConnected,
+    };
+    const latest = latestGenerateGuideAction(page.reviewId, listed.actions);
+    if (latest?.status === "succeeded" || latest?.status === "failed") {
+      session.ops = session.ops.filter((op) => op.id !== latest.id);
+    }
+  } catch {
+    /* Keep the hydrated review readable if the agent refresh fails. */
+  }
+}
+
+export async function queueGenerateGuide(reviewId: string): Promise<void> {
+  const created = await fetchJson<{ id: string }>("/api/actions", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ kind: "generate-guide", reviewId }),
+  });
+  session.ops = [
+    ...session.ops.filter(
+      (op) => !(op.kind === "generate-guide" && op.reviewId === reviewId),
+    ),
+    { id: created.id, kind: "generate-guide", reviewId, status: "pending" },
+  ];
+  await refreshCurrentReview(true);
 }
 
 export function setTab(
