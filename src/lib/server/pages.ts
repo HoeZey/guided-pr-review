@@ -7,12 +7,7 @@ function homeFromList(listed: ListReviewsOutput): HomePageData {
   return {
     kind: "home",
     status: "ok",
-    reviews: listed.reviews.map(({ id, title }) => ({ id, title })),
-    catalog: listed.catalog,
-    actions: listed.actions,
-    activeId: listed.activeId,
-    agentConnected: listed.agentConnected,
-    repositories: listed.repositories,
+    ...listed,
   };
 }
 

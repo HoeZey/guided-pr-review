@@ -11,6 +11,7 @@ import {
   FAKE_UNCHAPTERED_REVIEW,
 } from "$lib/shared/shell-fakes";
 import { HOME_PATH, reviewPath } from "$lib/shared/domain/overview";
+import { resetHomeUi } from "$lib/client/state/home.svelte";
 import { resetReviewSession, session } from "$lib/client/state/review.svelte";
 import AppShell from "./AppShell.svelte";
 
@@ -23,6 +24,7 @@ afterEach(() => {
   host?.remove();
   host = null;
   resetReviewSession();
+  resetHomeUi();
   vi.unstubAllGlobals();
 });
 

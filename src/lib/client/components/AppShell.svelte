@@ -1,8 +1,10 @@
 <script lang="ts">
-  import { HOME_PATH, reviewLandingTab, reviewPath } from "$lib/shared/domain/overview";
+  import { HOME_PATH, reviewLandingTab } from "$lib/shared/domain/overview";
   import type { HomePageData, ReviewPageData, ReviewTab } from "$lib/shared/page-data";
   import { prefs, setTheme } from "$lib/client/state/preferences.svelte";
   import { bindReview, session, setTab } from "$lib/client/state/review.svelte";
+  import HomeActions from "./home/HomeActions.svelte";
+  import HomeView from "./home/HomeView.svelte";
 
   let { data }: { data: HomePageData | ReviewPageData } = $props();
 
@@ -55,6 +57,9 @@
         <h1>{title}</h1>
       </div>
       <div class="header-actions">
+        {#if data.kind === "home" && data.status === "ok"}
+          <HomeActions {data} />
+        {/if}
         <button
           type="button"
           class="icon-btn square-toggle theme-toggle"
@@ -88,15 +93,7 @@
   {:else if data.status === "error"}
     <p class="err">{data.error}</p>
   {:else if data.kind === "home"}
-    <main class="home-main">
-      <div class="main-inner">
-        {#each data.reviews as row}
-          <a class="home-card-open" href={reviewPath(row.id)} data-open-review={row.id}>{row.title}</a>
-        {:else}
-          <p class="boot">No reviews yet. Add one from MCP or paste JSON.</p>
-        {/each}
-      </div>
-    </main>
+    <HomeView {data} />
   {:else}
     <main>
       <div class="main-inner">

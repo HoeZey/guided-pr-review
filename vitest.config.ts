@@ -10,7 +10,10 @@ export default defineConfig({
   cacheDir: path.join(root, "node_modules/.vite-vitest-client"),
   plugins: [svelte()],
   resolve: {
-    alias: { $lib: path.join(root, "src/lib") },
+    alias: {
+      $lib: path.join(root, "src/lib"),
+      "$app/navigation": path.join(root, "src/lib/client/browser/app-navigation.ts"),
+    },
     conditions: ["browser"],
   },
   test: {

@@ -33,7 +33,7 @@ reconciles browser-wide behavior only after those views exist.
 - [04 Introduce feature services and provider ports](04-introduce-services-and-ports.md) — done
 - [05 Preserve HTTP, MCP, and SSR data in SvelteKit](05-preserve-http-mcp-and-ssr.md) — done
 - [06 Build the Svelte review shell and shared state](06-build-svelte-review-shell.md) — done
-- [07 Render Home through SvelteKit SSR](07-render-ssr-home.md) — todo
+- [07 Render Home through SvelteKit SSR](07-render-ssr-home.md) — done
 - [08 Build shared Svelte code-view primitives](08-build-code-view-primitives.md) — done
 - [09 Port Guide to Svelte components](09-port-guide-view.md) — todo
 - [10 Port Diff to Svelte components](10-port-diff-view.md) — todo

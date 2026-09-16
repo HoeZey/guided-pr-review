@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "vitest";
 import { mount, unmount } from "svelte";
 import { FAKE_HOME_OK } from "$lib/shared/shell-fakes";
 import { reviewPath } from "$lib/shared/domain/overview";
+import { resetHomeUi } from "$lib/client/state/home.svelte";
 import { resetReviewSession } from "$lib/client/state/review.svelte";
 import HomePage from "./+page.svelte";
 
@@ -14,6 +15,7 @@ afterEach(() => {
   host?.remove();
   host = null;
   resetReviewSession();
+  resetHomeUi();
 });
 
 test("Home page renders the shell from fake page data", () => {

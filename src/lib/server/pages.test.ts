@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { GuideV1 } from "../shared/contracts/guide.ts";
+import { projectHomeOverview } from "../shared/domain/overview.ts";
 import { loadHomePage, loadReviewPage } from "./pages.ts";
 import { jsonRepositories, resetJsonStoreCache } from "./repositories/json/store.ts";
 import { createAppServices } from "./services/app.ts";
@@ -89,8 +90,17 @@ test("SSR home and review page data come from services without a Store v1 dump",
     const home = await loadHomePage(services);
     assert.equal(home.reviews[0].id, id);
     assert.equal(home.reviews[0].title, "One");
+    assert.equal(home.reviews[0].base, SHA_A);
+    assert.equal(home.reviews[0].head, SHA_B);
+    assert.equal(home.reviews[0].range, "main...feature/one");
     assert.equal(home.catalog.length, 1);
     assert.equal(home.activeId, id);
+    const overview = projectHomeOverview(home.reviews, home.catalog);
+    assert.deepEqual(
+      overview.groups.map((group) => group.id),
+      ["local-ranges"],
+    );
+    assert.equal(overview.groups[0].cards[0].id, id);
     assertNoSecrets(home);
 
     const review = await loadReviewPage(services, id);

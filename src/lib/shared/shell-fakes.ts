@@ -28,7 +28,16 @@ const emptyTransport = {
 export const FAKE_HOME_OK: HomePageData = {
   kind: "home",
   status: "ok",
-  reviews: [{ id: "fake-review", title: "Fake review" }],
+  reviews: [
+    {
+      id: "fake-review",
+      title: "Fake review",
+      addedAt: "2026-09-14T00:00:00.000Z",
+      base: FAKE_GUIDE.base,
+      head: FAKE_GUIDE.head,
+      range: "main...feature/fake",
+    },
+  ],
   ...emptyTransport,
 };
 

@@ -1,21 +1,17 @@
 import type { StoredAction, CatalogSnapshot, ConfiguredRepository } from "./contracts/catalog";
 import type { GuideV1 } from "./contracts/guide";
 import type { StoredOutcome } from "./contracts/outcomes";
+import type { ReviewSummary } from "./contracts/persistence";
 
 export type PageStatus = "ok" | "loading" | "error";
 
 export type ReviewTab = "guide" | "diff" | "review";
 
-export type HomeReviewLink = {
-  id: string;
-  title: string;
-};
-
 export type HomePageData = {
   kind: "home";
   status: PageStatus;
   error?: string;
-  reviews: HomeReviewLink[];
+  reviews: ReviewSummary[];
   catalog: CatalogSnapshot[];
   actions: StoredAction[];
   activeId: string | null;
