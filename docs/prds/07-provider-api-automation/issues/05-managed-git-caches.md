@@ -37,8 +37,10 @@ without a local clone or checkout.
 - Automatic cache retention/eviction
 - Private network in CI
 
-**Touches:** lib/server/git, local app-data configuration, process/filesystem
-fakes, Diff fixtures, tests
+**Touches:** src/lib/server/git/ports.ts (GitCacheIdentity, ManagedGitCache,
+GitDiff); new git process/filesystem adapter under src/lib/server/git/;
+CredentialSource from src/lib/server/auth/ports.ts; local app-data under
+GUIDED_PR_REVIEW_DATA; process/filesystem fakes; Diff fixtures; tests
 
 **Acceptance criteria:**
 

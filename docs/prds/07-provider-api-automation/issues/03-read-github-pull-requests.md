@@ -39,8 +39,11 @@ and PR records from GitHub as from ADO.
 - Account-wide repository discovery
 - GitHub Enterprise unless separately proved compatible
 
-**Touches:** lib/server/providers/github, lib/shared provider contracts,
-provider fixtures and tests
+**Touches:** src/lib/server/providers/ports.ts (same reader ports as 02); new
+GitHub REST adapter under src/lib/server/providers/; shared catalog/provenance
+contracts under src/lib/shared/contracts/; CredentialSource from
+src/lib/server/auth/ports.ts; provider fixtures and tests. Do not use
+GitHostAdapter.fetchOpen here.
 
 **Acceptance criteria:**
 

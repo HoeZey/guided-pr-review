@@ -36,8 +36,13 @@ existing gh identity without accepting or persisting credentials itself.
 - Native OAuth or multiple accounts per provider
 - Repository or PR network calls
 
-**Touches:** lib/server/auth, provider connection service, Svelte connection
-state/components, tests
+**Touches:** src/lib/server/auth/ports.ts (CredentialSource,
+CredentialStatus, CredentialIdentity, CredentialResult); new CLI
+CredentialSource and command runner under src/lib/server/auth/; connection
+status through src/lib/server/services/app.ts and src/lib/server/runtime.ts;
+Svelte connection state beside src/lib/client/state/home.svelte.ts and
+src/lib/client/components/home/; thin SvelteKit +server.ts; fake
+command-runner tests
 
 **Acceptance criteria:**
 

@@ -40,8 +40,12 @@ focus, or manual request without a waiting agent.
 - Comment refresh
 - Deleting saved reviews
 
-**Touches:** catalog service/repository, provider readers, SvelteKit server
-lifecycle/handler, Svelte Home state/components, overview projection, tests
+**Touches:** src/lib/server/services/catalog.ts, CatalogRepository in
+src/lib/server/repositories/ports.ts, src/routes/api/catalog/+server.ts;
+ProviderPullRequestReader; createAppServices in src/lib/server/services/app.ts
+and src/lib/server/runtime.ts; Home src/lib/client/state/home.svelte.ts
+(today queueHomeAction refresh still posts /api/actions);
+src/lib/shared/domain/overview.ts; tests
 
 **Acceptance criteria:**
 

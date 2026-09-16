@@ -23,9 +23,9 @@ containing every accepted provider story before develop or main moves.
 
 **Scope (in):**
 
-- Pin post-06 develop base.
+- Pin post-06 develop base 01d2314e6f4a050a2064803348f102c476cf94e2.
 - Confirm coordinator reconciled issue target paths and port names against
-  actual 06 output before implementation branches started.
+  that SHA in this issues/README.md before implementation branches started.
 - Verify the existing epic branch contains one accepted story commit in
   dependency order; do not reset or replay commits already integrated.
 - Resolve shared provider/service/repository/client overlap once.

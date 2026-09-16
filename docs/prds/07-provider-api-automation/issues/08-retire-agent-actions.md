@@ -39,9 +39,12 @@ code-review publication, not host or git work.
 - OAuth implementation
 - Comment actions
 
-**Touches:** action contracts/repository/services, lib/server MCP,
-SvelteKit handlers, shared overview domain, Svelte operation state/copy,
-SKILL.md, tests
+**Touches:** ActionRepository and src/lib/server/services/actions.ts;
+src/routes/api/actions and src/lib/server/mcp/handler.ts;
+src/lib/shared/contracts/catalog.ts action kinds; src/lib/shared/domain/overview.ts;
+queueHomeAction in src/lib/client/state/home.svelte.ts; queueGenerateGuide in
+src/lib/client/state/review.svelte.ts; SKILL.md; tests. Keep generate-guide
+queue/claim/complete.
 
 **Acceptance criteria:**
 

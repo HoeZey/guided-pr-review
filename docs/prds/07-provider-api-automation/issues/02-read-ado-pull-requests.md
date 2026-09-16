@@ -39,8 +39,12 @@ PR metadata through direct REST without Cursor/ADO MCP or az host commands.
 - Creating/updating PRs or votes
 - Live network in CI
 
-**Touches:** lib/server/providers/ado, lib/shared provider contracts, provider
-fixtures and tests
+**Touches:** src/lib/server/providers/ports.ts (ProviderRepositoryReader,
+ProviderPullRequestReader, ProviderRepositoryIdentity,
+ProviderPullRequestMetadata); new ADO REST adapter under
+src/lib/server/providers/; shared catalog/provenance contracts under
+src/lib/shared/contracts/; CredentialSource from src/lib/server/auth/ports.ts;
+provider fixtures and tests. Do not use GitHostAdapter.fetchOpen here.
 
 **Acceptance criteria:**
 

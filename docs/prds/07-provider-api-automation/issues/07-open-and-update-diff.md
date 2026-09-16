@@ -41,8 +41,13 @@ one app request even when no agent is connected.
 - Provider patch-only diffs
 - Persisted job queue or progress stream
 
-**Touches:** review service, provider/cache/repository ports, SvelteKit
-Open/Update handlers, Home/review Svelte state/components, tests
+**Touches:** src/lib/server/services/reviews.ts (today completeOpen /
+completeUpdateDiff still go through GitHostAdapter.fetchOpen);
+ProviderPullRequestReader; ManagedGitCache and GitDiff in
+src/lib/server/git/ports.ts; ReviewRepository.upsertReview;
+SvelteKit Open/Update +server.ts; Home queueHomeAction and
+src/lib/client/state/review.svelte.ts; tests with fake providers and local
+git-cache fixtures
 
 **Acceptance criteria:**
 

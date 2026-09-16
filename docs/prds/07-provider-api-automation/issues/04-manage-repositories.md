@@ -42,8 +42,12 @@ list, including current origin, without a waiting agent or hidden account scan.
 - Selecting multiple identities
 - Opening Diff in this story
 
-**Touches:** configured repository contracts/repository/service, Svelte Home
-controls/state, SvelteKit +server.ts handlers, tests
+**Touches:** ConfiguredRepositoryPort and ConfiguredRepositoryRecord in
+src/lib/server/repositories/ports.ts; JSON adapter
+src/lib/server/repositories/json/store.ts; provider readers from
+src/lib/server/providers/ports.ts; Home src/lib/client/state/home.svelte.ts
+and src/lib/client/components/home/; SvelteKit +server.ts; tests with fake
+provider readers
 
 **Acceptance criteria:**
 
