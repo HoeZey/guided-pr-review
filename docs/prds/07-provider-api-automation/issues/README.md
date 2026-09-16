@@ -55,7 +55,7 @@ PRD behavior unchanged. Issue Touches fields now name HEAD symbols:
 ## Status
 
 - [01 Connect one ADO and one GitHub CLI identity](01-connect-cli-identities.md) — done
-- [02 Read repositories and pull requests through ADO REST](02-read-ado-pull-requests.md) — todo
+- [02 Read repositories and pull requests through ADO REST](02-read-ado-pull-requests.md) — done
 - [03 Read repositories and pull requests through GitHub REST](03-read-github-pull-requests.md) — todo
 - [04 Manage explicit configured repositories](04-manage-repositories.md) — todo
 - [05 Fetch exact commits through managed bare caches](05-managed-git-caches.md) — todo

@@ -21,6 +21,7 @@ export type ProviderRepositoryIdentity = {
   name: string;
   webUrl: string;
   cloneUrl?: string;
+  defaultBranch?: string;
 };
 
 export type ProviderPullRequestMetadata = {
