@@ -27,7 +27,7 @@ const TOOL_DEFS = [
   {
     name: "queue_action",
     description:
-      "Queue an Open, Update Diff, Refresh, or Generate guide action. Dedupes an in-flight action of the same kind and target, or an in-flight Generate guide for the same review.",
+      "Queue a Generate guide action for an unchaptered review. Dedupes an in-flight Generate guide for the same review.",
     inputSchema: schema(tools.queue_action.input),
   },
   {
@@ -39,7 +39,7 @@ const TOOL_DEFS = [
   {
     name: "complete_action",
     description:
-      "Mark a claimed action succeeded or failed. Succeeded Open, Update Diff, and Generate guide require reviewId. Refresh success does not. Failed requires a structured error.",
+      "Mark a claimed Generate guide action succeeded or failed. Succeeded Generate guide requires reviewId. Failed requires a structured error.",
     inputSchema: schema(tools.complete_action.input),
   },
   {

@@ -44,10 +44,10 @@ test("SSR Home HTML contains projected groups, badges, ranges, and states before
   expect(body).not.toContain("Closed unguided");
 });
 
-test("SSR Home renders waiting and disconnected action states from page data", () => {
+test("SSR Home renders Generate guide waiting without hiding Open", () => {
   const waiting = render(AppShell, { props: { data: HOME_FIXTURE_WAITING } }).body;
   expect(waiting).toContain("Waiting");
-  expect(waiting).not.toContain("data-queue-open");
+  expect(waiting).toContain("data-queue-open");
 
   const disconnected = render(AppShell, { props: { data: HOME_FIXTURE_DISCONNECTED } }).body;
   expect(disconnected).toContain("Open from host");

@@ -24,150 +24,40 @@ Skill root is the directory that contains this SKILL.md (this git repo).
 
 - Named Azure DevOps PR URL or numeric id → **Named ADO PR** (upsert_review).
 - Explicit SHA, branch, or git range → **Local range** (add_review).
-- Neither → **Home**. Sync current-origin PR metadata, then open
-  http://localhost:8765/. Do not chapter a guide. Then wait for Open,
-  Update Diff, Refresh, and Generate guide actions. Do not call add_review
-  until an Open or Update Diff action is claimed.
+- Neither → **Home**. Open http://localhost:8765/. The app syncs catalogs
+  and opens or updates diffs. Do not chapter a guide. Wait only when
+  Generate Guide is requested.
 
 Do not switch the user's working tree on either review path. Do not git checkout,
 git switch, git reset, or git worktree add unless the user asked.
 
 ## Home
 
-A bare skill trigger syncs current-origin PR metadata and opens Home. No guide
-is generated until the reviewer selects a named PR, SHA, branch, or range.
+A bare skill trigger opens Home. The app syncs current origin and configured
+repositories. No guide is generated until the reviewer selects a named PR,
+SHA, branch, or range, or requests Generate Guide on an unchaptered Diff.
 
 1. **Ensure the instance is up** (same as Local range step 5). Do not start a
    second process if port 8765 is already taken.
 
-2. **Read origin** (same host rules as Named ADO PR step 1). Parse organization,
-   project, repository name, owner, host, and repo web URL.
+2. **Open Home.** http://localhost:8765/. Do not write reviews or catalogs
+   through MCP. Do not authenticate against provider MCP. Do not read origin.
+   Do not fetch commits. Do not chapter. Do not open a review URL.
 
-   If origin is not Azure DevOps: open http://localhost:8765/. Tell the user
-   catalog sync needs an Azure DevOps origin. Do not call replace_catalog,
-   add_review, or upsert_review.
-
-3. **Authenticate** (same as Named ADO PR step 3).
-
-4. **Resolve the origin repository.** repo_repository action get, project and
-   repositoryNameOrId from origin. Read repository.id and webUrl. Owner is
-   org/project. Host is never ssh.dev.azure.com.
-
-5. **List relationship metadata** with repo_pull_request action list,
-   repositoryId, project, status Active, top 100:
-
-   - created_by_me true
-   - i_am_reviewer true
-
-   Union by pullRequestId. A PR in the authored list is isAuthor. A PR in the
-   reviewer list is isReviewer. Keep an item when it is an active non-draft
-   review request or the user is the author (including the user's active
-   drafts). Drop reviewer-only drafts; they are not review requests.
-
-6. **Fill refs and commits.** The list payload is trimmed. For each kept PR,
-   repo_pull_request action get with repositoryId, pullRequestId, project
-   (includeChangedFiles false). Read title, isDraft, status, createdBy display
-   name, sourceRefName, targetRefName, url, lastMergeSourceCommit.commitId,
-   lastMergeTargetCommit.commitId, and a timestamp (closedDate or
-   creationDate). If a SHA is missing, skip that PR rather than inventing one.
-   If one get fails, skip that PR and continue.
-
-7. **Push the snapshot.** tools/call name replace_catalog. origin true.
-   repository is provider azure-devops plus host, id, owner, name, webUrl.
-   syncedAt is the current UTC ISO timestamp. pullRequests use status
-   active / completed / abandoned, boolean isDraft / isReviewer / isAuthor,
-   and the 40-character source and target commits. HTTP equivalent: PUT
-   http://localhost:8765/api/catalog with the same JSON body.
-
-   If repository get or both list calls fail: still call replace_catalog with
-   origin true, the repository identity you have, error as a short message, and
-   no pullRequests. That records an isolated catalog failure and keeps saved
-   guides.
-
-8. **Open Home.** http://localhost:8765/. Do not call add_review. Do not
-   chapter. Do not open a review URL.
-
-9. **Wait for actions.** Keep the instance running. Loop until the user stops
-   the skill:
+3. **Wait only for Generate Guide.** Keep the instance running. Loop until
+   the user stops the skill:
 
    - tools/call name wait_for_action with timeoutMs 25000 (HTTP: POST
      http://localhost:8765/api/actions/wait). That heartbeats the agent.
      Idle returns { "action": null }; loop immediately.
-   - If action.kind is open: handle **Open as Diff** below, then loop.
-   - If action.kind is update-diff: handle **Update Diff** below, then loop.
-   - If action.kind is refresh: handle **Refresh** below, then loop.
    - If action.kind is generate-guide: handle **Generate guide** below, then
      loop.
    - Any other kind: tools/call complete_action with status failed and
      error { "code": "unsupported-action", "message": "this session handles
-     Open, Update Diff, Refresh, and Generate guide" }. Then loop.
+     Generate guide" }. Then loop.
 
-   Do not Add repository from this loop.
-
-## Open as Diff
-
-Claimed Open means the reviewer picked a catalog PR with no saved review.
-Fetch exact commits without checkout. Do not chapter.
-
-1. **Authenticate** if the session dropped (Named ADO PR step 3).
-2. **Resolve identity without checkout** using action.target (host,
-   repository.id, repository.name, repository.owner, number) and Named ADO
-   PR steps 4, 5, and 7. Guide.base is the target SHA. Guide.head is the
-   source SHA. Guide.title is the PR title. Collect hunks with Local range
-   step 2. Empty diff: complete_action failed, error
-   { "code": "empty-diff", "message": "no changes to open" }, then return
-   to the wait loop. Do not upsert.
-3. **Build an unchaptered Guide v1.** One placeholder chapter holds every
-   file (kind core, id unchaptered). Set unchaptered to true. Set source as
-   in Named ADO PR step 9. Do not assign reading-order chapters. Do not run
-   Local range step 3.
-4. **Push via upsert_review**, then complete_action status succeeded with
-   the returned reviewId. HTTP: PUT http://localhost:8765/api/reviews then
-   POST http://localhost:8765/api/actions/{id}/complete. On any host or git
-   failure: complete_action status failed with
-   { "code": "open-failed", "message": "<short reason>" }. Do not change
-   other reviews. Then return to the wait loop.
-
-The app opens Diff. Do not open a review URL from the skill; the viewer
-navigates when the action succeeds.
-
-## Update Diff
-
-Claimed Update Diff means the reviewer wants a fresh snapshot of a saved PR
-whose catalog source commit moved. Same fetch as Open as Diff. Do not chapter.
-
-1. Follow Open as Diff steps 1–4 (authenticate, fetch exact commits without
-   checkout, build an unchaptered Guide v1, upsert_review, complete_action
-   succeeded with reviewId). Empty diff: complete_action failed, error
-   { "code": "empty-diff", "message": "no changes to open" }, then return to
-   the wait loop. Host or git failure: complete_action failed with
-   { "code": "update-failed", "message": "<short reason>" }. Then loop.
-2. upsert_review keeps the same id and replaces the stored snapshot. Do not
-   require chaptering. Then return to the wait loop.
-
-The app opens Diff. Do not open a review URL from the skill.
-
-## Refresh
-
-Claimed Refresh means the reviewer asked to replace catalog snapshots. Do not
-upsert. Do not delete saved reviews. Do not chapter.
-
-1. Repeat Home steps 2–7 (origin, authenticate, resolve repository, list
-   relationship metadata, fill refs and commits, replace_catalog).
-2. Also include saved pull requests that are no longer Active. tools/call
-   list_reviews. For each listed review with pullRequest whose number is
-   missing from the snapshot, repo_pull_request action get (includeChangedFiles
-   false) and append that PR with its host status (active, completed, or
-   abandoned). Skip a get that fails rather than dropping the rest.
-3. Push the combined snapshot with replace_catalog as in Home step 7. The store
-   adopts matching unsourced local-range reviews (exact source branch, else
-   unique ticket key). Do not call upsert_review for Refresh.
-4. complete_action status succeeded. Do not send reviewId. On host failure:
-   complete_action failed with { "code": "refresh-failed", "message": "<short
-   reason>" }. Then return to the wait loop.
-
-There is no timer. Refresh runs at bare skill startup (Home steps 1–8) and
-when the reviewer queues this action.
+The app owns Open, Update Diff, Refresh, and Add repository. Do not queue or
+complete those from this skill.
 
 ## Generate guide
 
@@ -393,11 +283,9 @@ review URL from the skill.
 - No LLM inside the app.
 - Do not implement product code in the repo under review.
 - Do not post ADO comments from this skill (a later story).
-- Do not chapter or upsert from a bare Home trigger. Catalog sync is
-  replace_catalog only.
-- Do not add a second repository from this path (later overview stories).
-  After Home catalog sync, wait for Open, Update Diff, Refresh, and
-  Generate guide.
+- Do not chapter or upsert from a bare Home trigger. The app owns catalog
+  sync, Open, Update Diff, Refresh, and Add repository.
+- After Home is open, wait only for Generate guide.
 
 ## MCP tools
 
@@ -408,16 +296,13 @@ review URL from the skill.
 - replace_catalog { origin, repository, syncedAt?, error?, pullRequests } →
   { ok: true } — catalog snapshot for one repository. Never deletes saved
   reviews. Adopts matching unsourced local-range reviews onto catalog PRs.
-- queue_action { kind: "open" | "update-diff" | "refresh" |
-  "generate-guide", target?, reviewId? } → { id } — target required for Open
-  and Update Diff. reviewId required for Generate guide. Dedupes an in-flight
-  action of the same kind and target, or an in-flight Generate guide for the
-  same review.
+- queue_action { kind: "generate-guide", reviewId } → { id } — reviewId
+  required. Dedupes an in-flight Generate guide for the same review.
 - wait_for_action { timeoutMs? } → { action } — claims the next queued
-  action and heartbeats the agent. Null when idle.
+  Generate guide action and heartbeats the agent. Null when idle.
 - complete_action { id, status, reviewId?, error? } → { ok: true } —
-  reviewId required when Open, Update Diff, or Generate guide succeeds.
-  Refresh success does not send reviewId.
+  reviewId required when Generate guide succeeds. Failed requires a
+  structured error.
 - add_review { guide } → { id } — new snapshot (local ranges).
 - upsert_review { guide } → { id } — stable id for a named ADO PR.
 - publish_review_outcome { reviewId, outcome } → { id }
@@ -425,9 +310,7 @@ review URL from the skill.
 - get_review { id } → { guide, outcomes }
 - set_active { id } → { activeId }
 
-Bare http://localhost:8765/ is Home after catalog sync. The waiting agent
-then long-polls wait_for_action. An explicit add or upsert opens
-http://localhost:8765/reviews/{id}. Open and Update Diff upsert an unchaptered
-review and the app lands on Diff. Refresh replaces catalog snapshots and
-updates Last synced. Generate guide chapters that review in place; Guide
-becomes the walkthrough.
+Bare http://localhost:8765/ is Home. The app syncs catalogs and opens diffs.
+The waiting agent then long-polls wait_for_action only for Generate guide.
+An explicit add or upsert opens http://localhost:8765/reviews/{id}. Generate
+guide chapters that review in place; Guide becomes the walkthrough.

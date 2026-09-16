@@ -2,7 +2,7 @@ import { z } from "zod";
 import {
   CatalogSnapshot,
   ConfiguredRepository,
-  StoredAction,
+  StoredActions,
 } from "./catalog.ts";
 import { GuideV1 } from "./guide.ts";
 import { StoredOutcome } from "./outcomes.ts";
@@ -23,7 +23,7 @@ export const StoreV1 = z
     reviews: z.array(ReviewRecord),
     repositories: z.array(ConfiguredRepository).default([]),
     catalog: z.array(CatalogSnapshot).default([]),
-    actions: z.array(StoredAction).default([]),
+    actions: StoredActions,
     agentLastSeen: z.string().min(1).optional(),
   })
   .strict();
@@ -71,7 +71,7 @@ export const ListReviewsOutput = z
     activeId: z.string().nullable(),
     repositories: z.array(ConfiguredRepository),
     catalog: z.array(CatalogSnapshot),
-    actions: z.array(StoredAction),
+    actions: StoredActions,
     agentConnected: z.boolean(),
   })
   .strict();

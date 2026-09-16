@@ -21,10 +21,11 @@ const listed = {
 
 const claimed: StoredAction = {
   id: "a1",
-  kind: "refresh",
+  kind: "generate-guide",
   status: "claimed",
   queuedAt: "t",
   claimedAt: "t",
+  reviewId: "r1",
 };
 
 function fakeServices(overrides: {
@@ -45,8 +46,6 @@ function fakeServices(overrides: {
       seedIfEmpty: unused("seedIfEmpty"),
       openDiff: unused("openDiff"),
       updateDiff: unused("updateDiff"),
-      completeOpen: unused("completeOpen"),
-      completeUpdateDiff: unused("completeUpdateDiff"),
     },
     catalog: { replace: unused("replace") },
     catalogRefresh: { refresh: unused("catalogRefresh") },

@@ -3,9 +3,6 @@ import {
   ActionError,
   CatalogPullRequest,
   QueueGenerateGuideInput,
-  QueueOpenInput,
-  QueueRefreshInput,
-  QueueUpdateDiffInput,
   StoredAction,
 } from "./catalog.ts";
 import { GuideV1 } from "./guide.ts";
@@ -22,12 +19,7 @@ export const tools = {
     output: ListReviewsOutput,
   },
   queue_action: {
-    input: z.discriminatedUnion("kind", [
-      QueueOpenInput,
-      QueueUpdateDiffInput,
-      QueueRefreshInput,
-      QueueGenerateGuideInput,
-    ]),
+    input: QueueGenerateGuideInput,
     output: z.object({ id: z.string() }).strict(),
   },
   wait_for_action: {

@@ -89,32 +89,6 @@ const storedActionBase = {
   error: ActionError.optional(),
 };
 
-export const StoredOpenAction = z
-  .object({
-    ...storedActionBase,
-    kind: z.literal("open"),
-    target: OpenActionTarget,
-    reviewId: z.string().min(1).optional(),
-  })
-  .strict();
-
-export const StoredUpdateDiffAction = z
-  .object({
-    ...storedActionBase,
-    kind: z.literal("update-diff"),
-    target: OpenActionTarget,
-    reviewId: z.string().min(1).optional(),
-  })
-  .strict();
-
-export const StoredRefreshAction = z
-  .object({
-    ...storedActionBase,
-    kind: z.literal("refresh"),
-    reviewId: z.string().min(1).optional(),
-  })
-  .strict();
-
 export const StoredGenerateGuideAction = z
   .object({
     ...storedActionBase,
@@ -123,28 +97,17 @@ export const StoredGenerateGuideAction = z
   })
   .strict();
 
-export const StoredAction = z.discriminatedUnion("kind", [
-  StoredOpenAction,
-  StoredUpdateDiffAction,
-  StoredRefreshAction,
-  StoredGenerateGuideAction,
-]);
+export const StoredAction = StoredGenerateGuideAction;
 
-export const QueueOpenInput = z
-  .object({
-    kind: z.literal("open"),
-    target: OpenActionTarget,
-  })
-  .strict();
+const RetiredActionKind = z.enum(["open", "update-diff", "refresh"]);
 
-export const QueueUpdateDiffInput = z
-  .object({
-    kind: z.literal("update-diff"),
-    target: OpenActionTarget,
-  })
-  .strict();
-
-export const QueueRefreshInput = z.object({ kind: z.literal("refresh") }).strict();
+export const StoredActions = z.preprocess((value) => {
+  if (!Array.isArray(value)) return value;
+  return value.filter((row) => {
+    if (!row || typeof row !== "object" || !("kind" in row)) return true;
+    return !RetiredActionKind.safeParse((row as { kind: unknown }).kind).success;
+  });
+}, z.array(StoredAction).default([]));
 
 export const QueueGenerateGuideInput = z
   .object({
@@ -154,7 +117,6 @@ export const QueueGenerateGuideInput = z
   .strict();
 
 export type StoredAction = z.infer<typeof StoredAction>;
-export type StoredOpenAction = z.infer<typeof StoredOpenAction>;
 export type StoredGenerateGuideAction = z.infer<typeof StoredGenerateGuideAction>;
 export type ActionKind = StoredAction["kind"];
 export type OpenActionTarget = z.infer<typeof OpenActionTarget>;

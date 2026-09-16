@@ -36,13 +36,14 @@ function repos(overrides: Partial<AppRepositories>): AppRepositories {
 test("catalog, action, outcome, and review commands use injected repository ports", async () => {
   const claimed: StoredAction = {
     id: "a1",
-    kind: "refresh",
+    kind: "generate-guide",
     status: "claimed",
     queuedAt: "t",
     claimedAt: "t",
+    reviewId: "r1",
   };
   const catalogInput = { origin: true };
-  const queueInput = { kind: "refresh" };
+  const queueInput = { kind: "generate-guide", reviewId: "r1" };
   const completeInput = { id: "a1", status: "succeeded" };
   const outcome = { id: "run-1" };
   const seen: string[] = [];

@@ -1,17 +1,4 @@
-import type { OpenActionTarget } from "../../shared/contracts/catalog.ts";
-import type { FileChange } from "../../shared/contracts/guide.ts";
-import type { PullRequestSource } from "../../shared/contracts/provenance.ts";
-
 export type GitProviderKind = "azure-devops" | "github";
-
-/** Waiting-agent Open/Update Diff snapshot. Not a god GitHost; 07 uses the readers below. */
-export type GitHostAdapter = {
-  fetchOpen: (target: OpenActionTarget) => Promise<{
-    title: string;
-    files: FileChange[];
-    source: PullRequestSource;
-  }>;
-};
 
 export type ProviderRepositoryIdentity = {
   provider: GitProviderKind;

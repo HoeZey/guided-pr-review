@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 blocked_by:
   - 07-open-and-update-diff
 blocks:
@@ -48,17 +48,48 @@ queue/claim/complete.
 
 **Acceptance criteria:**
 
-- [ ] Refresh, repository management, Open, and Update expose no agent action.
-- [ ] Dead queue/action code has no callers.
-- [ ] Generate Guide still chapters in place through explicit agent session.
-- [ ] code-review still publishes matching outcomes independently.
-- [ ] Browser never claims app can launch an LLM.
-- [ ] SKILL.md performs no provider metadata or git work for deterministic
+- [x] Refresh, repository management, Open, and Update expose no agent action.
+- [x] Dead queue/action code has no callers.
+- [x] Generate Guide still chapters in place through explicit agent session.
+- [x] code-review still publishes matching outcomes independently.
+- [x] Browser never claims app can launch an LLM.
+- [x] SKILL.md performs no provider metadata or git work for deterministic
   paths.
-- [ ] Full action and skill contract tests pass.
+- [x] Full action and skill contract tests pass.
 
 **Blocked by:** 07 Open and update Diff
 
 **Blocks:** 09 integration
 
 **Parallel-eligible:** no
+
+## CLI-auth UX
+
+16 September 2026. Existing az and gh CLI sessions are usable (az account
+show returned BBH Dev Pilot; gh auth status logged in to github.com).
+Terminal login is not a material friction for this slice. Native OAuth stays
+deferred. No PAT. No live comment mutation. No isolated 8771 server started.
+
+## code-review
+
+Date: 16 September 2026
+
+base: 6e0e52716fcfd281a209eae7032df44e6ea01bb0
+head: 2104a03800d8ee3adc230d912ef00df1427b600a
+branch: feature/07-08-retire-agent-actions
+
+Not blocking. Standards has no majors. Spec has no missing or incorrect findings.
+
+Judged leftover notes, not findings: Home queueHomeAction still types open, update-diff, and refresh, then POST to app APIs (/api/reviews/open, /api/reviews/update-diff, catalog refresh). Generate Guide still POST /api/actions. GitHostAdapter.fetchOpen, completeOpen, completeUpdateDiff, and MCP queue_action kinds open, update-diff, and refresh have no production callers. Historical issue docs still name GitHostAdapter.fetchOpen. homeCardAction still takes unused agentConnected; Open, Update, and Refresh no longer read it. Generate Guide still gates on agentConnected.
+
+### Standards
+
+major 0 / minor 0 / nit 0
+
+findings: []
+
+### Spec
+
+missing 0 / partial 0 / scope-creep 0 / incorrect 0
+
+findings: []

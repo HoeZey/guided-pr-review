@@ -1,4 +1,4 @@
-import type { OpenActionTarget, StoredAction } from "../../../shared/contracts/catalog.ts";
+import type { StoredAction } from "../../../shared/contracts/catalog.ts";
 import { GuideV1 } from "../../../shared/contracts/guide.ts";
 import {
   CodeReviewOutcome,
@@ -36,27 +36,19 @@ function unwrapGuide(body: unknown): GuideV1 {
   );
 }
 
-function sameOpenTarget(a: OpenActionTarget, b: OpenActionTarget): boolean {
-  return pullRequestSyncKey(a) === pullRequestSyncKey(b);
-}
-
 function isInFlight(action: StoredAction): boolean {
   return action.status === "queued" || action.status === "claimed";
 }
 
 function sameQueuedAction(
   existing: StoredAction,
-  parsed: { kind: StoredAction["kind"]; target?: OpenActionTarget; reviewId?: string },
+  parsed: { kind: StoredAction["kind"]; reviewId?: string },
 ): boolean {
-  if (!isInFlight(existing) || existing.kind !== parsed.kind) return false;
-  if (parsed.kind === "refresh") return true;
-  if (parsed.kind === "generate-guide") {
-    return existing.kind === "generate-guide" && existing.reviewId === parsed.reviewId;
-  }
-  return Boolean(
-    (existing.kind === "open" || existing.kind === "update-diff") &&
-      parsed.target &&
-      sameOpenTarget(existing.target, parsed.target),
+  return (
+    isInFlight(existing) &&
+    existing.kind === "generate-guide" &&
+    parsed.kind === "generate-guide" &&
+    existing.reviewId === parsed.reviewId
   );
 }
 
@@ -93,43 +85,23 @@ export async function listReviews(): Promise<ListReviewsOutput> {
 export async function queueAction(input: unknown): Promise<{ id: string }> {
   const parsed = tools.queue_action.input.parse(input);
   return mutateStore((store) => {
-    if (parsed.kind === "generate-guide") {
-      const found = store.reviews.find((review) => review.id === parsed.reviewId);
-      if (!found) {
-        throw httpError(`unknown review ${parsed.reviewId}`, 404);
-      }
-      if (!found.guide.unchaptered) {
-        throw httpError("Generate guide is only for an unchaptered review", 400);
-      }
+    const found = store.reviews.find((review) => review.id === parsed.reviewId);
+    if (!found) {
+      throw httpError(`unknown review ${parsed.reviewId}`, 404);
+    }
+    if (!found.guide.unchaptered) {
+      throw httpError("Generate guide is only for an unchaptered review", 400);
     }
     const existing = store.actions.find((action) => sameQueuedAction(action, parsed));
     if (existing) return { id: existing.id };
     const id = crypto.randomUUID();
-    const queuedAt = new Date().toISOString();
-    if (parsed.kind === "generate-guide") {
-      store.actions.push({
-        id,
-        kind: "generate-guide",
-        status: "queued",
-        queuedAt,
-        reviewId: parsed.reviewId,
-      });
-    } else if (parsed.kind === "refresh") {
-      store.actions.push({
-        id,
-        kind: "refresh",
-        status: "queued",
-        queuedAt,
-      });
-    } else {
-      store.actions.push({
-        id,
-        kind: parsed.kind,
-        status: "queued",
-        queuedAt,
-        target: parsed.target,
-      });
-    }
+    store.actions.push({
+      id,
+      kind: "generate-guide",
+      status: "queued",
+      queuedAt: new Date().toISOString(),
+      reviewId: parsed.reviewId,
+    });
     return { id };
   });
 }
@@ -168,11 +140,8 @@ export async function completeAction(input: unknown): Promise<{ ok: true }> {
     if (!isInFlight(action)) {
       throw httpError(`action ${parsed.id} is not in flight`, 409);
     }
-    if (parsed.status === "succeeded" && action.kind !== "refresh" && !parsed.reviewId) {
-      throw httpError(
-        "reviewId required when Open, Update Diff, or Generate guide succeeds",
-        400,
-      );
+    if (parsed.status === "succeeded" && !parsed.reviewId) {
+      throw httpError("reviewId required when Generate guide succeeds", 400);
     }
     action.status = parsed.status;
     action.completedAt = new Date().toISOString();

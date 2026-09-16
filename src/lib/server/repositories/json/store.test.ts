@@ -252,6 +252,95 @@ test("old Store v1 JSON without source still loads", async () => {
   });
 });
 
+test("leftover Open Update Diff and Refresh actions drop on load; Generate guide stays", async () => {
+  await withStore(async () => {
+    await writeFile(
+      join(process.env.GUIDED_PR_REVIEW_DATA!, "reviews.json"),
+      `${JSON.stringify({
+        version: 1,
+        activeId: "r1",
+        reviews: [
+          {
+            id: "r1",
+            addedAt: "2020-01-01T00:00:00.000Z",
+            guide: { ...sample, unchaptered: true },
+            outcomes: [],
+          },
+        ],
+        actions: [
+          {
+            id: "open-1",
+            kind: "open",
+            status: "queued",
+            queuedAt: "2026-09-16T00:00:00.000Z",
+            target: {
+              provider: "azure-devops",
+              host: "dev.azure.com",
+              repository: {
+                id: "repo-1",
+                owner: "braidteam/BRAID",
+                name: "braid-connection-designer",
+                webUrl: "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer",
+              },
+              number: 1101,
+            },
+          },
+          {
+            id: "upd-1",
+            kind: "update-diff",
+            status: "claimed",
+            queuedAt: "2026-09-16T00:01:00.000Z",
+            claimedAt: "2026-09-16T00:01:01.000Z",
+            target: {
+              provider: "azure-devops",
+              host: "dev.azure.com",
+              repository: {
+                id: "repo-1",
+                owner: "braidteam/BRAID",
+                name: "braid-connection-designer",
+                webUrl: "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer",
+              },
+              number: 1101,
+            },
+          },
+          {
+            id: "ref-1",
+            kind: "refresh",
+            status: "queued",
+            queuedAt: "2026-09-16T00:02:00.000Z",
+          },
+          {
+            id: "gen-1",
+            kind: "generate-guide",
+            status: "queued",
+            queuedAt: "2026-09-16T00:03:00.000Z",
+            reviewId: "r1",
+          },
+        ],
+      })}\n`,
+    );
+    resetJsonStoreCache();
+    const listed = await listReviews();
+    assert.equal(listed.reviews.length, 1);
+    assert.equal(listed.reviews[0].id, "r1");
+    assert.deepEqual(
+      listed.actions.map((action) => action.id),
+      ["gen-1"],
+    );
+    assert.equal(listed.actions[0].kind, "generate-guide");
+  });
+});
+
+test("queueing Open Update Diff or Refresh is rejected", async () => {
+  await withStore(async () => {
+    await assert.rejects(() => queueAction({ kind: "open", target: openTarget() }));
+    await assert.rejects(() => queueAction({ kind: "update-diff", target: openTarget() }));
+    await assert.rejects(() => queueAction({ kind: "refresh" }));
+    const listed = await listReviews();
+    assert.equal(listed.actions.length, 0);
+  });
+});
+
 test("same provider host repository PR upserts to one stable id", async () => {
   await withStore(async () => {
     const guide = GuideV1.parse({ ...sample, title: "PR 1027", source: prSource() });
@@ -576,49 +665,27 @@ function openTarget(number = 1101) {
   };
 }
 
-test("selecting an unopened PR queues exactly one Open action", async () => {
+test("Generate guide success still requires reviewId", async () => {
   await withStore(async () => {
-    const first = await queueAction({ kind: "open", target: openTarget() });
-    const second = await queueAction({ kind: "open", target: openTarget() });
-    assert.equal(second.id, first.id);
-    const listed = await listReviews();
-    assert.equal(listed.actions.length, 1);
-    assert.equal(listed.actions[0].id, first.id);
-    assert.equal(listed.actions[0].kind, "open");
-    assert.equal(listed.actions[0].status, "queued");
-    assert.equal(listed.actions[0].target?.number, 1101);
-  });
-});
-
-test("an in-flight Refresh is reused", async () => {
-  await withStore(async () => {
-    const first = await queueAction({ kind: "refresh" });
-    const second = await queueAction({ kind: "refresh" });
-    assert.equal(second.id, first.id);
-    const listed = await listReviews();
-    assert.equal(listed.actions.length, 1);
-    assert.equal(listed.actions[0].kind, "refresh");
-  });
-});
-
-test("Open success still requires reviewId", async () => {
-  await withStore(async () => {
-    const open = await queueAction({ kind: "open", target: openTarget() });
+    const saved = await addReview(GuideV1.parse({ ...sample, unchaptered: true }));
+    const queued = await queueAction({ kind: "generate-guide", reviewId: saved.id });
     await waitForAction({ timeoutMs: 0 });
     await assert.rejects(
-      () => completeAction({ id: open.id, status: "succeeded" }),
+      () => completeAction({ id: queued.id, status: "succeeded" }),
       /reviewId required/,
     );
   });
 });
 
-test("waitForAction claims a queued Open and marks the agent connected", async () => {
+test("waitForAction claims a queued Generate guide and marks the agent connected", async () => {
   await withStore(async () => {
     let listed = await listReviews();
     assert.equal(listed.agentConnected, false);
-    const queued = await queueAction({ kind: "open", target: openTarget() });
+    const saved = await addReview(GuideV1.parse({ ...sample, unchaptered: true }));
+    const queued = await queueAction({ kind: "generate-guide", reviewId: saved.id });
     const claimed = await waitForAction({ timeoutMs: 0 });
     assert.equal(claimed?.id, queued.id);
+    assert.equal(claimed?.kind, "generate-guide");
     assert.equal(claimed?.status, "claimed");
     listed = await listReviews();
     assert.equal(listed.agentConnected, true);
@@ -626,13 +693,14 @@ test("waitForAction claims a queued Open and marks the agent connected", async (
   });
 });
 
-
 test("a reconnecting waiter returns the in-flight claim before a queued backlog", async () => {
   await withStore(async () => {
-    const inFlight = await queueAction({ kind: "open", target: openTarget(1101) });
+    const firstReview = await addReview(GuideV1.parse({ ...sample, unchaptered: true, title: "A" }));
+    const secondReview = await addReview(GuideV1.parse({ ...sample, unchaptered: true, title: "B" }));
+    const inFlight = await queueAction({ kind: "generate-guide", reviewId: firstReview.id });
     const claimed = await waitForAction({ timeoutMs: 0 });
     assert.equal(claimed?.id, inFlight.id);
-    const backlog = await queueAction({ kind: "open", target: openTarget(1102) });
+    const backlog = await queueAction({ kind: "generate-guide", reviewId: secondReview.id });
     const again = await waitForAction({ timeoutMs: 0 });
     assert.equal(again?.id, inFlight.id);
     assert.equal(again?.status, "claimed");
@@ -645,10 +713,12 @@ test("a reconnecting waiter returns the in-flight claim before a queued backlog"
 
 test("concurrent claims cannot return the same queued action twice", async () => {
   await withStore(async () => {
-    const first = await queueAction({ kind: "open", target: openTarget(1101) });
+    const firstReview = await addReview(GuideV1.parse({ ...sample, unchaptered: true, title: "A" }));
+    const secondReview = await addReview(GuideV1.parse({ ...sample, unchaptered: true, title: "B" }));
+    const first = await queueAction({ kind: "generate-guide", reviewId: firstReview.id });
     const claimed = await waitForAction({ timeoutMs: 0 });
     assert.equal(claimed?.id, first.id);
-    const second = await queueAction({ kind: "open", target: openTarget(1102) });
+    const second = await queueAction({ kind: "generate-guide", reviewId: secondReview.id });
     const [a, b] = await Promise.all([
       waitForAction({ timeoutMs: 0 }),
       waitForAction({ timeoutMs: 0 }),
@@ -698,7 +768,7 @@ test("a missing or stale heartbeat is disconnected", () => {
   assert.equal(agentIsConnected(new Date().toISOString()), true);
 });
 
-test("manual Refresh updates Last synced and replaces catalog snapshots", async () => {
+test("manual catalog replacement updates Last synced and replaces snapshots", async () => {
   await withStore(async () => {
     await replaceCatalog({
       origin: true,
@@ -706,39 +776,29 @@ test("manual Refresh updates Last synced and replaces catalog snapshots", async 
       syncedAt: "2026-09-14T12:00:00.000Z",
       pullRequests: [catalogPullRequest({ number: 1101 })],
     });
-    const queued = await queueAction({ kind: "refresh" });
-    const claimed = await waitForAction({ timeoutMs: 0 });
-    assert.equal(claimed?.id, queued.id);
-    assert.equal(claimed?.kind, "refresh");
-    assert.equal(claimed?.status, "claimed");
     await replaceCatalog({
       origin: true,
       repository: catalogRepository(),
       syncedAt: "2026-09-15T08:00:00.000Z",
       pullRequests: [catalogPullRequest({ number: 1102, title: "Later" })],
     });
-    await completeAction({ id: queued.id, status: "succeeded" });
     const listed = await listReviews();
-    assert.equal(listed.actions[0].status, "succeeded");
-    assert.equal(listed.actions[0].reviewId, undefined);
+    assert.equal(listed.actions.length, 0);
     assert.equal(listed.catalog[0].syncedAt, "2026-09-15T08:00:00.000Z");
     assert.equal(listed.catalog[0].pullRequests[0].number, 1102);
     assert.equal(listed.catalog[0].pullRequests[0].title, "Later");
   });
 });
 
-test("Refresh never deletes a saved guide", async () => {
+test("catalog replacement never deletes a saved guide", async () => {
   await withStore(async () => {
     const saved = await addReview(sample);
-    const queued = await queueAction({ kind: "refresh" });
-    await waitForAction({ timeoutMs: 0 });
     await replaceCatalog({
       origin: true,
       repository: catalogRepository(),
       syncedAt: "2026-09-15T08:00:00.000Z",
       pullRequests: [catalogPullRequest({ status: "completed" })],
     });
-    await completeAction({ id: queued.id, status: "succeeded" });
     const listed = await listReviews();
     assert.equal(listed.reviews.length, 1);
     assert.equal(listed.reviews[0].id, saved.id);

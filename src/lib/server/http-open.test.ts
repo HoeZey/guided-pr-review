@@ -27,8 +27,6 @@ function fakeServices(overrides: {
       seedIfEmpty: unused("seedIfEmpty"),
       openDiff: overrides.openDiff ?? unused("openDiff"),
       updateDiff: overrides.updateDiff ?? unused("updateDiff"),
-      completeOpen: unused("completeOpen"),
-      completeUpdateDiff: unused("completeUpdateDiff"),
     },
     catalog: { replace: unused("replace") },
     catalogRefresh: { refresh: unused("catalogRefresh") },

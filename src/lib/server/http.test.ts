@@ -44,8 +44,6 @@ function fakeServices(overrides: {
       seedIfEmpty: unused("seedIfEmpty"),
       openDiff: unused("openDiff"),
       updateDiff: unused("updateDiff"),
-      completeOpen: unused("completeOpen"),
-      completeUpdateDiff: unused("completeUpdateDiff"),
     },
     catalog: { replace: unused("replace") },
     catalogRefresh: { refresh: overrides.refresh ?? unused("catalogRefresh") },
@@ -72,10 +70,11 @@ test("HTTP and MCP list_reviews and wait_for_action call the same services", asy
   const seen: string[] = [];
   const claimed: StoredAction = {
     id: "a1",
-    kind: "refresh",
+    kind: "generate-guide",
     status: "claimed",
     queuedAt: "t",
     claimedAt: "t",
+    reviewId: "r1",
   };
   const services = fakeServices({
     list: async () => {
@@ -167,6 +166,7 @@ const sampleGuide = GuideV1.parse({
   base: SHA_A,
   head: SHA_B,
   range: "main...feature/one",
+  unchaptered: true,
   chapters: [
     {
       id: "core",
@@ -301,7 +301,12 @@ test("isolated HTTP and MCP adapters preserve route contracts", async () => {
     assert.deepEqual(await catalog.json(), { ok: true });
 
     const queued = await http.actions.POST(
-      event(jsonRequest("http://localhost/api/actions", "POST", { kind: "refresh" })),
+      event(
+        jsonRequest("http://localhost/api/actions", "POST", {
+          kind: "generate-guide",
+          reviewId: id,
+        }),
+      ),
     );
     assert.equal(queued.status, 201);
     const { id: actionId } = (await queued.json()) as { id: string };
@@ -324,6 +329,7 @@ test("isolated HTTP and MCP adapters preserve route contracts", async () => {
       event(
         jsonRequest(`http://localhost/api/actions/${actionId}/complete`, "POST", {
           status: "succeeded",
+          reviewId: id,
         }),
         { id: actionId },
       ),

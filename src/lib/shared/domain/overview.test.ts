@@ -7,10 +7,7 @@ import {
   generateGuideHint,
   guidePresentsWalkthrough,
   homeCardAction,
-  hostActionHint,
   inFlightGenerateGuideCopy,
-  inFlightOpenCopy,
-  inFlightActionCopy,
   latestGenerateGuideAction,
   offersGenerateGuide,
   projectHomeCards,
@@ -592,16 +589,6 @@ test("catalog cards without a saved review expose an Open target", () => {
   assert.equal(homeCardAction(card, true), "queue-open");
 });
 
-test("host-backed actions explain that the skill must be running when disconnected", () => {
-  assert.equal(hostActionHint(true), undefined);
-  assert.match(hostActionHint(false) ?? "", /skill must be running/);
-  assert.equal(inFlightOpenCopy("queued"), "Waiting");
-  assert.equal(inFlightOpenCopy("claimed"), "Opening");
-  assert.equal(inFlightActionCopy("refresh", "queued"), "Waiting");
-  assert.equal(inFlightActionCopy("refresh", "claimed"), "Refreshing");
-  assert.equal(inFlightActionCopy("update-diff", "claimed"), "Updating");
-});
-
 test("Generate guide shows Waiting, Generating guide, and a disconnected hint", () => {
   assert.equal(inFlightGenerateGuideCopy("queued"), "Waiting");
   assert.equal(inFlightGenerateGuideCopy("claimed"), "Generating guide");
@@ -609,24 +596,6 @@ test("Generate guide shows Waiting, Generating guide, and a disconnected hint", 
   assert.equal(generateGuideHint(true), undefined);
   assert.match(generateGuideHint(false) ?? "", /skill must be running/);
   const latest = latestGenerateGuideAction("rev-1", [
-    {
-      id: "open-1",
-      kind: "open",
-      status: "failed",
-      queuedAt: "2026-09-15T00:00:00.000Z",
-      target: {
-        provider: "azure-devops",
-        host: "dev.azure.com",
-        repository: {
-          id: "repo-1",
-          owner: "braidteam/BRAID",
-          name: "braid-connection-designer",
-          webUrl: "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer",
-        },
-        number: 1101,
-      },
-      error: { code: "open-failed", message: "ignored" },
-    },
     {
       id: "gen-1",
       kind: "generate-guide",

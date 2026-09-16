@@ -4,16 +4,13 @@ import type { ListReviewsOutput } from "../../shared/contracts/persistence.ts";
 import type { StoredOutcome } from "../../shared/contracts/outcomes.ts";
 import { pullRequestSyncKey } from "../../shared/contracts/provenance.ts";
 import { catalogAsSource } from "../../shared/domain/reviews.ts";
-import type { ChapteringAdapter } from "../chaptering/ports.ts";
 import { GitOperationError, type GitDiff, type ManagedGitCache } from "../git/ports.ts";
 import type {
-  GitHostAdapter,
   ProviderPullRequestMetadata,
   ProviderPullRequestReader,
   ProviderRepositoryReader,
 } from "../providers/ports.ts";
 import type {
-  ActionRepository,
   ConfiguredRepositoryRecord,
   ReviewRepository,
 } from "../repositories/ports.ts";
@@ -48,16 +45,6 @@ export type ReviewService = {
   seedIfEmpty: (guide: GuideV1) => Promise<void>;
   openDiff: (target: OpenActionTarget) => Promise<DiffSyncResult>;
   updateDiff: (target: OpenActionTarget) => Promise<DiffSyncResult>;
-  completeOpen: (
-    id: string,
-    host: GitHostAdapter,
-    chaptering?: ChapteringAdapter,
-  ) => Promise<{ reviewId: string }>;
-  completeUpdateDiff: (
-    id: string,
-    host: GitHostAdapter,
-    chaptering?: ChapteringAdapter,
-  ) => Promise<{ reviewId: string }>;
 };
 
 function stripHeads(ref: string): string {
@@ -127,39 +114,10 @@ function toCatalogItem(meta: ProviderPullRequestMetadata): CatalogPullRequest {
 }
 
 export function createReviewService(
-  repos: ReviewRepository & Pick<ActionRepository, "completeAction">,
+  repos: ReviewRepository,
   options?: ReviewDiffOptions,
 ): ReviewService {
   const inflight = new Map<string, Promise<DiffSyncResult>>();
-
-  async function completeHostDiffAction(
-    id: string,
-    kind: "open" | "update-diff",
-    host: GitHostAdapter,
-  ): Promise<{ reviewId: string }> {
-    const listed = await repos.listReviews();
-    const action = listed.actions.find((row) => row.id === id);
-    if (!action || action.kind !== kind) {
-      throw Object.assign(new Error(`unknown action ${id}`), { status: 404 });
-    }
-    const failCode = kind === "open" ? "open-failed" : "update-failed";
-    try {
-      const fetched = await host.fetchOpen(action.target);
-      const { id: reviewId } = await repos.upsertReview(unchapteredGuide(fetched));
-      await repos.completeAction({ id, status: "succeeded", reviewId });
-      return { reviewId };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      await repos
-        .completeAction({
-          id,
-          status: "failed",
-          error: { code: failCode, message },
-        })
-        .catch(() => undefined);
-      throw err;
-    }
-  }
 
   async function resolveCloneUrl(
     meta: ProviderPullRequestMetadata,
@@ -267,8 +225,5 @@ export function createReviewService(
     seedIfEmpty: (guide) => repos.seedIfEmpty(guide),
     openDiff: (target) => runDiff(target),
     updateDiff: (target) => runDiff(target),
-    completeOpen: (id, host, _chaptering) => completeHostDiffAction(id, "open", host),
-    completeUpdateDiff: (id, host, _chaptering) =>
-      completeHostDiffAction(id, "update-diff", host),
   };
 }

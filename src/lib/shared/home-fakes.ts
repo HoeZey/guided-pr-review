@@ -178,16 +178,11 @@ export const HOME_FIXTURE_WAITING: HomePageData = {
   ...HOME_FIXTURE,
   actions: [
     {
-      id: "open-1",
-      kind: "open",
+      id: "gen-1",
+      kind: "generate-guide",
       status: "queued",
       queuedAt: "2026-09-16T00:00:00.000Z",
-      target: {
-        provider: "azure-devops",
-        host: "dev.azure.com",
-        repository: { ...REPO },
-        number: 1106,
-      },
+      reviewId: "saved-noguide",
     } satisfies StoredAction,
   ],
 };

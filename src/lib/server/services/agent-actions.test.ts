@@ -3,13 +3,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import type { OpenActionTarget } from "../../shared/contracts/catalog.ts";
 import { GuideV1, type FileChange } from "../../shared/contracts/guide.ts";
 import type { PullRequestSource } from "../../shared/contracts/provenance.ts";
 import { filesForDiff } from "../../shared/domain/guide-view.ts";
 import { guidePresentsWalkthrough, reviewLandingTab } from "../../shared/domain/overview.ts";
 import type { ChapteringAdapter } from "../chaptering/ports.ts";
-import type { GitHostAdapter } from "../providers/ports.ts";
 import { jsonRepositories, resetJsonStoreCache } from "../repositories/json/store.ts";
 import { createAppServices } from "./app.ts";
 
@@ -18,31 +16,17 @@ const { reviews, actions, guides } = createAppServices(jsonRepositories);
 const SOURCE = "1111111111111111111111111111111111111111";
 const TARGET = "2222222222222222222222222222222222222222";
 
-const sample = GuideV1.parse({
-  version: 1,
-  title: "Saved",
-  base: TARGET,
-  head: SOURCE,
-  range: "develop...feature/saved",
-  chapters: [
-    {
-      id: "core",
-      kind: "core",
-      title: "Core",
-      why: "The behavior change.",
-      files: [
-        {
-          path: "saved.py",
-          language: "python",
-          hunks: [{ lines: [{ type: "added", content: "y = 2", newLine: 1 }] }],
-        },
-      ],
-    },
-  ],
-});
+const OPEN_FILES: FileChange[] = [
+  {
+    path: "src/open.ts",
+    language: "typescript",
+    hunks: [{ lines: [{ type: "added", content: "export const n = 1;", newLine: 1 }] }],
+  },
+];
 
-function openTarget(number = 1101): OpenActionTarget {
+function hostSource(number = 1101): PullRequestSource {
   return {
+    kind: "pull-request",
     provider: "azure-devops",
     host: "dev.azure.com",
     repository: {
@@ -51,17 +35,6 @@ function openTarget(number = 1101): OpenActionTarget {
       name: "braid-connection-designer",
       webUrl: "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer",
     },
-    number,
-  };
-}
-
-function hostSource(number = 1101): PullRequestSource {
-  const target = openTarget(number);
-  return {
-    kind: "pull-request",
-    provider: "azure-devops",
-    host: "dev.azure.com",
-    repository: target.repository,
     number,
     webUrl: `https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/${number}`,
     sourceRef: "refs/heads/feature/review-me",
@@ -78,169 +51,27 @@ function hostSource(number = 1101): PullRequestSource {
   };
 }
 
-const OPEN_FILES: FileChange[] = [
-  {
-    path: "src/open.ts",
-    language: "typescript",
-    hunks: [{ lines: [{ type: "added", content: "export const n = 1;", newLine: 1 }] }],
-  },
-];
-
-function fakeHost(number = 1101, files = OPEN_FILES): GitHostAdapter {
-  return {
-    fetchOpen: async (target) => {
-      assert.equal(target.number, number);
-      assert.equal(target.host, "dev.azure.com");
-      return {
+function unchaptered(number = 1101): GuideV1 {
+  return GuideV1.parse({
+    version: 1,
+    title: `PR ${number}`,
+    base: TARGET,
+    head: SOURCE,
+    range: "develop...feature/review-me",
+    repo: "braid-connection-designer",
+    unchaptered: true,
+    chapters: [
+      {
+        id: "unchaptered",
+        kind: "core",
         title: `PR ${number}`,
-        files,
-        source: hostSource(number),
-      };
-    },
-  };
+        why: "Raw diff until a reading-order guide is generated.",
+        files: OPEN_FILES,
+      },
+    ],
+    source: hostSource(number),
+  });
 }
-
-async function withStore(fn: () => Promise<void>): Promise<void> {
-  const dir = await mkdtemp(join(tmpdir(), "gpr-"));
-  const prev = process.env.GUIDED_PR_REVIEW_DATA;
-  process.env.GUIDED_PR_REVIEW_DATA = dir;
-  resetJsonStoreCache();
-  try {
-    await fn();
-  } finally {
-    resetJsonStoreCache();
-    if (prev === undefined) delete process.env.GUIDED_PR_REVIEW_DATA;
-    else process.env.GUIDED_PR_REVIEW_DATA = prev;
-    await rm(dir, { recursive: true, force: true });
-  }
-}
-
-test("the waiting agent claims Open, upserts an unchaptered review, and lands on Diff", async () => {
-  await withStore(async () => {
-    const queued = await actions.queue({ kind: "open", target: openTarget() });
-    const claimed = await actions.wait();
-    assert.equal(claimed?.id, queued.id);
-    assert.equal(claimed?.status, "claimed");
-    const result = await reviews.completeOpen(queued.id, fakeHost());
-    const listed = await reviews.list();
-    assert.equal(listed.actions[0].status, "succeeded");
-    assert.equal(listed.actions[0].reviewId, result.reviewId);
-    assert.equal(listed.activeId, result.reviewId);
-    const got = await reviews.get(result.reviewId);
-    assert.equal(got.guide.unchaptered, true);
-    assert.equal(got.guide.title, "PR 1101");
-    assert.equal(got.guide.source?.number, 1101);
-    assert.equal(got.guide.chapters.length, 1);
-    assert.equal(got.guide.chapters[0].files[0].path, "src/open.ts");
-    assert.equal(reviewLandingTab(got.guide), "diff");
-  });
-});
-
-test("Open does not invoke a chaptering adapter", async () => {
-  await withStore(async () => {
-    const queued = await actions.queue({ kind: "open", target: openTarget() });
-    await actions.wait({ timeoutMs: 0 });
-    let called = false;
-    const chaptering: ChapteringAdapter = {
-      chapter: async () => {
-        called = true;
-        throw new Error("chaptering must not run for Open");
-      },
-    };
-    await reviews.completeOpen(queued.id, fakeHost(), chaptering);
-    assert.equal(called, false);
-  });
-});
-
-test("a failed Open reports a structured error without changing other reviews", async () => {
-  await withStore(async () => {
-    const saved = await reviews.add(sample);
-    const queued = await actions.queue({ kind: "open", target: openTarget() });
-    await actions.wait({ timeoutMs: 0 });
-    const host: GitHostAdapter = {
-      fetchOpen: async () => {
-        throw new Error("Azure DevOps returned 404");
-      },
-    };
-    await assert.rejects(
-      () => reviews.completeOpen(queued.id, host),
-      /Azure DevOps returned 404/,
-    );
-    const listed = await reviews.list();
-    assert.equal(listed.actions[0].status, "failed");
-    assert.equal(listed.actions[0].error?.code, "open-failed");
-    assert.equal(listed.actions[0].error?.message, "Azure DevOps returned 404");
-    assert.equal(listed.reviews.length, 1);
-    assert.equal(listed.reviews[0].id, saved.id);
-    assert.equal(listed.activeId, saved.id);
-  });
-});
-
-test("after success the agent waits again and a second Open can fetch another PR", async () => {
-  await withStore(async () => {
-    const first = await actions.queue({ kind: "open", target: openTarget(1101) });
-    await actions.wait({ timeoutMs: 0 });
-    const opened = await reviews.completeOpen(first.id, fakeHost(1101));
-    const idle = await actions.wait({ timeoutMs: 0 });
-    assert.equal(idle, null);
-    const second = await actions.queue({ kind: "open", target: openTarget(1102) });
-    assert.notEqual(second.id, first.id);
-    const claimed = await actions.wait({ timeoutMs: 0 });
-    assert.equal(claimed?.id, second.id);
-    const next = await reviews.completeOpen(second.id, fakeHost(1102));
-    assert.notEqual(next.reviewId, opened.reviewId);
-    const listed = await reviews.list();
-    assert.equal(listed.reviews.length, 2);
-    assert.equal(listed.activeId, next.reviewId);
-  });
-});
-
-test("Update Diff refreshes the snapshot through upsert without requiring chaptering", async () => {
-  await withStore(async () => {
-    const queued = await actions.queue({ kind: "open", target: openTarget() });
-    await actions.wait({ timeoutMs: 0 });
-    const opened = await reviews.completeOpen(queued.id, fakeHost());
-    const SHA_NEW = "cccccccccccccccccccccccccccccccccccccccc";
-    const update = await actions.queue({ kind: "update-diff", target: openTarget() });
-    await actions.wait({ timeoutMs: 0 });
-    let called = false;
-    const chaptering: ChapteringAdapter = {
-      chapter: async () => {
-        called = true;
-        throw new Error("chaptering must not run for Update Diff");
-      },
-    };
-    const host: GitHostAdapter = {
-      fetchOpen: async (target) => {
-        assert.equal(target.number, 1101);
-        return {
-          title: "PR 1101 updated",
-          files: [
-            {
-              path: "src/newer.ts",
-              language: "typescript",
-              hunks: [{ lines: [{ type: "added", content: "export const n = 2;", newLine: 1 }] }],
-            },
-          ],
-          source: { ...hostSource(), sourceCommit: SHA_NEW },
-        };
-      },
-    };
-    const result = await reviews.completeUpdateDiff(update.id, host, chaptering);
-    assert.equal(result.reviewId, opened.reviewId);
-    assert.equal(called, false);
-    const got = await reviews.get(opened.reviewId);
-    assert.equal(got.guide.unchaptered, true);
-    assert.equal(got.guide.title, "PR 1101 updated");
-    assert.equal(got.guide.source?.sourceCommit, SHA_NEW);
-    assert.equal(got.guide.chapters[0].files[0].path, "src/newer.ts");
-    const listed = await reviews.list();
-    assert.equal(listed.reviews.length, 1);
-    assert.equal(listed.actions[1].kind, "update-diff");
-    assert.equal(listed.actions[1].status, "succeeded");
-    assert.equal(listed.actions[1].reviewId, opened.reviewId);
-  });
-});
 
 function fakeChaptering(): { adapter: ChapteringAdapter; calls: number } {
   const state = { adapter: {} as ChapteringAdapter, calls: 0 };
@@ -271,25 +102,38 @@ function fakeChaptering(): { adapter: ChapteringAdapter; calls: number } {
   return state;
 }
 
+async function withStore(fn: () => Promise<void>): Promise<void> {
+  const dir = await mkdtemp(join(tmpdir(), "gpr-"));
+  const prev = process.env.GUIDED_PR_REVIEW_DATA;
+  process.env.GUIDED_PR_REVIEW_DATA = dir;
+  resetJsonStoreCache();
+  try {
+    await fn();
+  } finally {
+    resetJsonStoreCache();
+    if (prev === undefined) delete process.env.GUIDED_PR_REVIEW_DATA;
+    else process.env.GUIDED_PR_REVIEW_DATA = prev;
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 test("the waiting agent chapters in place and keeps the same review id", async () => {
   await withStore(async () => {
-    const opened = await actions.queue({ kind: "open", target: openTarget() });
-    await actions.wait({ timeoutMs: 0 });
-    const { reviewId } = await reviews.completeOpen(opened.id, fakeHost());
-    const queued = await actions.queue({ kind: "generate-guide", reviewId });
+    const saved = await reviews.add(unchaptered());
+    const queued = await actions.queue({ kind: "generate-guide", reviewId: saved.id });
     const claimed = await actions.wait({ timeoutMs: 0 });
     assert.equal(claimed?.id, queued.id);
     assert.equal(claimed?.kind, "generate-guide");
     const chaptering = fakeChaptering();
     const result = await guides.completeGenerateGuide(queued.id, chaptering.adapter);
-    assert.equal(result.reviewId, reviewId);
+    assert.equal(result.reviewId, saved.id);
     assert.equal(chaptering.calls, 1);
     const listed = await reviews.list();
     assert.equal(listed.actions.at(-1)?.status, "succeeded");
-    assert.equal(listed.actions.at(-1)?.reviewId, reviewId);
+    assert.equal(listed.actions.at(-1)?.reviewId, saved.id);
     assert.equal(listed.reviews.length, 1);
-    assert.equal(listed.reviews[0].id, reviewId);
-    const got = await reviews.get(reviewId);
+    assert.equal(listed.reviews[0].id, saved.id);
+    const got = await reviews.get(saved.id);
     assert.equal(got.guide.unchaptered, undefined);
     assert.equal(got.guide.chapters[0].id, "core");
     assert.equal(got.guide.source?.number, 1101);
@@ -298,13 +142,11 @@ test("the waiting agent chapters in place and keeps the same review id", async (
 
 test("after success the Guide tab shows the walkthrough and Diff still lists each path", async () => {
   await withStore(async () => {
-    const opened = await actions.queue({ kind: "open", target: openTarget() });
-    await actions.wait({ timeoutMs: 0 });
-    const { reviewId } = await reviews.completeOpen(opened.id, fakeHost());
-    const queued = await actions.queue({ kind: "generate-guide", reviewId });
+    const saved = await reviews.add(unchaptered());
+    const queued = await actions.queue({ kind: "generate-guide", reviewId: saved.id });
     await actions.wait({ timeoutMs: 0 });
     await guides.completeGenerateGuide(queued.id, fakeChaptering().adapter);
-    const got = await reviews.get(reviewId);
+    const got = await reviews.get(saved.id);
     assert.equal(guidePresentsWalkthrough(got.guide), true);
     assert.equal(reviewLandingTab(got.guide), "guide");
     assert.deepEqual(
@@ -316,10 +158,8 @@ test("after success the Guide tab shows the walkthrough and Diff still lists eac
 
 test("a failed Generate guide reports a structured error and leaves the Diff openable", async () => {
   await withStore(async () => {
-    const opened = await actions.queue({ kind: "open", target: openTarget() });
-    await actions.wait({ timeoutMs: 0 });
-    const { reviewId } = await reviews.completeOpen(opened.id, fakeHost());
-    const queued = await actions.queue({ kind: "generate-guide", reviewId });
+    const saved = await reviews.add(unchaptered());
+    const queued = await actions.queue({ kind: "generate-guide", reviewId: saved.id });
     await actions.wait({ timeoutMs: 0 });
     const chaptering: ChapteringAdapter = {
       chapter: async () => {
@@ -334,7 +174,7 @@ test("a failed Generate guide reports a structured error and leaves the Diff ope
     assert.equal(listed.actions.at(-1)?.status, "failed");
     assert.equal(listed.actions.at(-1)?.error?.code, "generate-guide-failed");
     assert.equal(listed.actions.at(-1)?.error?.message, "chaptering timed out");
-    const got = await reviews.get(reviewId);
+    const got = await reviews.get(saved.id);
     assert.equal(got.guide.unchaptered, true);
     assert.equal(reviewLandingTab(got.guide), "diff");
     assert.deepEqual(
@@ -344,27 +184,22 @@ test("a failed Generate guide reports a structured error and leaves the Diff ope
   });
 });
 
-test("Open of a different PR can still run after Generate guide completes", async () => {
+test("code-review still publishes matching outcomes independently of Generate guide", async () => {
   await withStore(async () => {
-    const opened = await actions.queue({ kind: "open", target: openTarget(1101) });
-    await actions.wait({ timeoutMs: 0 });
-    const { reviewId } = await reviews.completeOpen(opened.id, fakeHost(1101));
-    const generate = await actions.queue({ kind: "generate-guide", reviewId });
-    await actions.wait({ timeoutMs: 0 });
-    await guides.completeGenerateGuide(generate.id, fakeChaptering().adapter);
-    const idle = await actions.wait({ timeoutMs: 0 });
-    assert.equal(idle, null);
-    const second = await actions.queue({ kind: "open", target: openTarget(1102) });
-    const claimed = await actions.wait({ timeoutMs: 0 });
-    assert.equal(claimed?.id, second.id);
-    assert.equal(claimed?.kind, "open");
-    const next = await reviews.completeOpen(second.id, fakeHost(1102));
-    assert.notEqual(next.reviewId, reviewId);
-    const listed = await reviews.list();
-    assert.equal(listed.reviews.length, 2);
-    assert.equal(listed.activeId, next.reviewId);
-    const first = await reviews.get(reviewId);
-    assert.equal(guidePresentsWalkthrough(first.guide), true);
+    const saved = await reviews.add(unchaptered());
+    const { outcomes } = createAppServices(jsonRepositories);
+    const published = await outcomes.publish(saved.id, {
+      version: 1,
+      base: TARGET,
+      head: SOURCE,
+      standards: { findings: [] },
+      spec: { findings: [] },
+    });
+    const got = await reviews.get(saved.id);
+    assert.equal(got.guide.unchaptered, true);
+    assert.equal(got.outcomes.length, 1);
+    assert.equal(got.outcomes[0].id, published.id);
+    assert.equal(got.outcomes[0].outcome.base, TARGET);
+    assert.equal(got.outcomes[0].outcome.head, SOURCE);
   });
 });
-

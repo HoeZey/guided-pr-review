@@ -4,12 +4,8 @@
   import type { HomeCard } from "$lib/shared/domain/overview";
   import {
     homeCardAction,
-    inFlightActionCopy,
     inFlightGenerateGuideCopy,
-    inFlightOpenCopy,
-    latestAction,
     latestGenerateGuideAction,
-    latestOpenAction,
     offersGenerateGuide,
     reviewPath,
   } from "$lib/shared/domain/overview";
@@ -25,21 +21,11 @@
     agentConnected: boolean;
   } = $props();
 
-  const latestOpen = $derived(latestOpenAction(card, actions));
-  const latestUpdate = $derived(
-    card.openTarget ? latestAction(actions, "update-diff", card.openTarget) : undefined,
-  );
   const diffOp = $derived(
     card.openTarget ? homeUi.diffOps[pullRequestSyncKey(card.openTarget)] : undefined,
   );
   const inflight = $derived(
-    (diffOp && !diffOp.error
-      ? diffOp.kind === "update-diff"
-        ? "Updating"
-        : "Opening"
-      : undefined) ||
-      (latestOpen ? inFlightOpenCopy(latestOpen.status) : undefined) ||
-      (latestUpdate ? inFlightActionCopy("update-diff", latestUpdate.status) : undefined),
+    diffOp && !diffOp.error ? (diffOp.kind === "update-diff" ? "Updating" : "Opening") : undefined,
   );
   const generateLatest = $derived(
     card.reviewId ? latestGenerateGuideAction(card.reviewId, actions) : undefined,
@@ -48,14 +34,7 @@
     generateLatest ? inFlightGenerateGuideCopy(generateLatest.status) : undefined,
   );
   const failed = $derived(
-    diffOp?.error ||
-      (generateLatest?.status === "failed"
-        ? generateLatest.error?.message
-        : latestOpen?.status === "failed"
-          ? latestOpen.error?.message
-          : latestUpdate?.status === "failed"
-            ? latestUpdate.error?.message
-            : undefined),
+    diffOp?.error || (generateLatest?.status === "failed" ? generateLatest.error?.message : undefined),
   );
   const kind = $derived(homeCardAction(card, agentConnected));
   const busy = $derived(Boolean(inflight));

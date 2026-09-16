@@ -538,10 +538,10 @@ test("Store v1 without a repository collection loads lossless and migrates only 
         actions: [
           {
             id: "a1",
-            kind: "refresh",
-            status: "succeeded",
+            kind: "generate-guide",
+            status: "queued",
             queuedAt: "2020-01-01T00:00:00.000Z",
-            completedAt: "2020-01-01T00:00:01.000Z",
+            reviewId: "r1",
           },
         ],
       })}\n`,
