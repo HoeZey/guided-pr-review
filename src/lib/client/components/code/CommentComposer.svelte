@@ -9,7 +9,9 @@
   const sending = $derived(composerSession.delivery.state === "sending");
   const failed = $derived(composerSession.delivery.state === "failed");
   const content = $derived(composerSession.delivery.content);
-  const error = $derived(failed ? composerSession.delivery.error : null);
+  const error = $derived(
+    composerSession.delivery.state === "failed" ? composerSession.delivery.error : null,
+  );
   const sendLabel = $derived(sending ? "Sending" : failed ? "Retry" : "Send");
 </script>
 

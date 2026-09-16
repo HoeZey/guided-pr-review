@@ -1,4 +1,5 @@
 import { parseDiffLayout, type DiffLayout } from "$lib/shared/domain/guide-view";
+import type { ReviewTab } from "$lib/shared/page-data";
 import {
   DIFF_KEY,
   GUIDE_DIFF_KEY,
@@ -110,7 +111,7 @@ export function setDiffLayout(
 
 export function setDiffMode(
   next: DiffLayout,
-  tab: "guide" | "diff" | "review",
+  tab: ReviewTab,
   storage: StorageLike | null = browserLocalStorage(),
 ): void {
   if (tab === "guide") {

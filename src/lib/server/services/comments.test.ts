@@ -593,7 +593,73 @@ test("comment HTTP routes reject foreign Origin and return structured errors", a
   assert.equal(removed.status, 200);
   assert.deepEqual(await removed.json(), { ok: true });
 });
-test("createAppServices wires a fake comment provider and never a live host client", async () => {
+test("createAppServices defaults to live ADO and GitHub comment REST", async () => {
+  const seen: { url: string; auth: string | null }[] = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input instanceof Request ? input.url : input);
+    seen.push({ url, auth: new Headers(init?.headers).get("authorization") });
+    if (url.includes("dev.azure.com")) {
+      return new Response(JSON.stringify({ value: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+  try {
+    const ado = createAppServices(
+      {
+        ...repos({ r1: guide(prSource("azure-devops")) }),
+        replaceCatalog: unused("replaceCatalog"),
+        queueAction: unused("queueAction"),
+        waitForAction: unused("waitForAction"),
+        completeAction: unused("completeAction"),
+        publishReviewOutcome: unused("publishReviewOutcome"),
+      },
+      { credentials: credentials("me", "azure-devops") },
+    );
+    assert.deepEqual((await ado.comments.list("r1")).threads, []);
+    const github = createAppServices(
+      {
+        ...repos({ r1: guide(prSource("github")) }),
+        replaceCatalog: unused("replaceCatalog"),
+        queueAction: unused("queueAction"),
+        waitForAction: unused("waitForAction"),
+        completeAction: unused("completeAction"),
+        publishReviewOutcome: unused("publishReviewOutcome"),
+      },
+      { credentials: credentials("octocat", "github") },
+    );
+    assert.deepEqual((await github.comments.list("r1")).threads, []);
+  } finally {
+    globalThis.fetch = original;
+  }
+  assert.equal(
+    seen.some(
+      (row) =>
+        row.url.includes("/_apis/git/repositories/repo-1/pullrequests/1027/threads") &&
+        row.url.includes("api-version=7.1"),
+    ),
+    true,
+  );
+  assert.equal(
+    seen.some((row) =>
+      row.url.includes("https://api.github.com/repos/octocat/Hello-World/pulls/42/comments"),
+    ),
+    true,
+  );
+  assert.equal(
+    seen.some((row) =>
+      row.url.includes("https://api.github.com/repos/octocat/Hello-World/issues/42/comments"),
+    ),
+    true,
+  );
+  assert.equal(seen.every((row) => row.auth === "Bearer FIXTURE_TOKEN"), true);
+  assert.equal(seen.some((row) => row.url.includes("evil.example")), false);
+});
+
+test("createAppServices still injects fake comment providers", async () => {
   const services = createAppServices(
     {
       ...repos({ r1: guide(prSource("github")) }),
@@ -605,6 +671,10 @@ test("createAppServices wires a fake comment provider and never a live host clie
     },
     {
       credentials: credentials("octocat", "github"),
+      commentProviders: {
+        ado: createFakeCommentProvider({ provider: "azure-devops", threads: commentFixtures("azure-devops") }),
+        github: createFakeCommentProvider({ provider: "github", threads: commentFixtures("github") }),
+      },
     },
   );
   const listed = await services.comments.list("r1");

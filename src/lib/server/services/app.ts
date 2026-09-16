@@ -7,10 +7,11 @@ import { createManagedGitCache } from "../git/managed-cache.ts";
 import { createGitProcessRunner } from "../git/process.ts";
 import type { ProviderPullRequestReader, ProviderRepositoryReader } from "../providers/ports.ts";
 import type { CommentProvider } from "../providers/comments.ts";
-import { commentFixtures, createFakeCommentProvider } from "../providers/fake-comments.ts";
 import { createCliCredentialSource } from "../auth/cli-credentials.ts";
 import { createProcessCommandRunner } from "../auth/command-runner.ts";
+import { createAdoCommentAdapter } from "../providers/ado-comments.ts";
 import { createAdoRestAdapter } from "../providers/ado-rest.ts";
+import { createGithubCommentProvider } from "../providers/github/comments.ts";
 import { createGithubProvider } from "../providers/github/rest.ts";
 import { createActionService, type ActionService } from "./actions.ts";
 import { createCatalogService, type CatalogService } from "./catalog.ts";
@@ -90,14 +91,8 @@ export function createAppServices(
       credentials,
     });
   const commentProviders = options.commentProviders ?? {
-    ado: createFakeCommentProvider({
-      provider: "azure-devops",
-      threads: commentFixtures("azure-devops"),
-    }),
-    github: createFakeCommentProvider({
-      provider: "github",
-      threads: commentFixtures("github"),
-    }),
+    ado: createAdoCommentAdapter({ credentials }),
+    github: createGithubCommentProvider({ credentials }),
   };
   return {
     reviews: createReviewService(repos, {

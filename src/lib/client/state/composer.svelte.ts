@@ -166,7 +166,7 @@ export async function submitComposer(opts: SubmitComposerFns = {}): Promise<void
   if (!content.trim()) return;
 
   const retrying = composerSession.delivery.state === "failed";
-  const priorCode = retrying ? composerSession.delivery.errorCode : null;
+  const priorCode = composerSession.delivery.state === "failed" ? composerSession.delivery.errorCode : null;
   const mint = opts.mint ?? mintClientOperationId;
   if (retrying) {
     composerSession.delivery = nextDelivery(composerSession.delivery, { type: "retry" });
