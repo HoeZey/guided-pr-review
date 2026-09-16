@@ -1,0 +1,228 @@
+<script lang="ts">
+  import type { GuideV1 } from "$lib/shared/contracts/guide";
+  import {
+    generateGuideHint,
+    guidePresentsWalkthrough,
+  } from "$lib/shared/domain/overview";
+  import {
+    guideStops,
+    markViewed,
+    selectGuidePath,
+    stepGuide,
+    unmarkViewed,
+  } from "$lib/shared/domain/guide-view";
+  import { prefs } from "$lib/client/state/preferences.svelte";
+  import { persistViewed, session } from "$lib/client/state/review.svelte";
+  import GuideChapter from "./GuideChapter.svelte";
+  import GuideToc from "./GuideToc.svelte";
+  import { chaptersForNav, fileId, readGuideSpy, sectionId } from "./project";
+
+  let {
+    guide,
+    reviewId,
+    agentConnected = false,
+    hidden = false,
+  }: {
+    guide: GuideV1;
+    reviewId: string;
+    agentConnected?: boolean;
+    hidden?: boolean;
+  } = $props();
+
+  let tocOpen = $state(false);
+  let mainEl: HTMLElement | undefined;
+
+  const walkthrough = $derived(guidePresentsWalkthrough(guide));
+  const chapters = $derived(chaptersForNav(guide));
+  const selectedChapter = $derived(
+    chapters.find((chapter) => chapter.id === session.selectedChapterId) || chapters[0],
+  );
+  const selectedPath = $derived(
+    selectedChapter
+      ? selectGuidePath(selectedChapter.files || [], session.selectedGuidePath, session.viewed)
+      : null,
+  );
+  const canGenerate = $derived(Boolean(guide.unchaptered) && Boolean(reviewId) && agentConnected);
+  const generateHint = $derived(generateGuideHint(agentConnected));
+
+  $effect(() => {
+    if (!walkthrough || !selectedChapter) return;
+    if (session.selectedChapterId !== selectedChapter.id) {
+      session.selectedChapterId = selectedChapter.id;
+    }
+    if (session.selectedGuidePath !== selectedPath) {
+      session.selectedGuidePath = selectedPath;
+    }
+  });
+
+  $effect(() => {
+    const app = document.getElementById("app");
+    if (!(app instanceof HTMLElement)) return;
+    if (tocOpen && !hidden) app.dataset.toc = "open";
+    else delete app.dataset.toc;
+    return () => {
+      delete app.dataset.toc;
+    };
+  });
+
+  function jumpTo(id: string): void {
+    const el = document.getElementById(id);
+    if (el instanceof HTMLElement && mainEl?.contains(el)) {
+      el.scrollIntoView?.({ behavior: "auto", block: "start" });
+    }
+  }
+
+  function openStop(stop: { chapterId: string; path: string }): void {
+    session.selectedChapterId = stop.chapterId;
+    session.selectedGuidePath = stop.path;
+    session.selectedDiffPath = stop.path;
+    const chapter = chapters.find((item) => item.id === stop.chapterId);
+    const i = (chapter?.files || []).findIndex((file) => file.path === stop.path);
+    jumpTo(i >= 0 && chapter ? fileId(chapter.id, i) : sectionId(stop.chapterId));
+  }
+
+  function jumpFile(chapterId: string, path: string, id: string): void {
+    session.selectedChapterId = chapterId;
+    session.selectedGuidePath = path;
+    session.selectedDiffPath = path;
+    tocOpen = false;
+    jumpTo(id);
+  }
+
+  function jumpChapter(chapterId: string): void {
+    session.selectedChapterId = chapterId;
+    const chapter = chapters.find((item) => item.id === chapterId);
+    session.selectedGuidePath = selectGuidePath(chapter?.files || [], null, session.viewed);
+    tocOpen = false;
+    jumpTo(sectionId(chapterId));
+  }
+
+  function toggleCollapsed(path: string): void {
+    const next = new Set(session.collapsed);
+    if (next.has(path)) next.delete(path);
+    else next.add(path);
+    session.collapsed = next;
+  }
+
+  function onFileViewed(path: string, on: boolean): void {
+    if (on) {
+      session.viewed = markViewed(session.viewed, session.collapsed, path).viewed;
+      session.collapsed = new Set([...session.collapsed, path]);
+      persistViewed();
+      const stops = guideStops(chapters.filter((chapter) => !chapter._omitted));
+      const next = stepGuide(stops, session.selectedChapterId || "", path, 1);
+      if (next && (next.path !== path || next.chapterId !== session.selectedChapterId)) {
+        openStop(next);
+        return;
+      }
+      session.selectedGuidePath = path;
+      return;
+    }
+    const next = unmarkViewed(session.viewed, session.collapsed, path);
+    session.viewed = next.viewed;
+    session.collapsed = next.collapsed;
+    persistViewed();
+  }
+
+  function onChapterReviewed(chapterId: string, on: boolean): void {
+    const chapter = chapters.find((item) => item.id === chapterId);
+    if (!chapter) return;
+    if (on) {
+      for (const file of chapter.files || []) {
+        session.viewed = markViewed(session.viewed, session.collapsed, file.path).viewed;
+        session.collapsed = new Set([...session.collapsed, file.path]);
+      }
+      persistViewed();
+      const last = chapter.files[(chapter.files || []).length - 1];
+      const stops = guideStops(chapters.filter((item) => !item._omitted));
+      const next = last ? stepGuide(stops, chapterId, last.path, 1) : null;
+      if (next && next.chapterId !== chapterId) {
+        openStop(next);
+      }
+      return;
+    }
+    for (const file of chapter.files || []) {
+      const next = unmarkViewed(session.viewed, session.collapsed, file.path);
+      session.viewed = next.viewed;
+      session.collapsed = next.collapsed;
+    }
+    persistViewed();
+  }
+
+  function spyScroll(node: HTMLElement) {
+    mainEl = node;
+    const onScroll = () => {
+      const next = readGuideSpy(node);
+      if (next.chapterId) session.selectedChapterId = next.chapterId;
+      if (next.path) session.selectedGuidePath = next.path;
+    };
+    node.addEventListener("scroll", onScroll, { passive: true });
+    return {
+      destroy() {
+        node.removeEventListener("scroll", onScroll);
+        if (mainEl === node) mainEl = undefined;
+      },
+    };
+  }
+</script>
+
+<main hidden={hidden} use:spyScroll>
+  <div class="main-inner is-guide">
+    {#if walkthrough}
+      <div class="guide-doc">
+        {#each chapters as chapter, i (chapter.id)}
+          <GuideChapter
+            {chapter}
+            index={i}
+            total={chapters.length}
+            {selectedPath}
+            omitted={guide.omitted || []}
+            layout={prefs.guideLayout}
+            hideUnchanged={prefs.hideUnchanged}
+            theme={prefs.theme}
+            {tocOpen}
+            onjumpFile={jumpFile}
+            ontoggleToc={() => {
+              tocOpen = !tocOpen;
+            }}
+            onviewed={onFileViewed}
+            ontoggle={toggleCollapsed}
+            onchapterReviewed={onChapterReviewed}
+          />
+        {/each}
+      </div>
+    {:else}
+      <div class="outcome-empty">
+        <h2>Generate guide</h2>
+        <p>This review is a Diff. Generate a reading-order guide when you want one.</p>
+        {#if generateHint && !canGenerate}
+          <p>{generateHint}</p>
+        {/if}
+        <button
+          type="button"
+          class="ghost"
+          data-queue-generate={canGenerate ? reviewId : undefined}
+          disabled={!canGenerate}
+        >
+          Generate guide
+        </button>
+      </div>
+    {/if}
+  </div>
+</main>
+{#if walkthrough}
+  <GuideToc
+    {chapters}
+    selectedChapterId={selectedChapter?.id ?? null}
+    {selectedPath}
+    {hidden}
+    onjumpFile={jumpFile}
+    onjumpChapter={jumpChapter}
+    onenter={() => {
+      tocOpen = true;
+    }}
+    onleave={() => {
+      tocOpen = false;
+    }}
+  />
+{/if}

@@ -35,7 +35,7 @@ reconciles browser-wide behavior only after those views exist.
 - [06 Build the Svelte review shell and shared state](06-build-svelte-review-shell.md) — done
 - [07 Render Home through SvelteKit SSR](07-render-ssr-home.md) — done
 - [08 Build shared Svelte code-view primitives](08-build-code-view-primitives.md) — done
-- [09 Port Guide to Svelte components](09-port-guide-view.md) — todo
+- [09 Port Guide to Svelte components](09-port-guide-view.md) — done
 - [10 Port Diff to Svelte components](10-port-diff-view.md) — todo
 - [11 Port Code Review and Guide handoff](11-port-outcomes-and-guide-handoff.md) — todo
 - [12 Restore cross-view interaction parity](12-restore-interaction-parity.md) — todo

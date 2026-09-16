@@ -69,7 +69,8 @@ test("fake review data renders tabs internally without fetch or route changes", 
   expect(app?.getAttribute("data-tab")).toBe("guide");
   expect(root.querySelector("h1")?.textContent).toBe("Fake review");
   expect(root.querySelector(".back-link")?.getAttribute("href")).toBe(HOME_PATH);
-  expect(root.querySelector("[data-tab-panel]")?.textContent).toContain("Guide");
+  expect(root.querySelector(".guide-section")).toBeTruthy();
+  expect(root.querySelector(".guide-aside h2")?.textContent).toBe("Core");
 
   const diffTab = root.querySelector('[role="tab"][data-tab="diff"]') as HTMLButtonElement;
   diffTab.click();

@@ -3,6 +3,7 @@
   import type { HomePageData, ReviewPageData, ReviewTab } from "$lib/shared/page-data";
   import { prefs, setTheme } from "$lib/client/state/preferences.svelte";
   import { bindReview, session, setTab } from "$lib/client/state/review.svelte";
+  import GuideView from "./guide/GuideView.svelte";
   import HomeActions from "./home/HomeActions.svelte";
   import HomeView from "./home/HomeView.svelte";
 
@@ -95,10 +96,26 @@
   {:else if data.kind === "home"}
     <HomeView {data} />
   {:else}
-    <main>
-      <div class="main-inner">
-        <div data-tab-panel={tab}>Fake {tab === "review" ? "Code Review" : tab === "diff" ? "Diff" : "Guide"}</div>
-      </div>
-    </main>
+    {#if data.guide}
+      <GuideView
+        guide={data.guide}
+        reviewId={data.reviewId}
+        agentConnected={data.agentConnected}
+        hidden={tab !== "guide"}
+      />
+    {/if}
+    {#if tab !== "guide"}
+      <main>
+        <div class="main-inner">
+          <div data-tab-panel={tab}>Fake {tab === "review" ? "Code Review" : "Diff"}</div>
+        </div>
+      </main>
+    {:else if !data.guide}
+      <main>
+        <div class="main-inner">
+          <div data-tab-panel="guide">Fake Guide</div>
+        </div>
+      </main>
+    {/if}
   {/if}
 </div>
