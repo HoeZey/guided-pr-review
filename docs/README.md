@@ -16,7 +16,7 @@ PRD moves under done/.
 - [05 Code-review outcomes](prds/done/05-code-review-outcomes/) — implemented
 - [06 App structure](prds/06-app-structure/) — implemented
 - [07 Provider API automation](prds/07-provider-api-automation/) — implemented
-- [08 Inline git-host comments](prds/08-inline-git-host-comments/) — in_progress
+- [08 Inline git-host comments](prds/08-inline-git-host-comments/) — implemented
 
 ## Status
 

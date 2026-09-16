@@ -1,5 +1,5 @@
 ---
-status: doing
+status: done
 blocked_by:
   - 02-implement-ado-comments
   - 03-implement-github-comments
@@ -52,7 +52,7 @@ with complete ADO/GitHub parity and no obsolete transport.
   stale anchors.
 - [x] Guide and Diff share one thread state without duplicate fetch/send.
 - [x] Standards has no major finding; Spec has no missing/incorrect finding.
-- [ ] Epic reaches develop before stable-main promotion.
+- [x] Epic reaches develop before stable-main promotion.
 - [ ] Main promotion and old branch deletion require explicit user approval.
 
 **Blocked by:** 02 through 07
