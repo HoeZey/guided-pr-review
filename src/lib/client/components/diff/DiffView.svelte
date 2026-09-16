@@ -1,7 +1,8 @@
 <script lang="ts">
   import type { GuideV1 } from "$lib/shared/contracts/guide";
   import { filesForDiff, fileTree } from "$lib/shared/domain/guide-view";
-  import { headerThreads, projectInlineThreads, threadsAfter } from "$lib/shared/domain/comment-slots";
+  import { headerThreads, projectComposerAnchor, projectInlineThreads, threadsAfter } from "$lib/shared/domain/comment-slots";
+  import { composerSession } from "$lib/client/state/composer.svelte";
   import CodeFile from "../code/CodeFile.svelte";
   import { prefs } from "$lib/client/state/preferences.svelte";
   import { resizeRail } from "$lib/client/browser/interaction";
@@ -36,6 +37,15 @@
       hideUnchanged: prefs.hideUnchanged,
       surface: "diff",
     }),
+  );
+  const composerSlot = $derived(
+    threadSession.hosted && composerSession.target?.kind === "create"
+      ? projectComposerAnchor(composerSession.target.anchor, rows, {
+          layout: prefs.diffLayout,
+          hideUnchanged: prefs.hideUnchanged,
+          surface: "diff",
+        })
+      : null,
   );
 
   function jump(path: string, id: string, root: HTMLElement | null): void {
@@ -105,6 +115,14 @@
         theme={prefs.theme}
         headerThreads={headerThreads(slots, i)}
         afterThreads={(hunkIndex, itemIndex, side) => threadsAfter(slots, i, hunkIndex, itemIndex, side)}
+        commentable={threadSession.hosted}
+        headerComposer={composerSlot?.kind === "header" && composerSlot.fileIndex === i}
+        afterComposer={(hunkIndex, itemIndex, side) =>
+          composerSlot?.kind === "after" &&
+          composerSlot.fileIndex === i &&
+          composerSlot.hunkIndex === hunkIndex &&
+          composerSlot.itemIndex === itemIndex &&
+          composerSlot.side === side}
         ontoggle={toggleCollapsed}
         onviewed={setPathViewed}
       />

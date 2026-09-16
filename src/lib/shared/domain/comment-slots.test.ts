@@ -4,6 +4,7 @@ import type { CommentThread } from "../contracts/comments.ts";
 import type { FileChange } from "../contracts/guide.ts";
 import {
   headerThreads,
+  projectComposerAnchor,
   projectInlineThreads,
   threadsAfter,
 } from "./comment-slots.ts";
@@ -166,4 +167,25 @@ test("duplicate paths and hunks receive a thread once at the first matching file
   assert.equal(hits.length, 1);
   assert.equal(hits[0]?.[0].startsWith("0:"), true);
   assert.equal(threadsAfter(projected, 1, 0, 1, "unified").length, 0);
+});
+
+test("composer anchors use the same Guide and Diff slots as existing threads", () => {
+  const files = [file("src/a.ts")];
+  const opts = { layout: "unified" as const, hideUnchanged: false, surface: "diff" as const };
+  assert.deepEqual(projectComposerAnchor({ kind: "file", path: "src/a.ts" }, files, opts), {
+    kind: "header",
+    fileIndex: 0,
+  });
+  const line = projectComposerAnchor(
+    { kind: "line", path: "src/a.ts", side: "current", line: 11 },
+    files,
+    opts,
+  );
+  assert.equal(line?.kind, "after");
+  if (line?.kind === "after") {
+    assert.deepEqual(threadsAfter(projectInlineThreads([thread("line-11", { kind: "line", path: "src/a.ts", side: "current", line: 11 })], files, opts), 0, line.hunkIndex, line.itemIndex, line.side).map((row) => row.id), [
+      "line-11",
+    ]);
+  }
+  assert.equal(projectComposerAnchor({ kind: "pr" }, files, opts), null);
 });

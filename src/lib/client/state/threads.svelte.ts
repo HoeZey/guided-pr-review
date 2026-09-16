@@ -97,3 +97,22 @@ export async function retryReviewThreads(opts: {
     list: opts.list,
   });
 }
+
+export function upsertThread(thread: CommentThread): void {
+  const index = threadSession.threads.findIndex((row) => row.id === thread.id);
+  if (index < 0) {
+    threadSession.threads = [...threadSession.threads, thread];
+    return;
+  }
+  const next = threadSession.threads.slice();
+  next[index] = thread;
+  threadSession.threads = next;
+}
+
+export function appendReply(threadId: string, message: CommentThread["messages"][number]): void {
+  threadSession.threads = threadSession.threads.map((thread) => {
+    if (thread.id !== threadId) return thread;
+    if (thread.messages.some((row) => row.id === message.id)) return thread;
+    return { ...thread, messages: [...thread.messages, message] };
+  });
+}

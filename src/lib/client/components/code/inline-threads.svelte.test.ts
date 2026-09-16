@@ -306,3 +306,97 @@ test("split spacer height tracks a stack that appears after the first mount", as
   expect(spacer).toBeTruthy();
   expect((spacer as HTMLElement).style.height).toBe("48px");
 });
+
+test("Guide and Diff create a line comment and reply through one composer without targeting a host URL", async () => {
+  echoHighlighter();
+  const created: CommentThread = thread(
+    "review:90",
+    { kind: "line", path: "src/maps.py", side: "current", line: 3 },
+    {
+      messages: [
+        {
+          id: "review:90",
+          author: { login: "ada" },
+          body: "please rename",
+          createdAt: WHEN,
+          updatedAt: WHEN,
+          ownedByCurrentUser: true,
+        },
+      ],
+    },
+  );
+  const fetchSpy = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const method = (init?.method ?? "GET").toUpperCase();
+    if (url === "/api/reviews/hosted-1/comments" && method === "GET") {
+      return { ok: true, statusText: "OK", json: async () => ({ threads: [] }) };
+    }
+    if (url === "/api/reviews/hosted-1/comments" && method === "POST") {
+      const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      expect(body).toMatchObject({
+        anchor: { kind: "line", path: "src/maps.py", side: "current", line: 3 },
+        body: "please rename",
+      });
+      expect(body).not.toHaveProperty("provider");
+      expect(body).not.toHaveProperty("webUrl");
+      expect(body).not.toHaveProperty("host");
+      expect(String(body.clientOperationId)).toMatch(/^cop_[0-9a-f]{32}$/);
+      return { ok: true, statusText: "Created", json: async () => created };
+    }
+    if (url === "/api/reviews/hosted-1/comments/review%3A90/replies" && method === "POST") {
+      const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      expect(body.body).toBe("also here");
+      expect(body).not.toHaveProperty("provider");
+      return {
+        ok: true,
+        statusText: "Created",
+        json: async () => ({
+          id: "review:91",
+          author: { login: "ada" },
+          body: "also here",
+          createdAt: WHEN,
+          updatedAt: WHEN,
+          ownedByCurrentUser: true,
+        }),
+      };
+    }
+    return { ok: true, statusText: "OK", json: async () => ({}) };
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+  host = document.createElement("div");
+  document.body.appendChild(host);
+  mounted = mount(AppShell, { target: host, props: { data: hostedPage() } });
+  await vi.waitFor(() => {
+    expect(host?.querySelector("[data-comment-new='3']")).toBeTruthy();
+  });
+  (host.querySelector("[data-comment-new='3']") as HTMLElement).click();
+  await tick();
+  const draft = host.querySelector("[data-comment-draft]") as HTMLTextAreaElement;
+  expect(draft).toBeTruthy();
+  draft.value = "please rename";
+  draft.dispatchEvent(new Event("input", { bubbles: true }));
+  await tick();
+  (host.querySelector('[role="tab"][data-tab="diff"]') as HTMLButtonElement).click();
+  await tick();
+  expect((host.querySelector("[data-comment-draft]") as HTMLTextAreaElement).value).toBe("please rename");
+  (host.querySelector('[role="tab"][data-tab="guide"]') as HTMLButtonElement).click();
+  await tick();
+  (host.querySelector("[data-comment-send]") as HTMLButtonElement).click();
+  await vi.waitFor(() => {
+    expect(host?.querySelector('[data-thread="review:90"]')).toBeTruthy();
+  });
+  expect(host.querySelector("[data-comment-composer]")).toBeNull();
+  expect(host.querySelector('[data-thread="review:90"]')?.textContent).toContain("please rename");
+  (host.querySelector('[data-comment-reply="review:90"]') as HTMLButtonElement).click();
+  await tick();
+  const replyDraft = host.querySelector("[data-comment-draft]") as HTMLTextAreaElement;
+  replyDraft.value = "also here";
+  replyDraft.dispatchEvent(new Event("input", { bubbles: true }));
+  await tick();
+  (host.querySelector("[data-comment-send]") as HTMLButtonElement).click();
+  await vi.waitFor(() => {
+    expect(host?.textContent).toContain("also here");
+  });
+  const commentUrls = fetchSpy.mock.calls.map(([url]) => String(url)).filter((url) => url.includes("/comments"));
+  expect(commentUrls.join(" ")).not.toMatch(/github\.com|dev\.azure\.com/);
+});

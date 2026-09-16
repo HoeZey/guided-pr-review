@@ -9,11 +9,16 @@ import { fetchJson } from "./fetch";
 
 export type CommentClient = {
   list: (reviewId: string) => Promise<CommentThreadList>;
-  createThread: (reviewId: string, input: CreateThreadRequest) => Promise<CommentThread>;
+  createThread: (
+    reviewId: string,
+    input: CreateThreadRequest,
+    init?: RequestInit,
+  ) => Promise<CommentThread>;
   reply: (
     reviewId: string,
     threadId: string,
     input: ReplyRequest,
+    init?: RequestInit,
   ) => Promise<CommentThread["messages"][number]>;
   update: (
     reviewId: string,
@@ -38,12 +43,13 @@ function jsonInit(method: string, body: unknown): RequestInit {
 
 export const commentsApi: CommentClient = {
   list: (reviewId) => fetchJson(commentsPath(reviewId)),
-  createThread: (reviewId, input) => fetchJson(commentsPath(reviewId), jsonInit("POST", input)),
-  reply: (reviewId, threadId, input) =>
-    fetchJson(
-      commentsPath(reviewId, `/${encodeURIComponent(threadId)}/replies`),
-      jsonInit("POST", input),
-    ),
+  createThread: (reviewId, input, init) =>
+    fetchJson(commentsPath(reviewId), { ...jsonInit("POST", input), ...init }),
+  reply: (reviewId, threadId, input, init) =>
+    fetchJson(commentsPath(reviewId, `/${encodeURIComponent(threadId)}/replies`), {
+      ...jsonInit("POST", input),
+      ...init,
+    }),
   update: (reviewId, threadId, commentId, input) =>
     fetchJson(
       commentsPath(

@@ -32,4 +32,16 @@ test("fetchJson maps a failed response to Error from body.error or statusText", 
     );
     await expect(fetchJson("/api/reviews")).rejects.toThrow(message);
   }
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      ok: false,
+      statusText: "Unauthorized",
+      json: async () => ({ error: "git host identity is not connected", code: "auth" }),
+    }),
+  );
+  await expect(fetchJson("/api/reviews/r1/comments")).rejects.toMatchObject({
+    message: "git host identity is not connected",
+    code: "auth",
+  });
 });

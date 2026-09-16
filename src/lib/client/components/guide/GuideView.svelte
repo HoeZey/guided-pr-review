@@ -9,7 +9,8 @@
     stepGuide,
     unmarkViewed,
   } from "$lib/shared/domain/guide-view";
-  import { projectInlineThreads } from "$lib/shared/domain/comment-slots";
+  import { projectComposerAnchor, projectInlineThreads } from "$lib/shared/domain/comment-slots";
+  import { composerSession } from "$lib/client/state/composer.svelte";
   import { prefs } from "$lib/client/state/preferences.svelte";
   import { persistViewed, session } from "$lib/client/state/review.svelte";
   import { threadSession } from "$lib/client/state/threads.svelte";
@@ -56,6 +57,15 @@
       hideUnchanged: prefs.hideUnchanged,
       surface: "guide",
     }),
+  );
+  const composerSlot = $derived(
+    threadSession.hosted && composerSession.target?.kind === "create"
+      ? projectComposerAnchor(composerSession.target.anchor, walkFiles, {
+          layout: prefs.guideLayout,
+          hideUnchanged: prefs.hideUnchanged,
+          surface: "guide",
+        })
+      : null,
   );
   const selectedChapter = $derived(
     chapters.find((chapter) => chapter.id === session.selectedChapterId) || chapters[0],
@@ -210,6 +220,7 @@
             {tocOpen}
             fileOffset={chapterOffsets[i] ?? 0}
             {slots}
+            {composerSlot}
             onjumpFile={jumpFile}
             ontoggleToc={() => {
               session.tocOpen = !session.tocOpen;

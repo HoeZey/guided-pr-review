@@ -1722,6 +1722,77 @@ main {
   border-top: 1px solid var(--border);
 }
 
+.line[data-comment-type] {
+  cursor: pointer;
+}
+
+.line[data-comment-type]:hover .code {
+  background: var(--accent-dim);
+}
+
+.line.comment-selected {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.comment-composer {
+  margin: 8px 12px 12px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  box-sizing: border-box;
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.composer-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+
+.composer-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: comment-spin 0.7s linear infinite;
+}
+
+@keyframes comment-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.comment-composer textarea {
+  width: 100%;
+  min-height: 72px;
+  font: inherit;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  resize: vertical;
+}
+
+.composer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.composer-error {
+  margin: 8px 0 0;
+  color: var(--removed-text);
+}
+
 .comment-stack-spacer {
   pointer-events: none;
   margin: 8px 12px 12px;

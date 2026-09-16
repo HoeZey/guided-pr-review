@@ -3,6 +3,8 @@
   import type { FileChange } from "$lib/shared/contracts/guide";
   import { isUnchangedGap, type DiffLayout } from "$lib/shared/domain/guide-view";
   import type { CommentSlotSide } from "$lib/shared/domain/comment-slots";
+  import { openCreateComposer, openLineComposer, composerSession } from "$lib/client/state/composer.svelte";
+  import { threadSession } from "$lib/client/state/threads.svelte";
   import FileHeader from "./FileHeader.svelte";
   import HunkHeader from "./HunkHeader.svelte";
   import SplitRow from "./SplitRow.svelte";
@@ -23,6 +25,9 @@
     theme = "dark",
     headerThreads = [],
     afterThreads = () => [],
+    commentable = false,
+    headerComposer = false,
+    afterComposer = () => false,
     ontoggle,
     onviewed,
   }: {
@@ -36,12 +41,40 @@
     theme?: "light" | "dark";
     headerThreads?: CommentThread[];
     afterThreads?: (hunkIndex: number, itemIndex: number, side: CommentSlotSide) => CommentThread[];
+    commentable?: boolean;
+    headerComposer?: boolean;
+    afterComposer?: (hunkIndex: number, itemIndex: number, side: CommentSlotSide) => boolean;
     ontoggle?: (path: string) => void;
     onviewed?: (path: string, viewed: boolean) => void;
   } = $props();
 
   const lang = $derived(languageFor(file));
   const stats = $derived(fileDiffStats(file));
+  const selectedLines = $derived.by(() => {
+    const lines = new Set<number>();
+    const target = composerSession.target;
+    if (target?.kind !== "create") return lines;
+    const anchor = target.anchor;
+    if (anchor.kind === "line" && anchor.path === file.path) lines.add(anchor.line);
+    if (anchor.kind === "range" && anchor.path === file.path) {
+      for (let n = anchor.startLine; n <= anchor.endLine; n += 1) lines.add(n);
+    }
+    return lines;
+  });
+
+  function commentOnLine(line: number, extend: boolean): void {
+    if (!threadSession.reviewId) return;
+    openLineComposer(threadSession.reviewId, file.path, line, extend);
+  }
+
+  function commentOnFile(): void {
+    if (!threadSession.reviewId) return;
+    openCreateComposer(threadSession.reviewId, { kind: "file", path: file.path });
+  }
+
+  function rowSelected(newLine: number | undefined): boolean {
+    return newLine != null && selectedLines.has(newLine);
+  }
 </script>
 
 <section
@@ -56,10 +89,12 @@
     {collapsed}
     {viewed}
     {stats}
+    {commentable}
     ontoggle={() => ontoggle?.(file.path)}
     onviewed={(next) => onviewed?.(file.path, next)}
+    onfilecomment={commentOnFile}
   >
-    <CommentStack threads={headerThreads} />
+    <CommentStack threads={headerThreads} showComposer={headerComposer} />
   </FileHeader>
   <div class="file-body">
     {#if file.stub}
@@ -74,10 +109,19 @@
               {#each projected.split as item, i (`l${i}`)}
                 {@const own = afterThreads(hi, i, "left")}
                 {@const other = afterThreads(hi, i, "right")}
-                <SplitRow {item} side="left" {lang} {theme}>
-                  {#if own.length}
-                    <CommentStack threads={own} />
-                  {:else if other.length}
+                {@const ownComposer = afterComposer(hi, i, "left")}
+                {@const otherComposer = afterComposer(hi, i, "right")}
+                <SplitRow
+                  {item}
+                  side="left"
+                  {lang}
+                  {theme}
+                  commentable={false}
+                  selected={false}
+                >
+                  {#if own.length || ownComposer}
+                    <CommentStack threads={own} showComposer={ownComposer} />
+                  {:else if other.length || otherComposer}
                     <div class="comment-stack-spacer" aria-hidden="true"></div>
                   {/if}
                 </SplitRow>
@@ -88,10 +132,20 @@
               {#each projected.split as item, i (`r${i}`)}
                 {@const own = afterThreads(hi, i, "right")}
                 {@const other = afterThreads(hi, i, "left")}
-                <SplitRow {item} side="right" {lang} {theme}>
-                  {#if own.length}
-                    <CommentStack threads={own} />
-                  {:else if other.length}
+                {@const ownComposer = afterComposer(hi, i, "right")}
+                {@const otherComposer = afterComposer(hi, i, "left")}
+                <SplitRow
+                  {item}
+                  side="right"
+                  {lang}
+                  {theme}
+                  {commentable}
+                  selected={!isUnchangedGap(item) && rowSelected(item.right?.newLine)}
+                  oncomment={commentOnLine}
+                >
+                  {#if own.length || ownComposer}
+                    <CommentStack threads={own} showComposer={ownComposer} />
+                  {:else if other.length || otherComposer}
                     <div class="comment-stack-spacer" aria-hidden="true"></div>
                   {/if}
                 </SplitRow>
@@ -103,10 +157,23 @@
             {#each projected.unified as item, i (`u${i}`)}
               {#if isUnchangedGap(item)}
                 <UnchangedGap count={item.count} />
-                <CommentStack threads={afterThreads(hi, i, "unified")} />
+                <CommentStack
+                  threads={afterThreads(hi, i, "unified")}
+                  showComposer={afterComposer(hi, i, "unified")}
+                />
               {:else}
-                <UnifiedRow line={item} {lang} {theme}>
-                  <CommentStack threads={afterThreads(hi, i, "unified")} />
+                <UnifiedRow
+                  line={item}
+                  {lang}
+                  {theme}
+                  {commentable}
+                  selected={rowSelected(item.newLine)}
+                  oncomment={commentOnLine}
+                >
+                  <CommentStack
+                    threads={afterThreads(hi, i, "unified")}
+                    showComposer={afterComposer(hi, i, "unified")}
+                  />
                 </UnifiedRow>
               {/if}
             {/each}

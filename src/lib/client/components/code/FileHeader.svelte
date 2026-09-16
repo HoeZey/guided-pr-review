@@ -9,8 +9,10 @@
     collapsed = false,
     viewed = false,
     stats,
+    commentable = false,
     ontoggle,
     onviewed,
+    onfilecomment,
     children,
   }: {
     path: string;
@@ -18,8 +20,10 @@
     collapsed?: boolean;
     viewed?: boolean;
     stats: { additions: number; deletions: number };
+    commentable?: boolean;
     ontoggle?: () => void;
     onviewed?: (viewed: boolean) => void;
+    onfilecomment?: () => void;
     children?: Snippet;
   } = $props();
 
@@ -46,6 +50,11 @@
     <span class="path">{path}</span>
   {/if}
   <DiffStats additions={stats.additions} deletions={stats.deletions} />
+  {#if commentable}
+    <button type="button" class="ghost" data-comment-file={path} onclick={() => onfilecomment?.()}>
+      Comment
+    </button>
+  {/if}
   <label class="viewed">
     <input
       type="checkbox"

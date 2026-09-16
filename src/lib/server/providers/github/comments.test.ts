@@ -11,6 +11,10 @@ import {
 import type { PullRequestSource } from "../../../shared/contracts/provenance.ts";
 import { GITHUB_API_VERSION, GithubProviderError } from "./rest.ts";
 import { createGithubCommentProvider } from "./comments.ts";
+import type { GuideV1 } from "../../../shared/contracts/guide.ts";
+import type { ReviewRepository } from "../../repositories/ports.ts";
+import { createFakeCommentProvider } from "../fake-comments.ts";
+import { createCommentService } from "../../services/comments.ts";
 
 const GH_TOKEN = "gho_FIXTURE_TOKEN_abcdef1234567890";
 const GH_LOGIN = "octocat";
@@ -661,3 +665,120 @@ test("pagination, auth, permission, rate, and not-found failures stay on injecte
     },
   );
 });
+
+test("CommentService creates and replies through the injected GitHub adapter", async () => {
+  let createdReview: unknown;
+  const { fetch, calls } = recordingFetch((url, init) => {
+    const method = (init?.method ?? "GET").toUpperCase();
+    if (method === "GET" && url.pathname === "/repos/octocat/Hello-World/pulls/1347/comments") {
+      return jsonResponse(createdReview ? [createdReview] : []);
+    }
+    if (method === "GET" && url.pathname === "/repos/octocat/Hello-World/issues/1347/comments") {
+      return jsonResponse([]);
+    }
+    if (method === "POST" && url.pathname === "/repos/octocat/Hello-World/pulls/1347/comments") {
+      const body = readJson(init) as { body?: string; line?: number; path?: string };
+      createdReview = reviewComment({ id: 90, body: body.body, path: body.path, line: body.line });
+      return jsonResponse(createdReview, { status: 201 });
+    }
+    if (method === "POST" && url.pathname === "/repos/octocat/Hello-World/pulls/1347/comments/90/replies") {
+      const body = readJson(init) as { body?: string };
+      return jsonResponse(
+        reviewComment({ id: 91, in_reply_to_id: 90, body: body.body, user: user(GH_LOGIN) }),
+        { status: 201 },
+      );
+    }
+    throw new Error(`unexpected ${method} ${url.pathname}`);
+  });
+  const comments = createCommentService({
+    reviews: githubRepos(),
+    credentials: connectedCredentials(),
+    providers: {
+      ado: createFakeCommentProvider({ provider: "azure-devops" }),
+      github: createGithubCommentProvider({ credentials: connectedCredentials(), fetch }),
+    },
+  });
+  const created = await comments.createThread("r1", {
+    anchor: { kind: "line", path: "src/a.ts", side: "current", line: 11 },
+    body: "from service",
+    clientOperationId: COP,
+  });
+  assert.equal(created.id, "review:90");
+  assert.equal(created.anchor.kind, "line");
+  const replied = await comments.reply("r1", created.id, {
+    body: "also here",
+    clientOperationId: "cop_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  });
+  assert.equal(replied.body, "also here");
+  assert.equal(
+    calls.every((call) => call.url.startsWith("https://api.github.com/")),
+    true,
+  );
+  assert.equal(
+    JSON.stringify(calls.map((call) => call.init?.body)).includes("cop_"),
+    false,
+  );
+});
+
+function githubRepos(): ReviewRepository {
+  const source = PROVENANCE;
+  const loaded: GuideV1 = {
+    version: 1,
+    title: "One",
+    base: BASE_SHA,
+    head: HEAD_SHA,
+    range: "master...new-topic",
+    chapters: [
+      {
+        id: "core",
+        kind: "core",
+        title: "Core",
+        why: "The behavior change.",
+        files: [
+          {
+            path: "src/a.ts",
+            hunks: [
+              {
+                lines: [
+                  { type: "context", content: "keep", oldLine: 10, newLine: 10 },
+                  { type: "added", content: "x = 1", newLine: 11 },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    source,
+  };
+  return {
+    listReviews: async () => {
+      throw new Error("unexpected listReviews");
+    },
+    getReview: async (id) => {
+      if (id !== "r1") throw Object.assign(new Error(`unknown review ${id}`), { status: 404 });
+      return { guide: loaded, outcomes: [] };
+    },
+    addReview: async () => {
+      throw new Error("unexpected addReview");
+    },
+    addReviewFromTool: async () => {
+      throw new Error("unexpected addReviewFromTool");
+    },
+    upsertReview: async () => {
+      throw new Error("unexpected upsertReview");
+    },
+    upsertReviewFromTool: async () => {
+      throw new Error("unexpected upsertReviewFromTool");
+    },
+    removeReview: async () => {
+      throw new Error("unexpected removeReview");
+    },
+    setActive: async () => {
+      throw new Error("unexpected setActive");
+    },
+    seedIfEmpty: async () => {
+      throw new Error("unexpected seedIfEmpty");
+    },
+  };
+}

@@ -797,10 +797,16 @@ test("maps auth, permission, stale create, missing resource, rate, timeout, and 
   );
 });
 
-test("CommentService lists and creates through the injected ADO adapter", async () => {
+test("CommentService lists, creates, and replies through the injected ADO adapter", async () => {
   const { fetch, calls } = recordingFetch((url, request) => {
     if (request.method === "GET" && isThreadList(url)) {
       return jsonResponse({ value: [threadRow(11)], count: 1 });
+    }
+    if (request.method === "GET" && isThreadGet(url, "11")) {
+      return jsonResponse(threadRow(11));
+    }
+    if (request.method === "POST" && isCommentCreate(url, "11")) {
+      return jsonResponse(commentRow(3, "also here"), 201);
     }
     if (request.method === "POST" && isThreadList(url)) {
       return jsonResponse(threadRow(21, { comments: [commentRow(1, "from service")] }), 201);
@@ -824,8 +830,14 @@ test("CommentService lists and creates through the injected ADO adapter", async 
     clientOperationId: COP,
   });
   assert.equal(created.id, "21");
+  const replied = await comments.reply("r1", "11", {
+    body: "also here",
+    clientOperationId: "cop_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  });
+  assert.equal(replied.body, "also here");
   assert.equal(
     calls.every((call) => call.authorization === `Bearer ${TOKEN}` && call.url.includes("api-version=7.1")),
     true,
   );
+  assert.equal(calls.some((call) => call.url.includes("evil.example")), false);
 });

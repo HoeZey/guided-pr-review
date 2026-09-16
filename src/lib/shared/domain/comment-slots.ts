@@ -1,4 +1,4 @@
-import type { CommentThread } from "../contracts/comments.ts";
+import type { CommentThread, CreateCommentAnchor } from "../contracts/comments.ts";
 import type { FileChange } from "../contracts/guide.ts";
 import {
   isUnchangedGap,
@@ -151,6 +151,41 @@ export function threadsAfter(
   side: CommentSlotSide,
 ): CommentThread[] {
   return projected.after.get(afterKey(fileIndex, hunkIndex, itemIndex, side)) ?? [];
+}
+
+export type ComposerSlot =
+  | { kind: "header"; fileIndex: number }
+  | { kind: "after"; fileIndex: number; hunkIndex: number; itemIndex: number; side: CommentSlotSide };
+
+export function projectComposerAnchor(
+  anchor: CreateCommentAnchor,
+  files: FileChange[],
+  opts: { layout: DiffLayout; hideUnchanged: boolean; surface: ThreadSurface },
+): ComposerSlot | null {
+  if (anchor.kind === "pr") return null;
+  if (anchor.kind === "file") {
+    const fileIndex = files.findIndex((file) => file.path === anchor.path);
+    return fileIndex < 0 ? null : { kind: "header", fileIndex };
+  }
+  const start = anchor.kind === "line" ? anchor.line : anchor.startLine;
+  const end = anchor.kind === "line" ? anchor.line : anchor.endLine;
+  const placed = firstFileSlot(
+    files,
+    anchor.path,
+    opts.layout,
+    opts.hideUnchanged,
+    start,
+    end,
+    opts.surface === "guide",
+  );
+  if (!placed) return null;
+  return {
+    kind: "after",
+    fileIndex: placed.fileIndex,
+    hunkIndex: placed.slot.hunkIndex,
+    itemIndex: placed.slot.itemIndex,
+    side: placed.slot.side,
+  };
 }
 
 export function projectInlineThreads(

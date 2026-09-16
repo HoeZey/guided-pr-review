@@ -1,7 +1,16 @@
 <script lang="ts">
   import type { CommentMessage, CommentThread } from "$lib/shared/contracts/comments";
+  import { composerSession, openReplyComposer } from "$lib/client/state/composer.svelte";
+  import { threadSession } from "$lib/client/state/threads.svelte";
+  import CommentComposer from "./CommentComposer.svelte";
 
-  let { threads }: { threads: CommentThread[] } = $props();
+  let {
+    threads,
+    showComposer = false,
+  }: {
+    threads: CommentThread[];
+    showComposer?: boolean;
+  } = $props();
 
   function stamp(iso: string): string {
     const ms = Date.parse(iso);
@@ -11,9 +20,18 @@
   function edited(message: CommentMessage): boolean {
     return message.updatedAt !== message.createdAt;
   }
+
+  function replyOpen(threadId: string): boolean {
+    return composerSession.target?.kind === "reply" && composerSession.target.threadId === threadId;
+  }
+
+  function startReply(threadId: string): void {
+    if (!threadSession.reviewId) return;
+    openReplyComposer(threadSession.reviewId, threadId);
+  }
 </script>
 
-{#if threads.length}
+{#if threads.length || showComposer}
   <div class="comment-stack">
     {#each threads as thread (thread.id)}
       {@const root = thread.messages[0]}
@@ -42,9 +60,28 @@
                 <p class="thread-copy">{message.body}</p>
               </div>
             {/each}
+            {#if threadSession.hosted && threadSession.reviewId}
+              {#if replyOpen(thread.id)}
+                <CommentComposer />
+              {:else}
+                <div class="composer-actions">
+                  <button
+                    type="button"
+                    class="ghost"
+                    data-comment-reply={thread.id}
+                    onclick={() => startReply(thread.id)}
+                  >
+                    Reply
+                  </button>
+                </div>
+              {/if}
+            {/if}
           </div>
         </article>
       {/if}
     {/each}
+    {#if showComposer}
+      <CommentComposer />
+    {/if}
   </div>
 {/if}

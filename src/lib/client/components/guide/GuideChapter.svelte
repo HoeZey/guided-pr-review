@@ -7,8 +7,10 @@
   import {
     headerThreads,
     threadsAfter,
+    type ComposerSlot,
     type ProjectedInlineThreads,
   } from "$lib/shared/domain/comment-slots";
+  import { threadSession } from "$lib/client/state/threads.svelte";
   import { session } from "$lib/client/state/review.svelte";
   import { fileId, progressParts, sectionId, type GuideNavChapter } from "./project";
 
@@ -24,6 +26,7 @@
     tocOpen,
     fileOffset = 0,
     slots,
+    composerSlot = null,
     onjumpFile,
     ontoggleToc,
     onviewed,
@@ -41,6 +44,7 @@
     tocOpen: boolean;
     fileOffset?: number;
     slots?: ProjectedInlineThreads;
+    composerSlot?: ComposerSlot | null;
     onjumpFile: (chapterId: string, path: string, id: string) => void;
     ontoggleToc: () => void;
     onviewed: (path: string, viewed: boolean) => void;
@@ -144,6 +148,16 @@
           headerThreads={slots ? headerThreads(slots, fileOffset + i) : []}
           afterThreads={(hunkIndex, itemIndex, side) =>
             slots ? threadsAfter(slots, fileOffset + i, hunkIndex, itemIndex, side) : []}
+          commentable={threadSession.hosted}
+          headerComposer={composerSlot?.kind === "header" && composerSlot.fileIndex === fileOffset + i}
+          afterComposer={(hunkIndex, itemIndex, side) =>
+            Boolean(
+              composerSlot?.kind === "after" &&
+                composerSlot.fileIndex === fileOffset + i &&
+                composerSlot.hunkIndex === hunkIndex &&
+                composerSlot.itemIndex === itemIndex &&
+                composerSlot.side === side,
+            )}
           {ontoggle}
           {onviewed}
         />
