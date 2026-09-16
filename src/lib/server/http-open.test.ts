@@ -46,6 +46,13 @@ function fakeServices(overrides: {
       add: unused("repositories.add"),
       remove: unused("repositories.remove"),
     },
+    comments: {
+      list: unused("comments.list"),
+      createThread: unused("comments.createThread"),
+      reply: unused("comments.reply"),
+      update: unused("comments.update"),
+      delete: unused("comments.delete"),
+    },
   };
 }
 

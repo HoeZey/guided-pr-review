@@ -1,5 +1,6 @@
 import { OpenActionTarget } from "../shared/contracts/catalog.ts";
 import { createMcpHandler } from "./mcp/handler.ts";
+import { CommentError } from "./providers/comments.ts";
 import type { AppServices } from "./services/app.ts";
 
 export type HttpEvent = {
@@ -21,6 +22,34 @@ function jsonError(err: unknown, fallback: number): Response {
   const status = (err as { status?: number }).status ?? fallback;
   const message = err instanceof Error ? err.message : String(err);
   return Response.json({ error: message }, { status });
+}
+
+function commentJsonError(err: unknown, fallback: number): Response {
+  const status = (err as { status?: number }).status ?? fallback;
+  const message = err instanceof Error ? err.message : String(err);
+  if (err instanceof CommentError) {
+    return Response.json({ error: message, code: err.code }, { status });
+  }
+  return Response.json({ error: message }, { status });
+}
+
+function assertSameOrigin(request: Request): void {
+  const origin = request.headers.get("origin");
+  if (!origin) return;
+  if (origin !== new URL(request.url).origin) {
+    throw new CommentError("foreign-origin", "foreign origin is not allowed");
+  }
+}
+
+function requireParam(
+  params: HttpEvent["params"],
+  key: "id" | "threadId" | "commentId",
+): string {
+  const value = params[key];
+  if (value) return value;
+  if (key === "threadId") throw new CommentError("unknown-thread", "missing threadId");
+  if (key === "commentId") throw new CommentError("unknown-comment", "missing commentId");
+  throw new CommentError("unknown-review", "missing id");
 }
 
 function invalidJson(): Response {
@@ -290,6 +319,98 @@ export function createHttpHandlers(
           return Response.json(await services.repositories.remove(id));
         } catch (err) {
           return jsonError(err, 500);
+        }
+      },
+    },
+    comments: {
+      GET: async ({ request, params }: HttpEvent) => {
+        await seed();
+        try {
+          assertSameOrigin(request);
+          return Response.json(await services.comments.list(requireParam(params, "id")));
+        } catch (err) {
+          return commentJsonError(err, 500);
+        }
+      },
+      POST: async ({ request, params }: HttpEvent) => {
+        await seed();
+        let payload: unknown;
+        try {
+          payload = await readJson(request);
+        } catch {
+          return invalidJson();
+        }
+        try {
+          assertSameOrigin(request);
+          return Response.json(
+            await services.comments.createThread(requireParam(params, "id"), payload),
+            { status: 201 },
+          );
+        } catch (err) {
+          return commentJsonError(err, 400);
+        }
+      },
+    },
+    commentReply: {
+      POST: async ({ request, params }: HttpEvent) => {
+        await seed();
+        let payload: unknown;
+        try {
+          payload = await readJson(request);
+        } catch {
+          return invalidJson();
+        }
+        try {
+          assertSameOrigin(request);
+          return Response.json(
+            await services.comments.reply(
+              requireParam(params, "id"),
+              requireParam(params, "threadId"),
+              payload,
+            ),
+            { status: 201 },
+          );
+        } catch (err) {
+          return commentJsonError(err, 400);
+        }
+      },
+    },
+    comment: {
+      PATCH: async ({ request, params }: HttpEvent) => {
+        await seed();
+        let payload: unknown;
+        try {
+          payload = await readJson(request);
+        } catch {
+          return invalidJson();
+        }
+        try {
+          assertSameOrigin(request);
+          return Response.json(
+            await services.comments.update(
+              requireParam(params, "id"),
+              requireParam(params, "threadId"),
+              requireParam(params, "commentId"),
+              payload,
+            ),
+          );
+        } catch (err) {
+          return commentJsonError(err, 400);
+        }
+      },
+      DELETE: async ({ request, params }: HttpEvent) => {
+        await seed();
+        try {
+          assertSameOrigin(request);
+          return Response.json(
+            await services.comments.delete(
+              requireParam(params, "id"),
+              requireParam(params, "threadId"),
+              requireParam(params, "commentId"),
+            ),
+          );
+        } catch (err) {
+          return commentJsonError(err, 500);
         }
       },
     },

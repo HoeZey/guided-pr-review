@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 blocked_by:
   - ../../07-provider-api-automation/issues/09-integrate-provider-automation
 blocks:
@@ -53,20 +53,64 @@ fixtures. No createAdoRestAdapter or createGithubProvider HTTP in this story.
 
 **Acceptance criteria:**
 
-- [ ] ADO and GitHub can implement one port without provider fields in shared
+- [x] ADO and GitHub can implement one port without provider fields in shared
   thread contracts.
-- [ ] Browser inputs cannot choose arbitrary provider URL/repository/PR.
-- [ ] Service resolves all host identity from saved review provenance.
-- [ ] Line/range, file, PR-wide, and stale/unmappable anchors parse strictly.
-- [ ] Edit/delete require normalized current-user ownership and still defer
+- [x] Browser inputs cannot choose arbitrary provider URL/repository/PR.
+- [x] Service resolves all host identity from saved review provenance.
+- [x] Line/range, file, PR-wide, and stale/unmappable anchors parse strictly.
+- [x] Edit/delete require normalized current-user ownership and still defer
   final authorization to provider.
-- [ ] Client operation id has one strict format and cannot target provider
+- [x] Client operation id has one strict format and cannot target provider
   resources.
-- [ ] Same-origin and structured error behavior are tested.
-- [ ] No production provider call or UI lands.
+- [x] Same-origin and structured error behavior are tested.
+- [x] No production provider call or UI lands.
 
 **Blocked by:** 07 integration
 
 **Blocks:** 02, 03, 04, and 07
 
 **Parallel-eligible:** no
+
+## code-review
+
+Pass: 16 September 2026
+
+base: f5da2f55354ef3a6046636a1433b94f797efb0ab
+head: 2e80b17a3fc90b8e3f61b1b7fc63c7bd5ad1fef1
+branch: feature/08-01-define-comment-service
+
+Not blocking. Standards has no major. Spec has no missing or incorrect.
+
+Judged implementer notes: Default fake CommentProvider wiring in createAppServices is the 08-04 parallel seam and is not a finding. Mapping ProviderError and GithubProviderError in CommentService matches configured-repositories and is not a finding. svelte.config.js csrf trustedOrigins ["*"] is the known 06 minor; comment routes still reject a mismatched Origin header. Live comment HTTP stays out of createAdoRestAdapter and createGithubProvider.
+
+### Standards
+
+major 0 / minor 1 / nit 1
+
+- severity: minor
+  title: Mutation responses skip the strict comment contract parse
+  location: src/lib/server/services/comments.ts (createThread, reply, update)
+  startLine: 106
+  endLine: 162
+  reference:
+    source: .cursor/rules/ponytail.mdc
+    quote: Not lazy about input validation at trust boundaries.
+  explanation: list runs CommentThreadList.parse, which is strict, so extra provider keys fail the GET. createThread returns normalizeListedThread, and reply and update return a spread message with ownedByCurrentUser overwritten, with no CommentThread or CommentMessage parse. A later adapter can put pullRequestThreadId or node_id on that object and the JSON response will include it. The shared schemas are strict specifically to keep those fields out of the comment vocabulary.
+  recommendation: Parse the create result with CommentThread and reply/update results with CommentMessage after normalize. Map a parse failure to CommentError malformed so list and mutations share one leak boundary.
+
+- severity: nit
+  title: Reply and owned edits re-list every thread first
+  location: src/lib/server/services/comments.ts (requireOwned, reply)
+  startLine: 79
+  endLine: 143
+  reference:
+    source: .cursor/rules/ponytail.mdc
+    quote: Mark intentional simplifications with a ponytail comment. If the shortcut has a known ceiling, the comment names the ceiling and the upgrade path.
+  explanation: reply and requireOwned call listedThreads, which is a full provider list, before the mutate. That is enough for the fake and for the ownership tests. Against a live host it is an extra list round-trip on every reply, edit, and delete. There is no ponytail comment naming that ceiling or the upgrade (a get-thread call, or treating provider 404/403 as the existence and ownership check).
+  recommendation: Keep the full list while CommentProvider has no get-thread. Add a ponytail comment. Do not add a new provider method in 08-01.
+
+### Spec
+
+missing 0 / partial 0 / scope-creep 0 / incorrect 0
+
+findings: []
