@@ -67,7 +67,7 @@ PRD behavior unchanged. Issue Touches fields now name HEAD symbols:
 
 - [01 Define provider-neutral comment services and contracts](01-define-comment-service.md) — done
 - [02 Implement ADO comment adapter](02-implement-ado-comments.md) — done
-- [03 Implement GitHub comment adapter](03-implement-github-comments.md) — todo
+- [03 Implement GitHub comment adapter](03-implement-github-comments.md) — done
 - [04 Render existing threads inline in Guide and Diff](04-render-inline-threads.md) — todo
 - [05 Create comments and replies from both views](05-create-and-reply.md) — todo
 - [06 Edit and delete owned comments](06-edit-and-delete.md) — todo
