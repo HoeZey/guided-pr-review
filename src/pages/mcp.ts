@@ -1,6 +1,6 @@
 import type { APIRoute } from "astro";
-import { handleMcpRequest } from "../mcp.ts";
-import { ensureSeed } from "../seed.ts";
+import { handleMcpRequest } from "../lib/server/runtime.ts";
+import { ensureSeed } from "../lib/server/seed.ts";
 
 export const prerender = false;
 

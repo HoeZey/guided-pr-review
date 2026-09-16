@@ -1,6 +1,6 @@
 import type { APIRoute } from "astro";
 import { queueAction } from "../../lib/server/repositories/json/store.ts";
-import { ensureSeed } from "../../seed.ts";
+import { ensureSeed } from "../../lib/server/seed.ts";
 
 export const prerender = false;
 
