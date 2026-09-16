@@ -78,8 +78,8 @@ any conflict files
 - [x] Isolated Playwright/manual smoke covers Home, saved reviews, Guide, Diff,
   Code Review, Generate Guide, navigation, deep reload, preferences, keyboard,
   rails, syntax highlighting, and agent completion.
-- [ ] Standards review has no major finding.
-- [ ] Spec review has no missing or incorrect finding.
+- [x] Standards review has no major finding.
+- [x] Spec review has no missing or incorrect finding.
 - [ ] Integration fast-forwards or merges to develop only after all checks.
 - [ ] Stable main promotion requires explicit user authorization.
 

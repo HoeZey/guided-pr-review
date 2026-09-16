@@ -298,4 +298,117 @@ component and browser boundaries rather than HTML-string internals.
 
 ## integration-review
 
-Pending implementation.
+Date: 16 September 2026
+
+base: e58839e61237e1bac403a607abb0b964601e2ff7
+head: 44023083daa32d4f09ab47d7cbbd52a8a5da63a0
+branch: feature/06-app-structure
+
+History: 13 Merged commits, one per story 06-01 through 06-13, plus one overlap
+commit b8d4cad19ebdd716393a63fc9852b8c531da3ecb Adapt Diff keep-alive test to
+GuideView keep-alive.
+
+Not blocking. Standards has no major. Spec has no missing or incorrect finding.
+
+Story minors that no longer apply at this head are omitted: 06-04 early delete
+of src/actions.ts is now the required cutover state; 06-09 Guide spy-while-hidden
+and 06-11 stale refresh overlay are fixed. The 06-13 smoke note that
+HOST=localhost listened on ::1 rather than 127.0.0.1 is environmental Node
+bind behavior, not a product miss of the HOST/PORT override.
+
+### Standards
+
+major 0 / minor 5 / nit 3
+
+- severity: minor
+  title: Architecture import rules miss relative sibling-layer paths
+  location: scripts/check-architecture.ts
+  explanation: The check classifies files under src/lib/shared, src/lib/client,
+  and src/routes, then compares each import specifier to alias and package
+  patterns such as $lib/server and node:fs. A shared or client module can still
+  import a forbidden layer with a relative path into src/lib/server or
+  src/lib/client. HEAD source inspected for that shape does not do so, so this
+  does not fail the import-direction success criterion. The executable policy
+  still looks stricter than it is. Documented on 06-01; still true.
+
+- severity: minor
+  title: Extra-function route rule is untested and skips common handlers
+  location: scripts/check-architecture.ts
+  explanation: checkArchitecture flags extra function names in +page.server.ts
+  and +server.ts. The suite proves a shared svelte import fails, the scaffold
+  is clean, and Astro runtime files are gone. Nothing fails for
+  route-heavy-logic. The const-arrow matcher also requires a simple parameter
+  list, so a handler written as an async arrow with a destructured argument is
+  not seen as a function. Product routes at HEAD are thin re-exports, so this
+  is a checker gap, not a route-logic miss. Documented on 06-01; still true.
+
+- severity: minor
+  title: CSRF star origin is unused for JSON MCP and API
+  location: svelte.config.js
+  explanation: kit.csrf.trustedOrigins is still ["*"]. SvelteKit origin checks
+  run in production and only for form content types. Existing /api and /mcp
+  clients send JSON, so they never hit that check. After 06-13, npm start is
+  the adapter-node production server, so the star list now disables production
+  form CSRF on the product runtime before any form client exists. It is not
+  required for the HTTP/MCP contract. Documented on 06-05; still true.
+
+- severity: minor
+  title: Home list refresh can refill leftover state after leaveHome
+  location: src/lib/client/state/home.svelte.ts
+  explanation: leaveHome clears listed, pendingActionId, and the watch timer.
+  refreshHomeList still applyList after await. A tick that started while Home
+  was mounted can finish after destroy and write listed again. The next visit
+  to / then prefers that snapshot over the loader payload. Deep reload still
+  resets the module. First hydration still uses serialized page data. Documented
+  on 06-07 and 06-12; still true. Does not fail filled first-load SSR.
+
+- severity: minor
+  title: Playwright keyboard smoke does not fail when j is a no-op
+  location: e2e/interaction-parity.spec.ts
+  explanation: After switching to Guide, the smoke reads the current file-pill
+  path, presses j, and accepts either an unchanged path or any truthy pathAfter.
+  That passes when reading-order movement never runs. The production keydown
+  path is exercised in Vitest via bindReviewChrome. Rails, tabs, prefs, reload,
+  and navigation still have real assertions. Documented on 06-12; still true.
+
+- severity: nit
+  title: Hydration fetch assertion overlaps the existing review-shell test
+  location: src/lib/client/components/shell.svelte.test.ts
+  explanation: The review-shell test already stubs fetch and asserts it is not
+  called when AppShell receives review page data. The hydration test repeats
+  that review assertion and adds a Home case. Both mount AppShell with fakes;
+  neither runs +page.server.ts. Documented on 06-05; still true.
+
+- severity: nit
+  title: Diff scroll spy duplicates the shared spyCurrent action
+  location: src/lib/client/components/diff/DiffView.svelte
+  explanation: spyCurrent exists for Code Review observers. DiffView still
+  binds the same IntersectionObserver, rootMargin, and disconnect lifecycle in
+  a local spyFiles action. Behavior matches the old observeMain path. The copy
+  will drift if one helper changes. Documented on 06-12; still true.
+
+- severity: nit
+  title: Migration-proof route remains after the Astro cutover
+  location: src/routes/migration-proof
+  explanation: 06-01 added /migration-proof as a minimal SSR/hydration scaffold.
+  Product Home and review routes now provide that proof. The extra public route
+  still renders a click-counter page and is not a preserved product URL. 06-13
+  did not require its removal. Harmless leftover, not 07 or 08 behavior.
+
+### Spec
+
+missing 0 / partial 0 / scope-creep 0 / incorrect 0
+
+findings: []
+
+HEAD meets the 06 success criteria and 06-13 acceptance criteria graded here.
+SvelteKit plus adapter-node is the only runtime. Astro packages, config, pages,
+viewer.ts, and src/actions.ts are gone. npm run dev/build/start are SvelteKit;
+dev and start default to localhost:8765; start honors HOST/PORT; POST /mcp is
+same origin. Home and review SSR then hydrate without a duplicate first-load
+data request; Guide, Diff, and Code Review stay internal tabs. Source follows
+lib/client, lib/server, lib/shared, and routes with JSON repositories, feature
+services, and provider/auth/git/chaptering ports and no 07/08 product behavior.
+Public /, /reviews/:id, /api, and /mcp are preserved. Root store.ts and
+contracts.ts are gone. Visual CSS is the reused global sheet, not a design
+system.
