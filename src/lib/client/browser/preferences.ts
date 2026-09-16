@@ -1,5 +1,7 @@
 import type { DiffLayout } from "$lib/shared/domain/guide-view";
-import type { ReviewTab } from "$lib/shared/page-data";
+import { TAB_COOKIE, parseStoredTab, type ReviewTab } from "$lib/shared/page-data";
+
+export { TAB_COOKIE, parseStoredTab };
 
 export const THEME_KEY = "guided-pr-review-theme";
 export const TAB_KEY = "guided-pr-review-tab";
@@ -42,7 +44,12 @@ export function parseTheme(raw: string | null): Theme {
 }
 
 export function parseTab(raw: string | null): ReviewTab {
-  return raw === "guide" || raw === "diff" || raw === "review" ? raw : PREF_DEFAULTS.tab;
+  return parseStoredTab(raw) ?? PREF_DEFAULTS.tab;
+}
+
+export function writeTabCookie(tab: ReviewTab): void {
+  if (typeof document === "undefined") return;
+  document.cookie = `${TAB_COOKIE}=${tab}; Path=/; SameSite=Lax`;
 }
 
 export function parseSplitPct(raw: string | null): number {

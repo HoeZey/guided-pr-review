@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "vitest";
+import { TAB_COOKIE, parseStoredTab } from "$lib/shared/page-data";
 import {
   DIFF_KEY,
   GUIDE_DIFF_KEY,
@@ -15,9 +16,19 @@ import {
   parseTab,
   parseTheme,
   viewedKey,
+  writeTabCookie,
 } from "./preferences";
 import { parseDiffLayout } from "$lib/shared/domain/guide-view";
-import { hydratePreferences, prefs, resetPreferences } from "../state/preferences.svelte";
+import {
+  hydratePreferences,
+  persistRails,
+  persistSplitPct,
+  prefs,
+  resetPreferences,
+  setDiffMode,
+  setHideUnchanged,
+  setTheme,
+} from "../state/preferences.svelte";
 
 afterEach(() => {
   resetPreferences();
@@ -87,4 +98,40 @@ test("hydratePreferences reads stored values after SSR defaults", () => {
   expect(prefs.hideUnchanged).toBe(true);
   expect(prefs.sidebarPx).toBe(300);
   expect(prefs.hydrated).toBe(true);
+});
+
+test("tab cookie name matches the existing localStorage tab key", () => {
+  expect(TAB_COOKIE).toBe(TAB_KEY);
+  expect(TAB_COOKIE).toBe("guided-pr-review-tab");
+  expect(parseStoredTab("review")).toBe("review");
+  expect(parseStoredTab("diff")).toBe("diff");
+  expect(parseStoredTab("guide")).toBe("guide");
+  expect(parseStoredTab(null)).toBeNull();
+  expect(parseStoredTab("comments")).toBeNull();
+});
+
+test("every named preference setter writes its existing localStorage key", () => {
+  const data: Record<string, string> = {};
+  const storage = {
+    getItem: (key: string) => data[key] ?? null,
+    setItem: (key: string, value: string) => {
+      data[key] = value;
+    },
+  };
+  setTheme("light", storage);
+  setHideUnchanged(true, storage);
+  prefs.splitPct = 0.3;
+  persistSplitPct(storage);
+  prefs.sidebarPx = 360;
+  persistRails(storage);
+  setDiffMode("split", "guide", storage);
+  setDiffMode("unified", "diff", storage);
+  expect(data[THEME_KEY]).toBe("light");
+  expect(data[HIDE_KEY]).toBe("1");
+  expect(data[SPLIT_KEY]).toBe("0.3");
+  expect(data[RAILS_KEY]).toBe(JSON.stringify({ sidebar: 360 }));
+  expect(data[GUIDE_DIFF_KEY]).toBe("split");
+  expect(data[DIFF_KEY]).toBe("unified");
+  writeTabCookie("review");
+  expect(document.cookie).toContain(`${TAB_COOKIE}=review`);
 });

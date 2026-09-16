@@ -1,5 +1,5 @@
-import { resolveOverviewView, reviewPath } from "../shared/domain/overview.ts";
-import type { HomePageData, ReviewPageData } from "../shared/page-data.ts";
+import { resolveOverviewView, reviewLandingTab, reviewOutdatedWarning, reviewPath } from "../shared/domain/overview.ts";
+import { parseStoredTab, type HomePageData, type ReviewPageData } from "../shared/page-data.ts";
 import type { ListReviewsOutput } from "../shared/contracts/persistence.ts";
 import type { AppServices } from "./services/app.ts";
 
@@ -18,6 +18,7 @@ export async function loadHomePage(services: AppServices): Promise<HomePageData>
 export async function loadReviewPage(
   services: AppServices,
   id: string,
+  cookieTab?: string | null,
 ): Promise<HomePageData | ReviewPageData> {
   const listed = await services.reviews.list();
   const view = resolveOverviewView(
@@ -26,6 +27,7 @@ export async function loadReviewPage(
   );
   if (view.kind === "home") return homeFromList(listed);
   const { guide, outcomes } = await services.reviews.get(view.reviewId);
+  const summary = listed.reviews.find((row) => row.id === view.reviewId);
   return {
     kind: "review",
     status: "ok",
@@ -36,5 +38,8 @@ export async function loadReviewPage(
     catalog: listed.catalog,
     actions: listed.actions,
     agentConnected: listed.agentConnected,
+    tab: parseStoredTab(cookieTab) ?? reviewLandingTab(guide),
+    activeId: listed.activeId,
+    outdatedWarning: summary ? reviewOutdatedWarning(summary, listed.catalog) : undefined,
   };
 }

@@ -25,6 +25,7 @@ afterEach(() => {
   host = null;
   resetReviewSession();
   resetHomeUi();
+  localStorage.clear();
   vi.unstubAllGlobals();
 });
 

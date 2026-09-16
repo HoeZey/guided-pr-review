@@ -19,6 +19,7 @@ afterEach(() => {
   resetHomeUi();
   vi.unstubAllGlobals();
   vi.useRealTimers();
+  localStorage.clear();
 });
 
 function renderHome() {

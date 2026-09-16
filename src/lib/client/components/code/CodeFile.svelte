@@ -7,6 +7,7 @@
   import UnchangedGap from "./UnchangedGap.svelte";
   import UnifiedRow from "./UnifiedRow.svelte";
   import { fileDiffStats, languageFor, projectHunkLines } from "./project";
+  import { resizeSplit } from "$lib/client/browser/interaction";
 
   let {
     file,
@@ -65,7 +66,7 @@
                 <SplitRow {item} side="left" {lang} {theme} />
               {/each}
             </div>
-            <button type="button" class="split-handle" aria-label="Resize diff panes"></button>
+            <button type="button" class="split-handle" aria-label="Resize diff panes" use:resizeSplit></button>
             <div class="split-pane right">
               {#each projected.split as item, i (`r${i}`)}
                 <SplitRow {item} side="right" {lang} {theme} />

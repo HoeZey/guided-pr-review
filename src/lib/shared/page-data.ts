@@ -7,6 +7,12 @@ export type PageStatus = "ok" | "loading" | "error";
 
 export type ReviewTab = "guide" | "diff" | "review";
 
+export const TAB_COOKIE = "guided-pr-review-tab";
+
+export function parseStoredTab(raw: string | null | undefined): ReviewTab | null {
+  return raw === "guide" || raw === "diff" || raw === "review" ? raw : null;
+}
+
 export type HomePageData = {
   kind: "home";
   status: PageStatus;
@@ -30,4 +36,7 @@ export type ReviewPageData = {
   catalog: CatalogSnapshot[];
   actions: StoredAction[];
   agentConnected: boolean;
+  tab?: ReviewTab;
+  activeId?: string | null;
+  outdatedWarning?: string;
 };

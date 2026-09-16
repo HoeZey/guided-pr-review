@@ -27,7 +27,6 @@ export const homeUi = $state({
   pasteError: null as string | null,
   pendingActionId: null as string | null,
   listed: null as HomeListed | null,
-  mutating: false,
 });
 
 export function setHomeNavigate(fn: Navigate): void {
@@ -39,8 +38,15 @@ export function resetHomeUi(): void {
   homeUi.pasteError = null;
   homeUi.pendingActionId = null;
   homeUi.listed = null;
-  homeUi.mutating = false;
   navigate = defaultNavigate;
+  stopHomeWatch();
+}
+
+export function leaveHome(): void {
+  homeUi.pasteOpen = false;
+  homeUi.pasteError = null;
+  homeUi.pendingActionId = null;
+  homeUi.listed = null;
   stopHomeWatch();
 }
 
@@ -87,20 +93,15 @@ export async function queueHomeAction(
     | { kind: "refresh" }
     | { kind: "generate-guide"; reviewId: string },
 ): Promise<void> {
-  homeUi.mutating = true;
-  try {
-    const created = await fetchJson<{ id: string }>("/api/actions", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (payload.kind === "open" || payload.kind === "update-diff") {
-      homeUi.pendingActionId = created.id;
-    }
-    await refreshHomeList();
-  } finally {
-    homeUi.mutating = false;
+  const created = await fetchJson<{ id: string }>("/api/actions", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (payload.kind === "open" || payload.kind === "update-diff") {
+    homeUi.pendingActionId = created.id;
   }
+  await refreshHomeList();
 }
 
 export async function pasteGuide(text: string): Promise<void> {
@@ -113,7 +114,6 @@ export async function pasteGuide(text: string): Promise<void> {
   }
   const body =
     parsed && typeof parsed === "object" && "guide" in parsed ? parsed : { guide: parsed };
-  homeUi.mutating = true;
   homeUi.pasteError = null;
   try {
     const created = await fetchJson<{ id: string }>("/api/reviews", {
@@ -125,8 +125,6 @@ export async function pasteGuide(text: string): Promise<void> {
     await navigate(reviewPath(created.id));
   } catch (err) {
     homeUi.pasteError = err instanceof Error ? err.message : String(err);
-  } finally {
-    homeUi.mutating = false;
   }
 }
 

@@ -1,8 +1,14 @@
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { serializeViewed } from "$lib/shared/domain/guide-view";
+import { TAB_COOKIE } from "$lib/shared/page-data";
 import { TAB_KEY, viewedKey } from "../browser/preferences";
+import type { ReviewPageData } from "$lib/shared/page-data";
+import { FAKE_GUIDE, FAKE_REVIEW_OK } from "$lib/shared/shell-fakes";
 import {
+  adoptLegacyTab,
   bindReview,
+  nextReadingTarget,
+  refreshCurrentReview,
   resetReviewSession,
   session,
   setTab,
@@ -10,6 +16,7 @@ import {
 
 afterEach(() => {
   resetReviewSession();
+  localStorage.clear();
 });
 
 function memoryStorage(initial: Record<string, string> = {}): Storage {
@@ -75,4 +82,102 @@ test("setTab persists the selected tab without touching the review id", () => {
   expect(session.tab).toBe("diff");
   expect(session.reviewId).toBe("a");
   expect(storage.getItem(TAB_KEY)).toBe("diff");
+  expect(document.cookie).toContain(`${TAB_COOKIE}=diff`);
+});
+
+test("bindReview uses the SSR tab when provided and otherwise the landing tab", () => {
+  const storage = memoryStorage();
+  bindReview("a", { unchaptered: true }, storage, "review");
+  expect(session.tab).toBe("review");
+  bindReview("b", { unchaptered: true }, storage);
+  expect(session.tab).toBe("diff");
+});
+
+test("adoptLegacyTab takes the stored tab after hydration and seeds the cookie", () => {
+  const storage = memoryStorage({ [TAB_KEY]: "diff" });
+  bindReview("a", { unchaptered: false }, storage, "guide");
+  expect(session.tab).toBe("guide");
+  adoptLegacyTab(storage);
+  expect(session.tab).toBe("diff");
+  expect(storage.getItem(TAB_KEY)).toBe("diff");
+  expect(document.cookie).toContain(`${TAB_COOKIE}=diff`);
+});
+
+test("refreshCurrentReview ignores a stale overlay after the review id changes", async () => {
+  const pageA: ReviewPageData = { ...FAKE_REVIEW_OK, reviewId: "a", title: "A" };
+  const pageB: ReviewPageData = {
+    ...FAKE_REVIEW_OK,
+    reviewId: "b",
+    title: "B",
+    guide: { ...FAKE_GUIDE, title: "B" },
+  };
+  bindReview("a", pageA.guide ?? {}, memoryStorage(), "guide");
+  session.page = pageA;
+  session.ops = [{ id: "gen-a", kind: "generate-guide", reviewId: "a", status: "pending" }];
+  let releaseA: () => void = () => undefined;
+  const fetchSpy = vi.fn((input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url === "/api/reviews") {
+      return new Promise((resolve) => {
+        releaseA = () =>
+          resolve({
+            ok: true,
+            statusText: "OK",
+            json: async () => ({
+              reviews: [],
+              actions: [],
+              catalog: [],
+              agentConnected: false,
+              activeId: "a",
+              repositories: [],
+            }),
+          });
+      });
+    }
+    if (url === "/api/reviews/a") {
+      return Promise.resolve({
+        ok: true,
+        statusText: "OK",
+        json: async () => ({ guide: pageA.guide, outcomes: [] }),
+      });
+    }
+    throw new Error(`unexpected ${url}`);
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+  const pending = refreshCurrentReview(true);
+  bindReview("b", pageB.guide ?? {}, memoryStorage(), "guide");
+  session.page = pageB;
+  releaseA();
+  await pending;
+  expect(session.page?.reviewId).toBe("b");
+  expect(session.page?.title).toBe("B");
+  vi.unstubAllGlobals();
+});
+
+test("nextReadingTarget walks Guide files, Diff files, and Code Review axes", () => {
+  bindReview("a", FAKE_REVIEW_OK.guide ?? {}, memoryStorage(), "guide");
+  session.page = {
+    ...FAKE_REVIEW_OK,
+    guide: {
+      ...FAKE_GUIDE,
+      chapters: [
+        {
+          id: "core",
+          kind: "core",
+          title: "Core",
+          why: "Why.",
+          files: [{ path: "a.ts", stub: true }, { path: "b.ts", stub: true }],
+        },
+      ],
+    },
+  };
+  session.selectedChapterId = "core";
+  session.selectedGuidePath = "a.ts";
+  expect(nextReadingTarget(1)?.id).toBe("file-core-1");
+  session.tab = "diff";
+  session.selectedDiffPath = "a.ts";
+  expect(nextReadingTarget(1)?.id).toBe("diff-file-1");
+  session.tab = "review";
+  session.selectedOutcomeSection = "outcome-standards";
+  expect(nextReadingTarget(1)?.id).toBe("outcome-spec");
 });

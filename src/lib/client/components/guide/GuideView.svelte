@@ -11,6 +11,7 @@
   } from "$lib/shared/domain/guide-view";
   import { prefs } from "$lib/client/state/preferences.svelte";
   import { persistViewed, session } from "$lib/client/state/review.svelte";
+  import { revealCurrentToc, suppressHoverToc } from "$lib/client/browser/interaction";
   import GenerateGuideEmpty from "../outcomes/GenerateGuideEmpty.svelte";
   import GuideChapter from "./GuideChapter.svelte";
   import GuideToc from "./GuideToc.svelte";
@@ -32,7 +33,7 @@
     onQueue?: (reviewId: string) => void;
   } = $props();
 
-  let tocOpen = $state(false);
+  let tocOpen = $derived(session.tocOpen);
   let mainEl: HTMLElement | undefined;
 
   const walkthrough = $derived(guidePresentsWalkthrough(guide));
@@ -85,7 +86,8 @@
     session.selectedChapterId = chapterId;
     session.selectedGuidePath = path;
     session.selectedDiffPath = path;
-    tocOpen = false;
+    session.tocOpen = false;
+    suppressHoverToc();
     jumpTo(id);
   }
 
@@ -93,7 +95,8 @@
     session.selectedChapterId = chapterId;
     const chapter = chapters.find((item) => item.id === chapterId);
     session.selectedGuidePath = selectGuidePath(chapter?.files || [], null, session.viewed);
-    tocOpen = false;
+    session.tocOpen = false;
+    suppressHoverToc();
     jumpTo(sectionId(chapterId));
   }
 
@@ -149,15 +152,20 @@
     persistViewed();
   }
 
-  function spyScroll(node: HTMLElement) {
+  function spyScroll(node: HTMLElement, isHidden: boolean) {
     mainEl = node;
+    let hidden = isHidden;
     const onScroll = () => {
+      if (hidden) return;
       const next = readGuideSpy(node);
       if (next.chapterId) session.selectedChapterId = next.chapterId;
       if (next.path) session.selectedGuidePath = next.path;
     };
     node.addEventListener("scroll", onScroll, { passive: true });
     return {
+      update(nextHidden: boolean) {
+        hidden = nextHidden;
+      },
       destroy() {
         node.removeEventListener("scroll", onScroll);
         if (mainEl === node) mainEl = undefined;
@@ -166,7 +174,7 @@
   }
 </script>
 
-<main hidden={hidden} use:spyScroll>
+<main hidden={hidden} use:spyScroll={hidden}>
   <div class="main-inner is-guide">
     {#if walkthrough}
       <div class="guide-doc">
@@ -183,7 +191,8 @@
             {tocOpen}
             onjumpFile={jumpFile}
             ontoggleToc={() => {
-              tocOpen = !tocOpen;
+              session.tocOpen = !session.tocOpen;
+              if (session.tocOpen) requestAnimationFrame(() => revealCurrentToc());
             }}
             onviewed={onFileViewed}
             ontoggle={toggleCollapsed}
@@ -210,10 +219,11 @@
     onjumpFile={jumpFile}
     onjumpChapter={jumpChapter}
     onenter={() => {
-      tocOpen = true;
+      session.tocOpen = true;
+      revealCurrentToc();
     }}
     onleave={() => {
-      tocOpen = false;
+      session.tocOpen = false;
     }}
   />
 {/if}

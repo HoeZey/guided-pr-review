@@ -32,6 +32,10 @@ test("review shell SSR matches landing tab defaults", () => {
   expect(unchaptered).toContain('data-tab="diff"');
   expect(unchaptered).toContain('aria-label="Files"');
   expect(unchaptered).toContain("src/app.ts");
+
+  const cookieTab = render(AppShell, { props: { data: { ...FAKE_REVIEW_OK, tab: "review" } } }).body;
+  expect(cookieTab).toContain('data-tab="review"');
+  expect(cookieTab).toContain("No code-review outcome");
 });
 
 test("SSR loading and error markup uses the existing boot and err classes", () => {

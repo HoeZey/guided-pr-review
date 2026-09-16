@@ -146,6 +146,12 @@ test("tab away and back keeps Guide selection and scroll", async () => {
   await tick();
   expect(session.tab).toBe("diff");
   expect(guideMain.hasAttribute("hidden")).toBe(true);
+  const chapter = session.selectedChapterId;
+  const path = session.selectedGuidePath;
+  guideMain.dispatchEvent(new Event("scroll"));
+  await tick();
+  expect(session.selectedChapterId).toBe(chapter);
+  expect(session.selectedGuidePath).toBe(path);
   (host.querySelector('[data-tab="guide"]') as HTMLButtonElement).click();
   await tick();
   expect(session.tab).toBe("guide");

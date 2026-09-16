@@ -2,7 +2,8 @@
   import type { GuideV1 } from "$lib/shared/contracts/guide";
   import { filesForDiff, fileTree } from "$lib/shared/domain/guide-view";
   import CodeFile from "../code/CodeFile.svelte";
-  import { prefs, setDiffLayout, setHideUnchanged } from "$lib/client/state/preferences.svelte";
+  import { prefs } from "$lib/client/state/preferences.svelte";
+  import { resizeRail } from "$lib/client/browser/interaction";
   import {
     selectDiffPath,
     session,
@@ -70,66 +71,8 @@
 </script>
 
 <nav aria-label="Files" hidden={!visible}>
-  <button type="button" class="col-handle" data-rail="sidebar" aria-label="Resize file list"></button>
+  <button type="button" class="col-handle" data-rail="sidebar" aria-label="Resize file list" use:resizeRail></button>
   <div class="nav-label">Files</div>
-  <div class="display-modes" role="radiogroup" aria-label="Diff layout">
-    <!-- svelte-ignore a11y_role_supports_aria_props_implicit -->
-    <button
-      type="button"
-      class="display-mode"
-      data-diff-mode="unified"
-      aria-selected={prefs.diffLayout === "unified" ? "true" : "false"}
-      onclick={() => setDiffLayout("unified")}
-    >
-      <svg
-        viewBox="0 0 16 16"
-        width="16"
-        height="16"
-        aria-hidden="true"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.5"
-        stroke-linecap="round"
-        ><rect x="2.5" y="2.5" width="11" height="11" rx="1.5" /><path d="M5 6h6M5 8h6M5 10h6" /></svg
-      >
-      Unified
-    </button>
-    <!-- svelte-ignore a11y_role_supports_aria_props_implicit -->
-    <button
-      type="button"
-      class="display-mode"
-      data-diff-mode="split"
-      aria-selected={prefs.diffLayout === "split" ? "true" : "false"}
-      onclick={() => setDiffLayout("split")}
-    >
-      <svg
-        viewBox="0 0 16 16"
-        width="16"
-        height="16"
-        aria-hidden="true"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.5"
-        ><rect x="1.5" y="2.5" width="5.5" height="11" rx="1.5" /><rect
-          x="9"
-          y="2.5"
-          width="5.5"
-          height="11"
-          rx="1.5"
-        /></svg
-      >
-      Split
-    </button>
-  </div>
-  <button
-    type="button"
-    class="ghost"
-    data-hide-unchanged
-    aria-pressed={prefs.hideUnchanged ? "true" : "false"}
-    onclick={() => setHideUnchanged(!prefs.hideUnchanged)}
-  >
-    {prefs.hideUnchanged ? "Show unchanged" : "Hide unchanged"}
-  </button>
   <FileTree
     nodes={tree}
     {selected}

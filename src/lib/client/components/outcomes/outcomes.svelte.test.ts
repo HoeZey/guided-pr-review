@@ -19,6 +19,7 @@ afterEach(() => {
   resetReviewSession();
   vi.unstubAllGlobals();
   vi.useRealTimers();
+  localStorage.clear();
 });
 
 const BASE = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -222,7 +223,7 @@ test("Generate Guide appears only for the current unchaptered review and covers 
     actions: [generateAction("queued")],
   });
   await openGuide(waiting);
-  const waitingBtn = waiting.querySelector("button.ghost") as HTMLButtonElement;
+  const waitingBtn = waiting.querySelector(".outcome-empty button.ghost") as HTMLButtonElement;
   expect(waitingBtn.disabled).toBe(true);
   expect(waitingBtn.textContent).toBe("Waiting");
   expect(waiting.querySelector("[data-queue-generate]")).toBeNull();
@@ -236,8 +237,8 @@ test("Generate Guide appears only for the current unchaptered review and covers 
     actions: [generateAction("claimed")],
   });
   await openGuide(generating);
-  expect(generating.querySelector("button.ghost")?.textContent).toBe("Generating guide");
-  expect((generating.querySelector("button.ghost") as HTMLButtonElement).disabled).toBe(true);
+  expect(generating.querySelector(".outcome-empty button.ghost")?.textContent).toBe("Generating guide");
+  expect((generating.querySelector(".outcome-empty button.ghost") as HTMLButtonElement).disabled).toBe(true);
   unmount(mounted!);
   mounted = null;
   generating.remove();
@@ -273,7 +274,7 @@ test("Generate Guide appears only for the current unchaptered review and covers 
   });
   await openGuide(disconnected);
   expect(disconnected.textContent).toContain(GENERATE_GUIDE_DISCONNECTED_HINT);
-  expect((disconnected.querySelector("button.ghost") as HTMLButtonElement).disabled).toBe(true);
+  expect((disconnected.querySelector(".outcome-empty button.ghost") as HTMLButtonElement).disabled).toBe(true);
   await openCodeReview(disconnected);
   expect(disconnected.querySelector("#outcome-standards")?.textContent).toContain("Saved finding");
   const diffTab = disconnected.querySelector('[role="tab"][data-tab="diff"]') as HTMLButtonElement;
@@ -339,7 +340,7 @@ test("Generate Guide queues one action, refreshes while pending, and fills the s
   await openCodeReview(pending);
   await openGuide(pending);
   expect(fetchSpy).not.toHaveBeenCalled();
-  expect(pending.querySelector("button.ghost")?.textContent).toBe("Waiting");
+  expect(pending.querySelector(".outcome-empty button.ghost")?.textContent).toBe("Waiting");
   unmount(mounted!);
   mounted = null;
   pending.remove();

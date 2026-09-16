@@ -61,6 +61,7 @@ export function hydratePreferences(storage: StorageLike | null = browserLocalSto
   prefs.sidebarPx = parseSidebarPx(storage?.getItem(RAILS_KEY) ?? null);
   prefs.hydrated = true;
   applyTheme(prefs.theme);
+  applyChromeVars();
 }
 
 export function setTheme(theme: Theme, storage: StorageLike | null = browserLocalStorage()): void {
@@ -90,10 +91,33 @@ export function persistDiffLayout(storage: StorageLike | null = browserLocalStor
   writePref(storage, DIFF_KEY, prefs.diffLayout);
 }
 
+export function applyChromeVars(): void {
+  if (typeof document === "undefined") return;
+  const pct = Math.min(0.85, Math.max(0.15, prefs.splitPct));
+  prefs.splitPct = pct;
+  document.documentElement.style.setProperty("--split-left", `${pct}fr`);
+  document.documentElement.style.setProperty("--split-right", `${1 - pct}fr`);
+  document.documentElement.style.setProperty("--sidebar", `${prefs.sidebarPx}px`);
+}
+
 export function setDiffLayout(
   next: DiffLayout,
   storage: StorageLike | null = browserLocalStorage(),
 ): void {
+  prefs.diffLayout = next;
+  writePref(storage, DIFF_KEY, next);
+}
+
+export function setDiffMode(
+  next: DiffLayout,
+  tab: "guide" | "diff" | "review",
+  storage: StorageLike | null = browserLocalStorage(),
+): void {
+  if (tab === "guide") {
+    prefs.guideLayout = next;
+    writePref(storage, GUIDE_DIFF_KEY, next);
+    return;
+  }
   prefs.diffLayout = next;
   writePref(storage, DIFF_KEY, next);
 }

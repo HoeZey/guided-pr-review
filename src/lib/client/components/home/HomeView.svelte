@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import { hostActionHint, inFlightActionCopy, latestAction, projectHomeOverview } from "$lib/shared/domain/overview";
   import type { HomePageData } from "$lib/shared/page-data";
   import {
     formatLastSynced,
     homeListed,
     homeUi,
+    leaveHome,
     pasteGuide,
     stopHomeWatch,
     syncHomeWatch,
@@ -32,6 +34,10 @@
   $effect(() => {
     syncHomeWatch(listed.actions);
     return () => stopHomeWatch();
+  });
+
+  onDestroy(() => {
+    leaveHome();
   });
 
   function savePaste(): void {

@@ -20,6 +20,7 @@ afterEach(() => {
   resetReviewSession();
   resetPreferences();
   resetSyntax();
+  localStorage.clear();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -102,22 +103,22 @@ test("split, unified, gaps, leftovers, replacements, and hunks match projections
     expect(root.querySelector(".word-add")?.textContent).toBe("snapshot");
   });
 
-  (root.querySelector('[data-diff-mode="unified"]') as HTMLButtonElement).click();
+  prefs.diffLayout = "unified";
+  prefs.hideUnchanged = false;
   await tick();
-  expect(prefs.diffLayout).toBe("unified");
   expect(root.querySelector(".diff.split")).toBeNull();
   expect(root.querySelector("#diff-file-2 .line.removed")?.textContent).toContain("model");
   expect(root.querySelector("#diff-file-2 .line.added")?.textContent).toContain("snapshot");
   expect(root.querySelectorAll("#diff-file-2 .hunk-header")).toHaveLength(2);
 
-  (root.querySelector("[data-hide-unchanged]") as HTMLButtonElement).click();
+  prefs.hideUnchanged = true;
   await tick();
   expect(prefs.hideUnchanged).toBe(true);
   expect(root.querySelector("#diff-file-4 .unchanged-gap")?.textContent).toContain("2 unchanged");
   expect(root.querySelector("#diff-file-4 .line.added")?.textContent).toContain("gamma");
   expect(root.querySelector("#diff-file-4")?.textContent).not.toContain("alpha");
 
-  (root.querySelector('[data-diff-mode="split"]') as HTMLButtonElement).click();
+  prefs.diffLayout = "split";
   await tick();
   expect(root.querySelector("#diff-file-4 .unchanged-gap")).toBeTruthy();
   expect(root.querySelector(".diff.split")).toBeTruthy();

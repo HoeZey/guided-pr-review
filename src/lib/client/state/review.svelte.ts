@@ -1,8 +1,11 @@
 import {
   collapsedOnDiff,
+  filesForDiff,
+  guideStops,
   markViewed,
   parseViewed,
   serializeViewed,
+  stepGuide,
   unmarkViewed,
 } from "$lib/shared/domain/guide-view";
 import {
@@ -13,7 +16,8 @@ import {
 import type { GuideV1 } from "$lib/shared/contracts/guide";
 import type { ListReviewsOutput } from "$lib/shared/contracts/persistence";
 import type { StoredOutcome } from "$lib/shared/contracts/outcomes";
-import type { ReviewPageData, ReviewTab } from "$lib/shared/page-data";
+import { parseStoredTab, type ReviewPageData, type ReviewTab } from "$lib/shared/page-data";
+import { chaptersForNav, fileId, sectionId } from "../components/guide/project";
 import { fetchJson } from "../browser/fetch";
 import {
   TAB_KEY,
@@ -21,6 +25,7 @@ import {
   browserLocalStorage,
   viewedKey,
   writePref,
+  writeTabCookie,
 } from "../browser/preferences";
 
 export type UiOp = {
@@ -42,6 +47,7 @@ type ReviewSession = {
   selectedDiffPath: string | null;
   selectedOutcomeSection: string | null;
   selectedOutcomeId: string | null;
+  tocOpen: boolean;
   ops: UiOp[];
   page: ReviewPageData | null;
 };
@@ -58,6 +64,7 @@ function emptySession(): ReviewSession {
     selectedDiffPath: null,
     selectedOutcomeSection: null,
     selectedOutcomeId: null,
+    tocOpen: false,
     ops: [],
     page: null,
   };
@@ -77,6 +84,7 @@ export function resetReviewSession(): void {
   session.selectedDiffPath = next.selectedDiffPath;
   session.selectedOutcomeSection = next.selectedOutcomeSection;
   session.selectedOutcomeId = next.selectedOutcomeId;
+  session.tocOpen = next.tocOpen;
   session.ops = next.ops;
   session.page = next.page;
 }
@@ -85,10 +93,11 @@ export function bindReview(
   reviewId: string,
   guide: { unchaptered?: boolean },
   storage: StorageLike | null = browserLocalStorage(),
+  initialTab?: ReviewTab,
 ): void {
   if (session.reviewId === reviewId) return;
   const viewed = parseViewed(storage?.getItem(viewedKey(reviewId)) ?? null);
-  const tab = reviewLandingTab(guide);
+  const tab = initialTab ?? reviewLandingTab(guide);
   session.reviewId = reviewId;
   session.tab = tab;
   session.viewed = viewed;
@@ -99,6 +108,7 @@ export function bindReview(
   session.selectedDiffPath = null;
   session.selectedOutcomeSection = null;
   session.selectedOutcomeId = null;
+  session.tocOpen = false;
   session.ops = session.ops.filter((op) => !op.reviewId || op.reviewId === reviewId);
 }
 
@@ -127,13 +137,16 @@ export async function refreshCurrentReview(force = false): Promise<void> {
   if (!page || page.kind !== "review") return;
   if (session.reviewId !== page.reviewId) return;
   if (!force && !generateGuidePending(page)) return;
+  const reviewId = page.reviewId;
   try {
     const listed = await fetchJson<ListReviewsOutput>("/api/reviews");
     const payload = await fetchJson<{ guide: GuideV1; outcomes?: StoredOutcome[] }>(
-      `/api/reviews/${page.reviewId}`,
+      `/api/reviews/${reviewId}`,
     );
+    if (session.reviewId !== reviewId) return;
     session.page = {
       ...page,
+      reviewId,
       title: payload.guide.title,
       guide: payload.guide,
       outcomes: payload.outcomes ?? [],
@@ -141,7 +154,7 @@ export async function refreshCurrentReview(force = false): Promise<void> {
       catalog: listed.catalog,
       agentConnected: listed.agentConnected,
     };
-    const latest = latestGenerateGuideAction(page.reviewId, listed.actions);
+    const latest = latestGenerateGuideAction(reviewId, listed.actions);
     if (latest?.status === "succeeded" || latest?.status === "failed") {
       session.ops = session.ops.filter((op) => op.id !== latest.id);
     }
@@ -171,9 +184,62 @@ export function setTab(
 ): void {
   session.tab = next;
   writePref(storage, TAB_KEY, next);
+  writeTabCookie(next);
+  if (next !== "guide") session.tocOpen = false;
   if (next === "diff") {
     session.collapsed = collapsedOnDiff(session.viewed, session.collapsed);
   }
+}
+
+export function adoptLegacyTab(storage: StorageLike | null = browserLocalStorage()): void {
+  const stored = parseStoredTab(storage?.getItem(TAB_KEY) ?? null);
+  if (!stored) return;
+  setTab(stored, storage);
+}
+
+export type ReadingTarget = { id: string; path?: string; chapterId?: string };
+
+export function nextReadingTarget(delta: number): ReadingTarget | null {
+  const guide = session.page?.guide;
+  if (!guide) return null;
+  if (session.tab === "review") {
+    const ids = ["outcome-standards", "outcome-spec"];
+    const i = ids.indexOf(session.selectedOutcomeSection || "outcome-standards");
+    const next = ids[i + delta];
+    return next ? { id: next } : null;
+  }
+  if (session.tab === "diff") {
+    const rows = filesForDiff(guide);
+    const i = rows.findIndex((row) => row.path === session.selectedDiffPath);
+    const next = rows[i + delta];
+    return next ? { id: `diff-file-${i + delta}`, path: next.path } : null;
+  }
+  const chapters = chaptersForNav(guide);
+  const stops = guideStops(chapters.filter((chapter) => !chapter._omitted));
+  const path = session.selectedGuidePath || stops[0]?.path;
+  const chapterId = session.selectedChapterId || stops[0]?.chapterId;
+  if (!path || !chapterId) return null;
+  const next = stepGuide(stops, chapterId, path, delta);
+  if (!next) return null;
+  const chapter = chapters.find((item) => item.id === next.chapterId);
+  const index = (chapter?.files || []).findIndex((file) => file.path === next.path);
+  return {
+    id: index >= 0 && chapter ? fileId(chapter.id, index) : sectionId(next.chapterId),
+    path: next.path,
+    chapterId: next.chapterId,
+  };
+}
+
+export function applyReadingTarget(target: ReadingTarget): void {
+  if (target.chapterId) session.selectedChapterId = target.chapterId;
+  if (target.path) {
+    session.selectedGuidePath = target.path;
+    session.selectedDiffPath = target.path;
+  }
+  if (target.id === "outcome-standards" || target.id === "outcome-spec") {
+    session.selectedOutcomeSection = target.id;
+  }
+  document.getElementById(target.id)?.scrollIntoView?.({ behavior: "auto", block: "start" });
 }
 
 export function persistViewed(storage: StorageLike | null = browserLocalStorage()): void {
