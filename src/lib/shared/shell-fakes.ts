@@ -17,16 +17,26 @@ export const FAKE_GUIDE: GuideV1 = {
   ],
 };
 
+const emptyTransport = {
+  catalog: [],
+  actions: [],
+  activeId: null as string | null,
+  agentConnected: false,
+  repositories: [],
+};
+
 export const FAKE_HOME_OK: HomePageData = {
   kind: "home",
   status: "ok",
   reviews: [{ id: "fake-review", title: "Fake review" }],
+  ...emptyTransport,
 };
 
 export const FAKE_HOME_LOADING: HomePageData = {
   kind: "home",
   status: "loading",
   reviews: [],
+  ...emptyTransport,
 };
 
 export const FAKE_HOME_ERROR: HomePageData = {
@@ -34,6 +44,7 @@ export const FAKE_HOME_ERROR: HomePageData = {
   status: "error",
   error: "Failed to load Home",
   reviews: [],
+  ...emptyTransport,
 };
 
 export const FAKE_REVIEW_OK: ReviewPageData = {
@@ -42,6 +53,10 @@ export const FAKE_REVIEW_OK: ReviewPageData = {
   reviewId: "fake-review",
   title: "Fake review",
   guide: FAKE_GUIDE,
+  outcomes: [],
+  catalog: [],
+  actions: [],
+  agentConnected: false,
 };
 
 export const FAKE_REVIEW_LOADING: ReviewPageData = {
@@ -50,6 +65,10 @@ export const FAKE_REVIEW_LOADING: ReviewPageData = {
   reviewId: "fake-review",
   title: "Fake review",
   guide: null,
+  outcomes: [],
+  catalog: [],
+  actions: [],
+  agentConnected: false,
 };
 
 export const FAKE_REVIEW_ERROR: ReviewPageData = {
@@ -59,6 +78,10 @@ export const FAKE_REVIEW_ERROR: ReviewPageData = {
   reviewId: "fake-review",
   title: "Fake review",
   guide: null,
+  outcomes: [],
+  catalog: [],
+  actions: [],
+  agentConnected: false,
 };
 
 export const FAKE_UNCHAPTERED_REVIEW: ReviewPageData = {
@@ -67,4 +90,8 @@ export const FAKE_UNCHAPTERED_REVIEW: ReviewPageData = {
   reviewId: "fake-diff",
   title: "Fake diff",
   guide: { ...FAKE_GUIDE, title: "Fake diff", unchaptered: true },
+  outcomes: [],
+  catalog: [],
+  actions: [],
+  agentConnected: false,
 };

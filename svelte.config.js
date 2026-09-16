@@ -4,6 +4,9 @@ import adapter from "@sveltejs/adapter-node";
 const config = {
   kit: {
     adapter: adapter({ out: "build" }),
+    csrf: {
+      trustedOrigins: ["*"],
+    },
     files: {
       routes: "src/routes",
       lib: "src/lib",

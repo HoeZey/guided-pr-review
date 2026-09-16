@@ -31,7 +31,7 @@ reconciles browser-wide behavior only after those views exist.
 - [02 Split shared contracts and pure domain rules](02-split-shared-contracts-and-domain.md) — done
 - [03 Introduce app-shaped repositories and JSON adapter](03-introduce-repositories.md) — done
 - [04 Introduce feature services and provider ports](04-introduce-services-and-ports.md) — done
-- [05 Preserve HTTP, MCP, and SSR data in SvelteKit](05-preserve-http-mcp-and-ssr.md) — todo
+- [05 Preserve HTTP, MCP, and SSR data in SvelteKit](05-preserve-http-mcp-and-ssr.md) — done
 - [06 Build the Svelte review shell and shared state](06-build-svelte-review-shell.md) — done
 - [07 Render Home through SvelteKit SSR](07-render-ssr-home.md) — todo
 - [08 Build shared Svelte code-view primitives](08-build-code-view-primitives.md) — todo

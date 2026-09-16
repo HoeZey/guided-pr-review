@@ -91,6 +91,22 @@ test("unchaptered fake review lands on Diff without a route change", () => {
   );
 });
 
+test("hydration consumes Home and review page data without a catalog or review fetch", () => {
+  const fetchSpy = vi.fn();
+  vi.stubGlobal("fetch", fetchSpy);
+  const home = renderShell(FAKE_HOME_OK);
+  expect(home.querySelector("#app")?.getAttribute("data-view")).toBe("home");
+  expect(home.querySelector(`[data-open-review="${FAKE_HOME_OK.reviews[0].id}"]`)).toBeTruthy();
+  unmount(mounted!);
+  mounted = null;
+  home.remove();
+
+  const review = renderShell(FAKE_REVIEW_OK);
+  expect(review.querySelector("#app")?.getAttribute("data-view")).toBe("review");
+  expect(review.querySelector("h1")?.textContent).toBe("Fake review");
+  expect(fetchSpy).not.toHaveBeenCalled();
+});
+
 test("review loading and error surfaces keep the shell chrome", () => {
   const loading = renderShell(FAKE_REVIEW_LOADING);
   expect(loading.querySelector("#app")?.getAttribute("data-view")).toBe("review");
