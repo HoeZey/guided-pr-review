@@ -1,5 +1,5 @@
 ---
-status: in_progress
+status: implemented
 blocked_by:
   - ../06-app-structure/
 ---

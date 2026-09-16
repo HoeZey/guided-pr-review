@@ -62,4 +62,4 @@ PRD behavior unchanged. Issue Touches fields now name HEAD symbols:
 - [06 Refresh configured PR catalogs](06-refresh-catalogs.md) — done
 - [07 Open and update Diff without an agent](07-open-and-update-diff.md) — done
 - [08 Retire deterministic agent actions](08-retire-agent-actions.md) — done
-- [09 Integrate and verify provider automation](09-integrate-provider-automation.md) — doing
+- [09 Integrate and verify provider automation](09-integrate-provider-automation.md) — done

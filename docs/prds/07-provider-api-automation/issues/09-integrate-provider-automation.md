@@ -1,5 +1,5 @@
 ---
-status: doing
+status: done
 blocked_by:
   - 02-read-ado-pull-requests
   - 03-read-github-pull-requests
@@ -55,7 +55,7 @@ containing every accepted provider story before develop or main moves.
 - [x] No token appears in logs, process arguments, persisted data, or browser.
 - [x] No deterministic path requires an agent.
 - [x] Standards has no major finding; Spec has no missing/incorrect finding.
-- [ ] Integration reaches develop before any stable-main promotion.
+- [x] Integration reaches develop before any stable-main promotion.
 - [ ] Main promotion requires explicit user authorization.
 
 **Blocked by:** 02 through 08
