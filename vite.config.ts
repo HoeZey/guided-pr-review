@@ -11,12 +11,12 @@ export default defineConfig({
   plugins: [sveltekit()],
   server: {
     host: "localhost",
-    port: 8766,
+    port: 8765,
     strictPort: true,
   },
   preview: {
     host: "localhost",
-    port: 8766,
+    port: 8765,
     strictPort: true,
   },
 });
