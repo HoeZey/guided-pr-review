@@ -191,6 +191,16 @@ export function createHttpHandlers(
         }
       },
     },
+    connections: {
+      GET: async () => {
+        await seed();
+        return Response.json(await services.connections.list());
+      },
+      POST: async () => {
+        await seed();
+        return Response.json(await services.connections.retry());
+      },
+    },
     mcp: {
       GET: async ({ request }: HttpEvent) => {
         await seed();

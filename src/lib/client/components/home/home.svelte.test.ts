@@ -29,10 +29,15 @@ function renderHome() {
   return host;
 }
 
-test("hydration renders projected Home from page data without refetching list or catalog", () => {
-  const fetchSpy = vi.fn();
+test("hydration renders projected Home from page data without refetching list or catalog", async () => {
+  const fetchSpy = vi.fn().mockResolvedValue({
+    ok: true,
+    statusText: "OK",
+    json: async () => ({ connections: [] }),
+  });
   vi.stubGlobal("fetch", fetchSpy);
   const root = renderHome();
+  await tick();
   expect(root.querySelector(".home-group h2")?.textContent).toBe("Review requests");
   expect(root.querySelector(`[data-open-review="saved-current"]`)?.getAttribute("href")).toBe(
     reviewPath("saved-current"),
@@ -46,26 +51,39 @@ test("hydration renders projected Home from page data without refetching list or
   expect(root.querySelector("[data-queue-refresh]")?.textContent).toBe("Refresh");
   expect(root.querySelector("[data-open-paste]")?.textContent).toBe("Add");
   expect(root.querySelector(".home-group.is-archived summary h2")?.textContent).toBe("Archived");
-  expect(fetchSpy).not.toHaveBeenCalled();
+  expect(fetchSpy.mock.calls.every(([url]) => url === "/api/connections")).toBe(true);
   unmount(mounted!);
   mounted = null;
   root.remove();
   host = document.createElement("div");
   document.body.appendChild(host);
   mounted = mount(AppShell, { target: host, props: { data: HOME_FIXTURE_WAITING } });
+  await tick();
   expect([...host.querySelectorAll(".home-card-status")].map((el) => el.textContent)).toContain(
     "Waiting",
   );
-  expect(fetchSpy).not.toHaveBeenCalled();
+  expect(fetchSpy.mock.calls.every(([url]) => url === "/api/connections")).toBe(true);
+  expect(fetchSpy.mock.calls.some(([url]) => String(url).includes("reviews") || String(url).includes("catalog"))).toBe(
+    false,
+  );
 });
 
 test("Paste Guide posts the existing reviews API then navigates to the new review", async () => {
   const goto = vi.fn().mockResolvedValue(undefined);
   setHomeNavigate(goto);
-  const fetchSpy = vi.fn().mockResolvedValue({
-    ok: true,
-    statusText: "Created",
-    json: async () => ({ id: "pasted-1" }),
+  const fetchSpy = vi.fn((url: string) => {
+    if (url === "/api/connections") {
+      return Promise.resolve({
+        ok: true,
+        statusText: "OK",
+        json: async () => ({ connections: [] }),
+      });
+    }
+    return Promise.resolve({
+      ok: true,
+      statusText: "Created",
+      json: async () => ({ id: "pasted-1" }),
+    });
   });
   vi.stubGlobal("fetch", fetchSpy);
   const root = renderHome();
@@ -76,9 +94,9 @@ test("Paste Guide posts the existing reviews API then navigates to the new revie
   (root.querySelector("[data-paste-save]") as HTMLButtonElement).click();
   await tick();
   await Promise.resolve();
-  expect(fetchSpy).toHaveBeenCalledTimes(1);
-  const init = fetchSpy.mock.calls[0][1] as RequestInit;
-  expect(fetchSpy.mock.calls[0][0]).toBe("/api/reviews");
+  const reviewCalls = fetchSpy.mock.calls.filter(([url]) => url === "/api/reviews");
+  expect(reviewCalls).toHaveLength(1);
+  const init = reviewCalls[0][1] as RequestInit;
   expect(init.method).toBe("POST");
   expect(JSON.parse(String(init.body))).toEqual({ guide: FAKE_GUIDE });
   expect(goto).toHaveBeenCalledWith(reviewPath("pasted-1"));
@@ -87,6 +105,13 @@ test("Paste Guide posts the existing reviews API then navigates to the new revie
 test("host actions keep stale Home visible while the API request is in flight", async () => {
   let resolvePost: ((value: unknown) => void) | undefined;
   const fetchSpy = vi.fn((url: string) => {
+    if (url === "/api/connections") {
+      return Promise.resolve({
+        ok: true,
+        statusText: "OK",
+        json: async () => ({ connections: [] }),
+      });
+    }
     if (url === "/api/actions") {
       return new Promise((resolve) => {
         resolvePost = resolve;
@@ -107,15 +132,54 @@ test("host actions keep stale Home visible while the API request is in flight", 
   });
   vi.stubGlobal("fetch", fetchSpy);
   const root = renderHome();
+  await tick();
   (root.querySelector("[data-queue-refresh]") as HTMLButtonElement).click();
   await tick();
   expect(root.querySelector(".home-group h2")?.textContent).toBe("Review requests");
   expect(root.querySelector(".home-card-title")?.textContent).toBe("Current work");
-  expect(fetchSpy.mock.calls[0][0]).toBe("/api/actions");
+  expect(fetchSpy.mock.calls.some(([url]) => url === "/api/actions")).toBe(true);
   resolvePost?.({
     ok: true,
     statusText: "Created",
     json: async () => ({ id: "refresh-1" }),
   });
   await tick();
+});
+
+test("Home shows provider recovery and Retry without leaking tokens", async () => {
+  const payload = {
+    connections: [
+      {
+        provider: "azure-devops",
+        host: "dev.azure.com",
+        status: "login-required",
+        recovery: "az login",
+      },
+      {
+        provider: "github",
+        host: "github.com",
+        status: "connected",
+        login: "octocat",
+      },
+    ],
+  };
+  const fetchSpy = vi.fn().mockResolvedValue({
+    ok: true,
+    statusText: "OK",
+    json: async () => payload,
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+  const root = renderHome();
+  await vi.waitFor(() => {
+    expect(root.querySelector('[data-connection="azure-devops"]')?.textContent).toContain("az login");
+  });
+  expect(root.querySelector('[data-retry-connection="azure-devops"]')?.textContent).toBe("Retry");
+  expect(root.querySelector('[data-connection="github"]')?.textContent).toContain("octocat");
+  expect(root.textContent).not.toContain("gho_");
+  expect(root.textContent).not.toContain("accessToken");
+  (root.querySelector("[data-retry-connection='azure-devops']") as HTMLButtonElement).click();
+  await tick();
+  expect(fetchSpy.mock.calls.some((call) => (call[1] as RequestInit | undefined)?.method === "POST")).toBe(
+    true,
+  );
 });

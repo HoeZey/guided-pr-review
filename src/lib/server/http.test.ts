@@ -51,6 +51,10 @@ function fakeServices(overrides: {
     },
     outcomes: { publish: unused("publish") },
     guides: { completeGenerateGuide: unused("completeGenerateGuide") },
+    connections: {
+      list: unused("connections.list"),
+      retry: unused("connections.retry"),
+    },
   };
 }
 

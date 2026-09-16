@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import { hostActionHint, inFlightActionCopy, latestAction, projectHomeOverview } from "$lib/shared/domain/overview";
   import type { HomePageData } from "$lib/shared/page-data";
   import {
@@ -11,6 +11,7 @@
     stopHomeWatch,
     syncHomeWatch,
   } from "$lib/client/state/home.svelte";
+  import { connectionUi, loadConnections } from "$lib/client/state/connection.svelte";
   import HomeCard from "./HomeCard.svelte";
 
   let { data }: { data: HomePageData } = $props();
@@ -28,12 +29,19 @@
       Boolean(overview.lastSynced) ||
       Boolean(disconnected) ||
       Boolean(refreshFailed) ||
-      Boolean(homeUi.pasteError),
+      Boolean(homeUi.pasteError) ||
+      connectionUi.busy ||
+      connectionUi.connections.length > 0 ||
+      Boolean(connectionUi.error),
   );
 
   $effect(() => {
     syncHomeWatch(listed.actions);
     return () => stopHomeWatch();
+  });
+
+  onMount(() => {
+    void loadConnections();
   });
 
   onDestroy(() => {
@@ -49,6 +57,32 @@
 <main class="home-main">
   <div class="main-inner">
     {#if hasContent}
+      {#if connectionUi.busy && connectionUi.connections.length === 0}
+        <p class="home-meta">Connecting</p>
+      {/if}
+      {#if connectionUi.error}
+        <p class="home-error">{connectionUi.error}</p>
+      {/if}
+      {#each connectionUi.connections as row}
+        {#if row.status === "connected"}
+          <p class="home-meta" data-connection={row.provider}>
+            {row.provider === "github" ? "GitHub" : "Azure DevOps"}: {row.login}
+          </p>
+        {:else}
+          <p class="home-error" data-connection={row.provider}>
+            {row.provider === "github" ? "GitHub" : "Azure DevOps"}: {row.recovery}
+            <button
+              type="button"
+              class="ghost"
+              data-retry-connection={row.provider}
+              disabled={connectionUi.busy}
+              onclick={() => void loadConnections("POST")}
+            >
+              Retry
+            </button>
+          </p>
+        {/if}
+      {/each}
       {#if overview.lastSynced}
         <p class="home-meta">Last synced {formatLastSynced(overview.lastSynced)}</p>
       {/if}

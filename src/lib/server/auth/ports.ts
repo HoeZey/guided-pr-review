@@ -9,6 +9,24 @@ export type CredentialStatus =
   | "timeout"
   | "malformed";
 
+export type CommandRunRequest = {
+  argv: readonly string[];
+  timeoutMs: number;
+  maxOutputBytes: number;
+};
+
+export type CommandRunResult = {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+  commandMissing: boolean;
+};
+
+export type CommandRunner = {
+  run: (request: CommandRunRequest) => Promise<CommandRunResult>;
+};
+
 export type CredentialIdentity = {
   provider: GitProviderKind;
   host: string;
@@ -30,7 +48,7 @@ export type CredentialFailure = {
 
 export type CredentialResult = CredentialSuccess | CredentialFailure;
 
-/** CLI-backed token source. Implementations land in PRD 07; no subprocess here. */
+/** CLI-backed token source. Tokens stay inside this server seam. */
 export type CredentialSource = {
   getAccessToken: (input: {
     provider: GitProviderKind;

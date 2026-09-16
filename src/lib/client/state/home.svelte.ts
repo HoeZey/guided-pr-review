@@ -3,6 +3,7 @@ import type { ListReviewsOutput, ReviewSummary } from "$lib/shared/contracts/per
 import { reviewPath } from "$lib/shared/domain/overview";
 import type { HomePageData } from "$lib/shared/page-data";
 import { fetchJson } from "../browser/fetch";
+import { resetConnectionUi } from "./connection.svelte";
 
 export type HomeListed = {
   reviews: ReviewSummary[];
@@ -40,6 +41,7 @@ export function resetHomeUi(): void {
   homeUi.listed = null;
   navigate = defaultNavigate;
   stopHomeWatch();
+  resetConnectionUi();
 }
 
 export function leaveHome(): void {
@@ -48,6 +50,7 @@ export function leaveHome(): void {
   homeUi.pendingActionId = null;
   homeUi.listed = null;
   stopHomeWatch();
+  resetConnectionUi();
 }
 
 export function homeListed(data: HomePageData): HomeListed {
