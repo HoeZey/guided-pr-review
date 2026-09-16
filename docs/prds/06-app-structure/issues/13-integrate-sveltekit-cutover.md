@@ -1,5 +1,5 @@
 ---
-status: doing
+status: done
 blocked_by:
   - 03-introduce-repositories
   - 04-introduce-services-and-ports
@@ -80,7 +80,7 @@ any conflict files
   rails, syntax highlighting, and agent completion.
 - [x] Standards review has no major finding.
 - [x] Spec review has no missing or incorrect finding.
-- [ ] Integration fast-forwards or merges to develop only after all checks.
+- [x] Integration fast-forwards or merges to develop only after all checks.
 - [ ] Stable main promotion requires explicit user authorization.
 
 **Blocked by:** 03 through 12
