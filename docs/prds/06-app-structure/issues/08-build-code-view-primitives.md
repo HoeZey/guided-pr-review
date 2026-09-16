@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 blocked_by:
   - 02-split-shared-contracts-and-domain
   - 05-preserve-http-mcp-and-ssr
@@ -48,19 +48,41 @@ Shiki browser adapter, focused component tests, existing CSS
 
 **Acceptance criteria:**
 
-- [ ] One fixture file renders equivalent unified and split rows from existing
+- [x] One fixture file renders equivalent unified and split rows from existing
   pure projections.
-- [ ] SSR output contains readable code/line numbers before JavaScript.
-- [ ] Hydration and lazy syntax enhancement produce no mismatch or duplicated
+- [x] SSR output contains readable code/line numbers before JavaScript.
+- [x] Hydration and lazy syntax enhancement produce no mismatch or duplicated
   rows.
-- [ ] User-controlled code/content remains escaped.
-- [ ] Added, removed, context, gap, word-change, stats, reviewed, and collapsed
+- [x] User-controlled code/content remains escaped.
+- [x] Added, removed, context, gap, word-change, stats, reviewed, and collapsed
   states match current classes/appearance.
-- [ ] Guide and Diff can consume primitives without importing DOM utilities.
-- [ ] Component tests cover both layouts and Shiki failure fallback.
+- [x] Guide and Diff can consume primitives without importing DOM utilities.
+- [x] Component tests cover both layouts and Shiki failure fallback.
 
 **Blocked by:** 02, 05, and 06
 
 **Blocks:** 09 Guide, 10 Diff, and 13 integration
 
 **Parallel-eligible:** yes, with 07 and 11
+
+## code-review
+
+Pass: 16 September 2026
+
+base: 139be4dadffd06d078a4a3eb90b35939f08ea25b
+head: d42df8c6652346a470045162dce6efada533bcda
+branch: feature/06-08-build-code-view-primitives
+
+Not blocking. Standards has no major. Spec has no missing or incorrect.
+
+### Standards
+
+major 0 / minor 0 / nit 0
+
+findings: []
+
+### Spec
+
+missing 0 / partial 0 / scope-creep 0 / incorrect 0
+
+findings: []
