@@ -1,7 +1,8 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { mount, tick, unmount } from "svelte";
-import { HOME_FIXTURE, HOME_FIXTURE_WAITING } from "$lib/shared/home-fakes";
+import { HOME_FIXTURE, HOME_FIXTURE_DISCONNECTED, HOME_FIXTURE_WAITING } from "$lib/shared/home-fakes";
 import { reviewPath } from "$lib/shared/domain/overview";
+import { CATALOG_REFRESH_STALE_MS } from "$lib/shared/domain/catalog";
 import { FAKE_GUIDE } from "$lib/shared/shell-fakes";
 import { resetHomeUi, setHomeNavigate, homeUi, addRepository } from "$lib/client/state/home.svelte";
 import { resetReviewSession } from "$lib/client/state/review.svelte";
@@ -132,7 +133,7 @@ test("Paste Guide posts the existing reviews API then navigates to the new revie
 test("host actions keep stale Home visible while the API request is in flight", async () => {
   let resolvePost: ((value: unknown) => void) | undefined;
   const fetchSpy = homeFetch((url) => {
-    if (url === "/api/actions") {
+    if (url === "/api/catalog") {
       return new Promise((resolve) => {
         resolvePost = resolve;
       });
@@ -160,11 +161,13 @@ test("host actions keep stale Home visible while the API request is in flight", 
   await tick();
   expect(root.querySelector(".home-group h2")?.textContent).toBe("Review requests");
   expect(root.querySelector(".home-card-title")?.textContent).toBe("Current work");
-  expect(homeFetchUrls(fetchSpy).some((url) => url === "/api/actions")).toBe(true);
+  expect(root.textContent).toContain("Refreshing");
+  expect(homeFetchUrls(fetchSpy).some((url) => url === "/api/catalog")).toBe(true);
+  expect(homeFetchUrls(fetchSpy).some((url) => url === "/api/actions")).toBe(false);
   resolvePost?.({
     ok: true,
-    statusText: "Created",
-    json: async () => ({ id: "refresh-1" }),
+    statusText: "OK",
+    json: async () => ({ skipped: false }),
   });
   await tick();
 });
@@ -318,5 +321,113 @@ test("Home shows duplicate and unsupported repository errors from the handler", 
     expect(root.querySelector("[data-repository-error]")?.textContent).toBe("unsupported git host");
   });
   expect(homeFetchUrls(fetchSpy).some((url) => url === "/api/actions")).toBe(false);
+});
+
+test("Refresh stays enabled without an agent and does not queue actions", async () => {
+  const fetchSpy = homeFetch((url) => {
+    if (url === "/api/catalog") {
+      return {
+        ok: true,
+        statusText: "OK",
+        json: async () => ({ skipped: false }),
+      };
+    }
+    if (url === "/api/reviews") {
+      return {
+        ok: true,
+        statusText: "OK",
+        json: async () => ({
+          reviews: HOME_FIXTURE_DISCONNECTED.reviews,
+          catalog: HOME_FIXTURE_DISCONNECTED.catalog,
+          actions: HOME_FIXTURE_DISCONNECTED.actions,
+          agentConnected: false,
+          activeId: HOME_FIXTURE_DISCONNECTED.activeId,
+          repositories: HOME_FIXTURE_DISCONNECTED.repositories,
+        }),
+      };
+    }
+    return undefined;
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+  host = document.createElement("div");
+  document.body.appendChild(host);
+  mounted = mount(AppShell, { target: host, props: { data: HOME_FIXTURE_DISCONNECTED } });
+  await tick();
+  const button = host.querySelector("[data-queue-refresh]") as HTMLButtonElement;
+  expect(button.disabled).toBe(false);
+  button.click();
+  await vi.waitFor(() => {
+    expect(homeFetchUrls(fetchSpy).some((url) => url === "/api/catalog")).toBe(true);
+  });
+  await tick();
+  expect(homeFetchUrls(fetchSpy).some((url) => url === "/api/actions")).toBe(false);
+  expect(host.querySelector(".home-card-title")?.textContent).toBe("Current work");
+});
+
+test("failed catalog refresh keeps prior Home cards and shows the existing error line", async () => {
+  const fetchSpy = homeFetch((url) => {
+    if (url === "/api/catalog") {
+      return {
+        ok: false,
+        statusText: "Internal Server Error",
+        json: async () => ({ error: "listRepositories failed" }),
+      };
+    }
+    return undefined;
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+  const root = renderHome();
+  await tick();
+  (root.querySelector("[data-queue-refresh]") as HTMLButtonElement).click();
+  await vi.waitFor(() => {
+    expect(root.querySelector("[data-refresh-error]")?.textContent).toBe("listRepositories failed");
+  });
+  expect(root.querySelector(".home-card-title")?.textContent).toBe("Current work");
+  expect(homeUi.refreshing).toBe(false);
+  expect(homeFetchUrls(fetchSpy).some((url) => url === "/api/actions")).toBe(false);
+});
+
+test("stale Home focus refreshes after 60 seconds and skips inside the window", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-09-16T12:00:00.000Z"));
+  const fetchSpy = homeFetch((url) => {
+    if (url === "/api/catalog") {
+      return {
+        ok: true,
+        statusText: "OK",
+        json: async () => ({ skipped: false }),
+      };
+    }
+    if (url === "/api/reviews") {
+      return {
+        ok: true,
+        statusText: "OK",
+        json: async () => ({
+          reviews: HOME_FIXTURE.reviews,
+          catalog: HOME_FIXTURE.catalog,
+          actions: [],
+          agentConnected: true,
+          activeId: HOME_FIXTURE.activeId,
+          repositories: [],
+        }),
+      };
+    }
+    return undefined;
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+  const root = renderHome();
+  await tick();
+  homeUi.lastCatalogRefreshAt = Date.now();
+  document.dispatchEvent(new Event("visibilitychange"));
+  await tick();
+  expect(fetchSpy.mock.calls.filter(([url]) => url === "/api/catalog")).toHaveLength(0);
+  vi.setSystemTime(Date.now() + CATALOG_REFRESH_STALE_MS);
+  document.dispatchEvent(new Event("visibilitychange"));
+  await tick();
+  expect(fetchSpy.mock.calls.filter(([url]) => url === "/api/catalog")).toHaveLength(1);
+  expect(JSON.parse(String((fetchSpy.mock.calls.find(([url]) => url === "/api/catalog")?.[1] as RequestInit).body))).toEqual(
+    { reason: "focus" },
+  );
+  expect(root.querySelector(".home-card-title")?.textContent).toBe("Current work");
 });
 

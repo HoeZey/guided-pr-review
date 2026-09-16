@@ -11,7 +11,7 @@ import {
 import { GuideV1 } from "./guide.ts";
 import { CodeReviewOutcome, StoredOutcome } from "./outcomes.ts";
 import { ListReviewsOutput } from "./persistence.ts";
-import { isAzureDevOpsHost } from "./provenance.ts";
+import { isAzureDevOpsHost, isGitHubHost } from "./provenance.ts";
 
 // Transport-only MCP tool input and output declarations.
 // Runtime schemas live in sibling contract modules.
@@ -64,23 +64,33 @@ export const tools = {
         origin: z.boolean(),
         repository: z
           .object({
-            provider: z.literal("azure-devops"),
-            host: z
-              .string()
-              .min(1)
-              .refine(isAzureDevOpsHost, { message: "unsupported git host" }),
+            provider: z.enum(["azure-devops", "github"]),
+            host: z.string().min(1),
             id: z.string().min(1),
             owner: z.string().min(1),
             name: z.string().min(1),
             webUrl: z.string().url(),
+            cloneUrl: z.string().min(1).optional(),
           })
           .strict(),
         syncedAt: z.string().min(1).optional(),
+        attemptedAt: z.string().min(1).optional(),
         error: z.string().min(1).optional(),
         pullRequests: z.array(CatalogPullRequest).default([]),
       })
       .strict()
       .superRefine((value, ctx) => {
+        const ok =
+          value.repository.provider === "github"
+            ? isGitHubHost(value.repository.host)
+            : isAzureDevOpsHost(value.repository.host);
+        if (!ok) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "unsupported git host",
+            path: ["repository", "host"],
+          });
+        }
         if (!value.error && !value.syncedAt) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,

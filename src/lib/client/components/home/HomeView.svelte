@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import { hostActionHint, inFlightActionCopy, latestAction, projectHomeOverview } from "$lib/shared/domain/overview";
+  import { hostActionHint, projectHomeOverview } from "$lib/shared/domain/overview";
   import type { HomePageData } from "$lib/shared/page-data";
   import {
     formatLastSynced,
@@ -12,6 +12,7 @@
     addRepository,
     removeRepository,
     pasteGuide,
+    refreshCatalog,
     stopHomeWatch,
     syncHomeWatch,
   } from "$lib/client/state/home.svelte";
@@ -23,19 +24,16 @@
   const listed = $derived(homeListed(data));
   const configured = $derived(homeRepositories(data));
   const overview = $derived(projectHomeOverview(listed.reviews, listed.catalog));
-  const refresh = $derived(latestAction(listed.actions, "refresh"));
-  const refreshFailed = $derived(
-    refresh?.status === "failed" ? refresh.error?.message : undefined,
-  );
   const disconnected = $derived(hostActionHint(listed.agentConnected));
   const hasContent = $derived(
     overview.groups.length > 0 ||
       overview.catalogErrors.length > 0 ||
       Boolean(overview.lastSynced) ||
       Boolean(disconnected) ||
-      Boolean(refreshFailed) ||
       Boolean(homeUi.pasteError) ||
+      Boolean(homeUi.refreshError) ||
       Boolean(homeUi.repositoryError) ||
+      Boolean(homeUi.refreshing) ||
       configured.length > 0 ||
       connectionUi.busy ||
       connectionUi.connections.length > 0 ||
@@ -50,6 +48,16 @@
   onMount(() => {
     void loadConnections();
     void loadRepositories();
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      void refreshCatalog("focus");
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
   });
 
   onDestroy(() => {
@@ -134,12 +142,12 @@
       {#if homeUi.pasteError}
         <p class="home-error">{homeUi.pasteError}</p>
       {/if}
+      {#if homeUi.refreshError}
+        <p class="home-error" data-refresh-error>{homeUi.refreshError}</p>
+      {/if}
       {#each overview.catalogErrors as entry}
         <p class="home-error">{entry.owner} / {entry.name}: {entry.message}</p>
       {/each}
-      {#if refreshFailed}
-        <p class="home-error">{refreshFailed}</p>
-      {/if}
       {#each overview.groups as group}
         {#if group.collapsed}
           <details class="home-group is-archived">

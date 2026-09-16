@@ -1,5 +1,6 @@
 import type { CatalogSnapshot, ConfiguredRepository, OpenActionTarget, StoredAction } from "$lib/shared/contracts/catalog";
 import type { ListReviewsOutput, ReviewSummary } from "$lib/shared/contracts/persistence";
+import { CATALOG_REFRESH_STALE_MS } from "$lib/shared/domain/catalog";
 import { reviewPath } from "$lib/shared/domain/overview";
 import type { HomePageData } from "$lib/shared/page-data";
 import { fetchJson } from "../browser/fetch";
@@ -23,6 +24,7 @@ async function defaultNavigate(path: string): Promise<void> {
 
 let navigate: Navigate = defaultNavigate;
 let watchTimer: ReturnType<typeof setInterval> | null = null;
+let catalogRefreshInflight: Promise<void> | null = null;
 
 export const homeUi = $state({
   pasteOpen: false,
@@ -33,6 +35,9 @@ export const homeUi = $state({
   repositoryError: null as string | null,
   repositoryInput: "",
   repositoryBusy: false,
+  refreshing: false,
+  lastCatalogRefreshAt: null as number | null,
+  refreshError: null as string | null,
 });
 
 export function setHomeNavigate(fn: Navigate): void {
@@ -48,7 +53,11 @@ export function resetHomeUi(): void {
   homeUi.repositoryError = null;
   homeUi.repositoryInput = "";
   homeUi.repositoryBusy = false;
+  homeUi.refreshing = false;
+  homeUi.lastCatalogRefreshAt = null;
+  homeUi.refreshError = null;
   navigate = defaultNavigate;
+  catalogRefreshInflight = null;
   stopHomeWatch();
   resetConnectionUi();
 }
@@ -62,6 +71,8 @@ export function leaveHome(): void {
   homeUi.repositoryError = null;
   homeUi.repositoryInput = "";
   homeUi.repositoryBusy = false;
+  homeUi.refreshing = false;
+  homeUi.refreshError = null;
   stopHomeWatch();
   resetConnectionUi();
 }
@@ -157,12 +168,49 @@ export async function refreshHomeList(): Promise<void> {
   }
 }
 
+export async function refreshCatalog(reason: "focus" | "manual" = "manual"): Promise<void> {
+  if (
+    reason === "focus" &&
+    homeUi.lastCatalogRefreshAt != null &&
+    Date.now() - homeUi.lastCatalogRefreshAt < CATALOG_REFRESH_STALE_MS
+  ) {
+    return;
+  }
+  if (catalogRefreshInflight) {
+    await catalogRefreshInflight;
+    return;
+  }
+  homeUi.refreshing = true;
+  catalogRefreshInflight = (async () => {
+    try {
+      await fetchJson("/api/catalog", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reason }),
+      });
+      homeUi.refreshError = null;
+      homeUi.lastCatalogRefreshAt = Date.now();
+      await refreshHomeList();
+    } catch (err) {
+      homeUi.refreshError = err instanceof Error ? err.message : String(err);
+    } finally {
+      homeUi.refreshing = false;
+      catalogRefreshInflight = null;
+    }
+  })();
+  await catalogRefreshInflight;
+}
+
 export async function queueHomeAction(
   payload:
     | { kind: "open" | "update-diff"; target: OpenActionTarget }
     | { kind: "refresh" }
     | { kind: "generate-guide"; reviewId: string },
 ): Promise<void> {
+  if (payload.kind === "refresh") {
+    await refreshCatalog("manual");
+    return;
+  }
   const created = await fetchJson<{ id: string }>("/api/actions", {
     method: "POST",
     headers: { "content-type": "application/json" },

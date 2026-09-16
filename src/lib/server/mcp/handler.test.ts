@@ -47,6 +47,7 @@ function fakeServices(overrides: {
       completeUpdateDiff: unused("completeUpdateDiff"),
     },
     catalog: { replace: unused("replace") },
+    catalogRefresh: { refresh: unused("catalogRefresh") },
     actions: {
       queue: unused("queue"),
       wait: overrides.wait ?? unused("wait"),

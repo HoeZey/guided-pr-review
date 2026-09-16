@@ -138,6 +138,27 @@ export function createHttpHandlers(
           return jsonError(err, 400);
         }
       },
+      POST: async ({ request }: HttpEvent) => {
+        await seed();
+        let payload: unknown = {};
+        try {
+          payload = await readJsonAllowEmpty(request);
+        } catch {
+          return invalidJson();
+        }
+        const reason =
+          payload &&
+          typeof payload === "object" &&
+          "reason" in payload &&
+          (payload.reason === "startup" || payload.reason === "focus" || payload.reason === "manual")
+            ? payload.reason
+            : "manual";
+        try {
+          return Response.json(await services.catalogRefresh.refresh({ reason }));
+        } catch (err) {
+          return jsonError(err, 500);
+        }
+      },
     },
     actions: {
       POST: async ({ request }: HttpEvent) => {

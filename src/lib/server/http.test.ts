@@ -28,6 +28,8 @@ const listed = {
 function fakeServices(overrides: {
   list?: AppServices["reviews"]["list"];
   wait?: AppServices["actions"]["wait"];
+  refresh?: AppServices["catalogRefresh"]["refresh"];
+  queue?: AppServices["actions"]["queue"];
 }): AppServices {
   return {
     reviews: {
@@ -44,8 +46,9 @@ function fakeServices(overrides: {
       completeUpdateDiff: unused("completeUpdateDiff"),
     },
     catalog: { replace: unused("replace") },
+    catalogRefresh: { refresh: overrides.refresh ?? unused("catalogRefresh") },
     actions: {
-      queue: unused("queue"),
+      queue: overrides.queue ?? unused("queue"),
       wait: overrides.wait ?? unused("wait"),
       complete: unused("complete"),
     },
@@ -123,6 +126,34 @@ test("HTTP and MCP list_reviews and wait_for_action call the same services", asy
     { action: claimed },
   );
   assert.deepEqual(seen, ["list", "list", "wait", "wait"]);
+});
+
+test("POST /api/catalog refreshes through the catalog service and never queues an agent", async () => {
+  const seen: string[] = [];
+  const http = createHttpHandlers(
+    fakeServices({
+      refresh: async (input) => {
+        seen.push("refresh");
+        assert.deepEqual(input, { reason: "focus" });
+        return { skipped: false };
+      },
+      queue: async () => {
+        seen.push("queue");
+        return { id: "nope" };
+      },
+    }),
+  );
+  const response = await http.catalog.POST({
+    request: new Request("http://localhost/api/catalog", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ reason: "focus" }),
+    }),
+    params: {},
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { skipped: false });
+  assert.deepEqual(seen, ["refresh"]);
 });
 
 const SHA_A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";

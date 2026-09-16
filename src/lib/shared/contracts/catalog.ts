@@ -69,6 +69,7 @@ export const CatalogSnapshot = z
     host: z.string().min(1),
     repository: CatalogRepositoryIdentity,
     syncedAt: z.string().min(1).optional(),
+    attemptedAt: z.string().min(1).optional(),
     error: z.string().min(1).optional(),
     pullRequests: z.array(CatalogPullRequest),
   })

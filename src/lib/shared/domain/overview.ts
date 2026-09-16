@@ -59,7 +59,7 @@ export function guidePresentsWalkthrough(guide: { unchaptered?: boolean }): bool
 }
 
 export const AGENT_DISCONNECTED_HINT =
-  "The guided-review skill must be running to open or refresh a pull request from the host.";
+  "The guided-review skill must be running to open a pull request from the host.";
 
 export const GENERATE_GUIDE_DISCONNECTED_HINT =
   "The guided-review skill must be running to generate a reading-order guide.";

@@ -6,6 +6,8 @@ import type {
 import type { ReviewRecord } from "../contracts/persistence.ts";
 import { adoptLocalsFromCatalog } from "./reviews.ts";
 
+export const CATALOG_REFRESH_STALE_MS = 60_000;
+
 export type CatalogReplacementInput = {
   origin: boolean;
   repository: {
@@ -15,8 +17,10 @@ export type CatalogReplacementInput = {
     owner: string;
     name: string;
     webUrl: string;
+    cloneUrl?: string;
   };
   syncedAt?: string;
+  attemptedAt?: string;
   error?: string;
   pullRequests: CatalogPullRequest[];
 };
@@ -48,10 +52,18 @@ export function applyCatalogReplacement(
   reviews: ReviewRecord[];
 } {
   const key = repositoryKey(parsed.repository);
+  const previousConfigured = repositories.find((repository) => repositoryKey(repository) === key);
   const configured: ConfiguredRepository = {
-    ...parsed.repository,
+    provider: parsed.repository.provider,
+    host: parsed.repository.host,
+    id: parsed.repository.id,
+    owner: parsed.repository.owner,
+    name: parsed.repository.name,
+    webUrl: parsed.repository.webUrl,
     origin: parsed.origin,
   };
+  const cloneUrl = parsed.repository.cloneUrl ?? previousConfigured?.cloneUrl;
+  if (cloneUrl) configured.cloneUrl = cloneUrl;
   let nextRepos = repositories.filter((repository) => repositoryKey(repository) !== key);
   if (parsed.origin) {
     nextRepos = nextRepos.map((repository) => ({
@@ -78,6 +90,7 @@ export function applyCatalogReplacement(
   } else if (parsed.syncedAt) {
     snapshot.syncedAt = parsed.syncedAt;
   }
+  if (parsed.attemptedAt) snapshot.attemptedAt = parsed.attemptedAt;
   const nextCatalog = catalog.filter((entry) => snapshotKey(entry) !== key);
   nextCatalog.push(snapshot);
   const nextReviews = reviews.map((review) => ({
