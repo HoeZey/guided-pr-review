@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 blocked_by:
   - 02-split-shared-contracts-and-domain
 blocks:
@@ -53,19 +53,19 @@ src/styles/global.css, typed component tests
 
 **Acceptance criteria:**
 
-- [ ] Root layout and review shell SSR/hydrate without DOM mismatch.
-- [ ] SvelteKit handles Home/review navigation; no new manual pushState router.
-- [ ] Review tabs switch internally without route navigation or component-wide
+- [x] Root layout and review shell SSR/hydrate without DOM mismatch.
+- [x] SvelteKit handles Home/review navigation; no new manual pushState router.
+- [x] Review tabs switch internally without route navigation or component-wide
   refetch.
-- [ ] Shared state has explicit owner/reset rules when review id changes.
-- [ ] Existing localStorage keys have SSR-safe defaults and typed browser
+- [x] Shared state has explicit owner/reset rules when review id changes.
+- [x] Existing localStorage keys have SSR-safe defaults and typed browser
   adapters.
-- [ ] Client imports no filesystem, subprocess, repository, provider, or MCP
+- [x] Client imports no filesystem, subprocess, repository, provider, or MCP
   runtime code.
-- [ ] Duplicate Guide shape is removed.
-- [ ] Fake Home/review data renders shell, tabs, loading, and errors in focused
+- [x] Duplicate Guide shape is removed.
+- [x] Fake Home/review data renders shell, tabs, loading, and errors in focused
   Svelte tests.
-- [ ] No comment UI or provider feature is copied from the old branch.
+- [x] No comment UI or provider feature is copied from the old branch.
 
 **Blocked by:** 02 Split shared contracts and pure domain rules
 
@@ -73,3 +73,25 @@ src/styles/global.css, typed component tests
 
 **Parallel-eligible:** yes; starts with 03 after 02 and remains independent
 while 04 follows 03
+
+## code-review
+
+Pass: 16 September 2026
+
+base: 7840b8e96a280715389655e8aa961632049cfb11
+head: e505e846c6935428c267cf805302bffe2f07fa5c
+branch: feature/06-06-build-svelte-review-shell
+
+Not blocking. Standards has no major. Spec has no missing or incorrect.
+
+### Standards
+
+major 0 / minor 0 / nit 0
+
+findings: []
+
+### Spec
+
+missing 0 / partial 0 / scope-creep 0 / incorrect 0
+
+findings: []

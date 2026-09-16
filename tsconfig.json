@@ -13,5 +13,10 @@
     "types": ["node"]
   },
   "include": ["src/**/*", "astro.config.mjs", "scripts/**/*.ts"],
-  "exclude": ["src/routes", "src/app.d.ts", "scripts/architecture-fixtures"]
+  "exclude": [
+    "src/routes",
+    "src/app.d.ts",
+    "src/lib/client",
+    "scripts/architecture-fixtures"
+  ]
 }

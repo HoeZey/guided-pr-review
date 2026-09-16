@@ -34,6 +34,7 @@ import type {
   OpenActionTarget,
   StoredAction,
 } from "./lib/shared/contracts/catalog.ts";
+import type { Chapter, FileChange, GuideV1, Hunk } from "./lib/shared/contracts/guide.ts";
 import type { SpecFinding, StandardsFinding, StoredOutcome } from "./lib/shared/contracts/outcomes.ts";
 import type { ReviewSummary } from "./lib/shared/contracts/persistence.ts";
 import {
@@ -94,61 +95,9 @@ const LANGS = [
   "toml",
 ] as const;
 
-type Guide = {
-  title: string;
-  summary?: string;
-  base: string;
-  head: string;
-  range?: string;
-  repo?: string;
-  additions?: number;
-  deletions?: number;
-  chapters: Chapter[];
-  omitted?: { path: string; reason: string; note?: string }[];
-  unchaptered?: boolean;
-  source?: {
-    kind: string;
-    provider: string;
-    host: string;
-    repository: { id: string; owner: string; name: string; webUrl: string };
-    number: number;
-    webUrl: string;
-    sourceRef: string;
-    targetRef: string;
-    sourceCommit: string;
-    targetCommit: string;
-  };
-};
-
-type Chapter = {
-  id: string;
-  kind: string;
-  title: string;
-  why: string;
-  open?: boolean;
-  additions?: number;
-  deletions?: number;
-  files: FileChange[];
-  _omitted?: boolean;
-};
-
-type FileChange = {
-  path: string;
-  language?: string;
-  stub?: boolean;
-  reason?: string;
-  additions?: number;
-  deletions?: number;
-  hunks?: { header?: string; lines: DiffLine[] }[];
-};
-
-type DiffLine = {
-  type: string;
-  content: string;
-  oldLine?: number;
-  newLine?: number;
-};
-
+type Guide = GuideV1;
+type DiffLine = Hunk["lines"][number];
+type NavChapter = Chapter & { _omitted?: boolean };
 type Tab = "guide" | "diff" | "review";
 
 let highlighter: Highlighter | null = null;
@@ -322,7 +271,7 @@ async function paintCode(): Promise<void> {
 function sourceHeader(data: Guide): string {
   const src = data.source;
   if (src?.kind !== "pull-request" || !src.webUrl) return "";
-  const github = src.provider === "github" || /github/i.test(src.host);
+  const github = /github/i.test(src.host);
   const label = github ? "Open in GitHub" : "Open in Azure DevOps";
   return `<a class="icon-btn host-link" href="${esc(src.webUrl)}" target="_blank" rel="noreferrer" aria-label="${label}" title="${label}">${github ? GH_MARK : ADO_MARK}</a>`;
 }
@@ -581,8 +530,8 @@ function renderFile(file: FileChange, id: string, opts?: { stage?: boolean }) {
   return `<section class="${cls}" id="${esc(id)}" data-path="${esc(file.path)}" data-collapsed="${isCollapsed}">${head}<div class="file-body">${hunks}</div></section>`;
 }
 
-function chaptersForNav(data: Guide): Chapter[] {
-  const list = data.chapters.slice();
+function chaptersForNav(data: Guide): NavChapter[] {
+  const list: NavChapter[] = data.chapters.slice();
   if (data.omitted && data.omitted.length) {
     list.push({
       id: "__omitted__",
@@ -686,7 +635,7 @@ function progressToc(index: number, total: number) {
   return `<button type="button" class="progress-toc" data-toggle-toc aria-expanded="${tocOpen ? "true" : "false"}" aria-controls="guide-toc" title="Sections" aria-label="Sections ${idx} of ${tot}">${ICON_TOC}<span>${idx} / ${tot}</span></button>`;
 }
 
-function renderGuideToc(chapters: Chapter[]): { nav: string; rail: string } {
+function renderGuideToc(chapters: NavChapter[]): { nav: string; rail: string } {
   const groups: string[] = [];
   const ticks: string[] = [];
   chapters.forEach((ch, i) => {
@@ -718,7 +667,7 @@ function renderFilePill(file: FileChange, id: string, chapterId: string, current
   return `<button type="button" class="file-pill${dim}" data-jump="${esc(id)}" data-chapter="${esc(chapterId)}" data-path="${esc(file.path)}" title="${esc(file.path)}" aria-current="${current ? "true" : "false"}"><span class="file-pill-main"><span class="file-pill-name">${esc(name)}</span>${dir ? `<span class="file-pill-dir">${esc(dir)}</span>` : ""}</span>${statsHtml(s)}</button>`;
 }
 
-function renderSection(chapter: Chapter, index: number, total: number) {
+function renderSection(chapter: NavChapter, index: number, total: number) {
   const sid = sectionId(chapter.id);
   if (chapter._omitted) {
     return `<section class="guide-section" id="${esc(sid)}" data-chapter="${esc(chapter.id)}"><div class="guide-aside"><h2>Omitted</h2><div class="guide-progress">${progressToc(index, total)}</div><div class="guide-why">${formatCopy("Binary or unreadable paths.")}</div></div><div class="guide-stage">${renderOmitted(guide?.omitted || [])}</div></section>`;
@@ -786,7 +735,7 @@ function setTab(next: Tab) {
 
 function diffRows() {
   if (!guide) return [];
-  return filesForDiff(guide as Parameters<typeof filesForDiff>[0]);
+  return filesForDiff(guide);
 }
 
 function renderFileTree(nodes: FileTreeNode[], depth: number, rows: FileChange[]): string {

@@ -32,7 +32,7 @@ reconciles browser-wide behavior only after those views exist.
 - [03 Introduce app-shaped repositories and JSON adapter](03-introduce-repositories.md) — todo
 - [04 Introduce feature services and provider ports](04-introduce-services-and-ports.md) — todo
 - [05 Preserve HTTP, MCP, and SSR data in SvelteKit](05-preserve-http-mcp-and-ssr.md) — todo
-- [06 Build the Svelte review shell and shared state](06-build-svelte-review-shell.md) — todo
+- [06 Build the Svelte review shell and shared state](06-build-svelte-review-shell.md) — done
 - [07 Render Home through SvelteKit SSR](07-render-ssr-home.md) — todo
 - [08 Build shared Svelte code-view primitives](08-build-code-view-primitives.md) — todo
 - [09 Port Guide to Svelte components](09-port-guide-view.md) — todo
