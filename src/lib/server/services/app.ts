@@ -137,6 +137,7 @@ function pullRequestReader(
       }
       return reader.getPullRequest(input);
     },
+    getCommentContext: reader.getCommentContext?.bind(reader),
   };
 }
 

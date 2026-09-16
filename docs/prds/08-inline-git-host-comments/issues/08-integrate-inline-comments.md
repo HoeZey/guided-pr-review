@@ -163,11 +163,13 @@ worktree/branch not deleted.
 
 Open Diff and Update Diff now fetch ADO iterations and changeTrackingId through
 createAdoRestAdapter.getCommentContext (REST 7.1 fetch, not az rest) and pass
-them into catalogAsSource. Paths without a tracking id stay absent so
-createPayload still throws invalid-anchor for that path only. Catalog adopt
-without Open still writes zeros. Already-saved ADO reviews skip Update Diff
-when sourceCommit is unchanged, so empty stored changes stay until a non-skip
-upsert. No live comment POST.
+them into catalogAsSource. pullRequestReader forwards getCommentContext so
+createAppServices Open Diff keeps those ids (second integration-review hole).
+Paths without a tracking id stay absent so createPayload still throws
+invalid-anchor for that path only. Catalog adopt without Open still writes
+zeros. Already-saved ADO reviews skip Update Diff when sourceCommit is
+unchanged, so empty stored changes stay until a non-skip upsert. No live
+comment POST. Awaits a fresh independent integration-review.
 
 ### Leftover notes from 01-07 (unfixed)
 
