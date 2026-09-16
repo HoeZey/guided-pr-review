@@ -70,6 +70,6 @@ PRD behavior unchanged. Issue Touches fields now name HEAD symbols:
 - [03 Implement GitHub comment adapter](03-implement-github-comments.md) — done
 - [04 Render existing threads inline in Guide and Diff](04-render-inline-threads.md) — done
 - [05 Create comments and replies from both views](05-create-and-reply.md) — done
-- [06 Edit and delete owned comments](06-edit-and-delete.md) — todo
+- [06 Edit and delete owned comments](06-edit-and-delete.md) — done
 - [07 Deliver the PR-wide Discussion tab](07-deliver-discussion-tab.md) — todo
 - [08 Integrate and verify inline comments](08-integrate-inline-comments.md) — todo

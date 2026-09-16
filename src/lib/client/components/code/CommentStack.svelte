@@ -1,7 +1,11 @@
 <script lang="ts">
   import type { CommentMessage, CommentThread } from "$lib/shared/contracts/comments";
   import { composerSession, openReplyComposer } from "$lib/client/state/composer.svelte";
-  import { threadSession } from "$lib/client/state/threads.svelte";
+  import {
+    deleteOwnedComment,
+    threadSession,
+    updateOwnedComment,
+  } from "$lib/client/state/threads.svelte";
   import CommentComposer from "./CommentComposer.svelte";
 
   let {
@@ -11,6 +15,13 @@
     threads: CommentThread[];
     showComposer?: boolean;
   } = $props();
+
+  let editingId: string | null = $state(null);
+  let confirmingId: string | null = $state(null);
+  let draft = $state("");
+  let busy = $state(false);
+  let errorId: string | null = $state(null);
+  let error = $state<string | null>(null);
 
   function stamp(iso: string): string {
     const ms = Date.parse(iso);
@@ -28,6 +39,85 @@
   function startReply(threadId: string): void {
     if (!threadSession.reviewId) return;
     openReplyComposer(threadSession.reviewId, threadId);
+  }
+
+  function canMutate(message: CommentMessage): boolean {
+    return Boolean(
+      threadSession.hosted && threadSession.reviewId && message.ownedByCurrentUser && !message.deleted,
+    );
+  }
+
+  function threadIdOf(commentId: string): string | undefined {
+    return threads.find((thread) => thread.messages.some((row) => row.id === commentId))?.id;
+  }
+
+  function startEdit(message: CommentMessage): void {
+    confirmingId = null;
+    editingId = message.id;
+    draft = message.body;
+    errorId = null;
+    error = null;
+  }
+
+  function cancelEdit(): void {
+    editingId = null;
+    draft = "";
+    errorId = null;
+    error = null;
+  }
+
+  function startDelete(message: CommentMessage): void {
+    editingId = null;
+    draft = "";
+    confirmingId = message.id;
+    errorId = null;
+    error = null;
+  }
+
+  function cancelDelete(): void {
+    confirmingId = null;
+    errorId = null;
+    error = null;
+  }
+
+  async function save(): Promise<void> {
+    const commentId = editingId;
+    const threadId = commentId ? threadIdOf(commentId) : undefined;
+    if (!commentId || !threadId || busy || !draft.trim()) return;
+    busy = true;
+    errorId = null;
+    error = null;
+    try {
+      await updateOwnedComment(threadId, commentId, draft);
+      editingId = null;
+      draft = "";
+    } catch (err) {
+      editingId = null;
+      draft = "";
+      errorId = commentId;
+      error = err instanceof Error ? err.message : String(err);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function confirmDelete(): Promise<void> {
+    const commentId = confirmingId;
+    const threadId = commentId ? threadIdOf(commentId) : undefined;
+    if (!commentId || !threadId || busy) return;
+    busy = true;
+    errorId = null;
+    error = null;
+    try {
+      await deleteOwnedComment(threadId, commentId);
+      confirmingId = null;
+    } catch (err) {
+      confirmingId = null;
+      errorId = commentId;
+      error = err instanceof Error ? err.message : String(err);
+    } finally {
+      busy = false;
+    }
   }
 </script>
 
@@ -48,7 +138,7 @@
             {#if thread.outdated}<span class="thread-flag is-outdated">Outdated</span>{/if}
           </div>
           <div class="thread-body">
-            <p class="thread-copy">{root.body}</p>
+            {@render messageBody(root)}
             {#each thread.messages.slice(1) as message (message.id)}
               <div class="thread-reply">
                 <div class="thread-meta">
@@ -57,7 +147,7 @@
                   {#if edited(message)}<span class="thread-flag">Edited</span>{/if}
                   {#if message.deleted}<span class="thread-flag">Deleted</span>{/if}
                 </div>
-                <p class="thread-copy">{message.body}</p>
+                {@render messageBody(message)}
               </div>
             {/each}
             {#if threadSession.hosted && threadSession.reviewId}
@@ -85,3 +175,50 @@
     {/if}
   </div>
 {/if}
+
+{#snippet messageBody(message: CommentMessage)}
+  {#if editingId === message.id}
+    <div class="comment-composer">
+      <textarea
+        data-comment-edit-draft
+        readonly={busy}
+        value={draft}
+        oninput={(event) => (draft = event.currentTarget.value)}
+      ></textarea>
+      <div class="composer-actions">
+        <button type="button" class="ghost" data-comment-edit-cancel onclick={() => cancelEdit()}>Cancel</button>
+        <button type="button" class="ghost" data-comment-save disabled={busy} onclick={() => void save()}>
+          Save
+        </button>
+      </div>
+    </div>
+  {:else}
+    <p class="thread-copy">{message.body}</p>
+    {#if error && errorId === message.id}<p class="composer-error">{error}</p>{/if}
+    {#if canMutate(message)}
+      <div class="composer-actions">
+        {#if confirmingId === message.id}
+          <button type="button" class="ghost" data-comment-delete-cancel onclick={() => cancelDelete()}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="ghost"
+            data-comment-delete-confirm
+            disabled={busy}
+            onclick={() => void confirmDelete()}
+          >
+            Delete
+          </button>
+        {:else}
+          <button type="button" class="ghost" data-comment-edit={message.id} onclick={() => startEdit(message)}>
+            Edit
+          </button>
+          <button type="button" class="ghost" data-comment-delete={message.id} onclick={() => startDelete(message)}>
+            Delete
+          </button>
+        {/if}
+      </div>
+    {/if}
+  {/if}
+{/snippet}

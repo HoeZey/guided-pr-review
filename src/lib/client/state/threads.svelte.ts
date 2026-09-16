@@ -1,4 +1,4 @@
-import type { CommentThread } from "$lib/shared/contracts/comments";
+import type { CommentMessage, CommentThread } from "$lib/shared/contracts/comments";
 import { commentsApi } from "../browser/comments";
 
 export const THREAD_LIST_STALE_MS = 60_000;
@@ -6,6 +6,16 @@ export const THREAD_LIST_STALE_MS = 60_000;
 export type ThreadLoadReason = "open" | "focus" | "retry";
 
 type ThreadListFn = (reviewId: string) => Promise<{ threads: CommentThread[] }>;
+
+type CommentMutateFns = {
+  update?: (
+    reviewId: string,
+    threadId: string,
+    commentId: string,
+    input: { body: string },
+  ) => Promise<CommentMessage>;
+  delete?: (reviewId: string, threadId: string, commentId: string) => Promise<{ ok: true }>;
+};
 
 type ThreadSession = {
   reviewId: string | null;
@@ -115,4 +125,82 @@ export function appendReply(threadId: string, message: CommentThread["messages"]
     if (thread.messages.some((row) => row.id === message.id)) return thread;
     return { ...thread, messages: [...thread.messages, message] };
   });
+}
+
+function ownedMessage(threadId: string, commentId: string): CommentMessage | undefined {
+  const thread = threadSession.threads.find((row) => row.id === threadId);
+  const message = thread?.messages.find((row) => row.id === commentId);
+  if (!message || !message.ownedByCurrentUser || message.deleted) return undefined;
+  return message;
+}
+
+function cloneThreads(): CommentThread[] {
+  return threadSession.threads.map((thread) => ({
+    ...thread,
+    messages: thread.messages.map((row) => ({ ...row })),
+  }));
+}
+
+function replaceThreads(next: CommentThread[]): void {
+  threadSession.threads = next;
+}
+
+function mapMessage(
+  threadId: string,
+  commentId: string,
+  fn: (message: CommentMessage) => CommentMessage | null,
+): void {
+  threadSession.threads = threadSession.threads.flatMap((thread) => {
+    if (thread.id !== threadId) return [thread];
+    const messages = thread.messages.flatMap((row) => {
+      if (row.id !== commentId) return [row];
+      const next = fn(row);
+      return next ? [next] : [];
+    });
+    if (messages.length === 0) return [];
+    return [{ ...thread, messages }];
+  });
+}
+
+export async function updateOwnedComment(
+  threadId: string,
+  commentId: string,
+  body: string,
+  opts: CommentMutateFns = {},
+): Promise<void> {
+  const reviewId = threadSession.reviewId;
+  if (!reviewId || !ownedMessage(threadId, commentId)) return;
+  const snapshot = cloneThreads();
+  mapMessage(threadId, commentId, (message) => ({ ...message, body }));
+  try {
+    const update = opts.update ?? commentsApi.update;
+    const message = await update(reviewId, threadId, commentId, { body });
+    mapMessage(threadId, commentId, () => message);
+  } catch (err) {
+    replaceThreads(snapshot);
+    throw err;
+  }
+}
+
+export async function deleteOwnedComment(
+  threadId: string,
+  commentId: string,
+  opts: CommentMutateFns = {},
+): Promise<void> {
+  const reviewId = threadSession.reviewId;
+  const thread = threadSession.threads.find((row) => row.id === threadId);
+  if (!reviewId || !thread || !ownedMessage(threadId, commentId)) return;
+  const snapshot = cloneThreads();
+  if (thread.provider === "github") {
+    mapMessage(threadId, commentId, () => null);
+  } else {
+    mapMessage(threadId, commentId, (message) => ({ ...message, deleted: true }));
+  }
+  try {
+    const remove = opts.delete ?? commentsApi.delete;
+    await remove(reviewId, threadId, commentId);
+  } catch (err) {
+    replaceThreads(snapshot);
+    throw err;
+  }
 }

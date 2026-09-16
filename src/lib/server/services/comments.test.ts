@@ -360,6 +360,17 @@ test("edit and delete require current-user ownership and still call the provider
   await service.delete("r1", "ado_thr_line", "ado_cmt_line");
   assert.equal(callsAdo.some((row) => Array.isArray(row) && row[0] === "update"), true);
   assert.equal(callsAdo.some((row) => Array.isArray(row) && row[0] === "delete"), true);
+
+  const githubFake = createFakeCommentProvider({ provider: "github", threads: commentFixtures("github") });
+  const githubService = createCommentService({
+    reviews: repos({ r1: guide(prSource("github")) }),
+    credentials: credentials("octocat", "github"),
+    providers: { ado: createFakeCommentProvider({ provider: "azure-devops" }), github: githubFake },
+  });
+  await githubService.delete("r1", "gh_thr_line", "gh_cmt_line");
+  const listed = await githubService.list("r1");
+  const remaining = listed.threads.find((thread) => thread.id === "gh_thr_line");
+  assert.equal(remaining?.messages.some((row) => row.id === "gh_cmt_line"), false);
 });
 
 test("client operation id cannot target provider resources and is not stored as thread identity", async () => {

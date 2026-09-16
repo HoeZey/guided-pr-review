@@ -2,10 +2,12 @@ import { afterEach, expect, test, vi } from "vitest";
 import type { CommentThread } from "$lib/shared/contracts/comments";
 import {
   THREAD_LIST_STALE_MS,
+  deleteOwnedComment,
   loadReviewThreads,
   resetThreadSession,
   retryReviewThreads,
   threadSession,
+  updateOwnedComment,
 } from "./threads.svelte";
 
 const WHEN = "2026-09-16T10:00:00.000Z";
@@ -89,4 +91,89 @@ test("failed list keeps the review readable and Retry refetches", async () => {
   expect(list).toHaveBeenCalledTimes(2);
   expect(threadSession.threads.map((row) => row.id)).toEqual(["t2"]);
   expect(threadSession.error).toBeNull();
+});
+
+test("owned edit and delete share one thread collection; failure restores the original; foreign ids never mutate", async () => {
+  const later = "2026-09-16T12:00:00.000Z";
+  const ado = thread("ado_thr");
+  ado.provider = "azure-devops";
+  const github: CommentThread = {
+    ...thread("gh_thr"),
+    messages: [
+      thread("gh_thr").messages[0]!,
+      {
+        id: "gh_thr-other",
+        author: { login: "other-reviewer" },
+        body: "reply",
+        createdAt: WHEN,
+        updatedAt: WHEN,
+        ownedByCurrentUser: false,
+      },
+    ],
+  };
+  threadSession.reviewId = "r1";
+  threadSession.hosted = true;
+  threadSession.threads = [ado, github];
+
+  const update = vi.fn();
+  const remove = vi.fn();
+  await updateOwnedComment("missing", "ado_thr-m", "forged", { update });
+  await updateOwnedComment("gh_thr", "gh_thr-other", "forged", { update });
+  await deleteOwnedComment("gh_thr", "gh_thr-other", { delete: remove });
+  expect(update).not.toHaveBeenCalled();
+  expect(remove).not.toHaveBeenCalled();
+  expect(threadSession.threads[0]?.messages[0]?.body).toBe("note");
+  expect(threadSession.threads[1]?.messages.map((row) => row.id)).toEqual(["gh_thr-m", "gh_thr-other"]);
+
+  const renamed = {
+    ...ado.messages[0]!,
+    body: "renamed",
+    updatedAt: later,
+  };
+  const updateOwned = vi.fn(async () => {
+    expect(threadSession.threads[0]?.messages[0]?.body).toBe("renamed");
+    return renamed;
+  });
+  await updateOwnedComment("ado_thr", "ado_thr-m", "renamed", { update: updateOwned });
+  expect(updateOwned).toHaveBeenCalledWith("r1", "ado_thr", "ado_thr-m", { body: "renamed" });
+  expect(threadSession.threads[0]?.messages[0]).toEqual(renamed);
+  expect(threadSession.threads[1]?.messages[0]?.body).toBe("note");
+
+  const denied = Object.assign(new Error("GitHub permission was denied"), { code: "denied" });
+  const failUpdate = vi.fn(async () => {
+    expect(threadSession.threads[1]?.messages[0]?.body).toBe("edited");
+    throw denied;
+  });
+  await expect(updateOwnedComment("gh_thr", "gh_thr-m", "edited", { update: failUpdate })).rejects.toMatchObject({
+    code: "denied",
+  });
+  expect(threadSession.threads[1]?.messages[0]?.body).toBe("note");
+  expect(threadSession.threads[0]?.messages[0]?.body).toBe("renamed");
+
+  const deleteGithub = vi.fn(async () => {
+    expect(threadSession.threads[1]?.messages.map((row) => row.id)).toEqual(["gh_thr-other"]);
+    return { ok: true as const };
+  });
+  await deleteOwnedComment("gh_thr", "gh_thr-m", { delete: deleteGithub });
+  expect(deleteGithub).toHaveBeenCalledWith("r1", "gh_thr", "gh_thr-m");
+  expect(threadSession.threads[1]?.messages.map((row) => row.id)).toEqual(["gh_thr-other"]);
+
+  const failDelete = vi.fn(async () => {
+    expect(threadSession.threads[0]?.messages[0]?.deleted).toBe(true);
+    throw denied;
+  });
+  await expect(deleteOwnedComment("ado_thr", "ado_thr-m", { delete: failDelete })).rejects.toMatchObject({
+    code: "denied",
+  });
+  expect(threadSession.threads[0]?.messages[0]?.deleted).toBeUndefined();
+  expect(threadSession.threads[0]?.messages[0]?.body).toBe("renamed");
+
+  const deleteAdo = vi.fn(async () => ({ ok: true as const }));
+  await deleteOwnedComment("ado_thr", "ado_thr-m", { delete: deleteAdo });
+  expect(threadSession.threads[0]?.messages[0]?.deleted).toBe(true);
+  expect(threadSession.threads[0]?.messages[0]?.body).toBe("renamed");
+
+  threadSession.threads = [thread("solo")];
+  await deleteOwnedComment("solo", "solo-m", { delete: async () => ({ ok: true as const }) });
+  expect(threadSession.threads).toEqual([]);
 });

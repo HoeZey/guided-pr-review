@@ -25,13 +25,21 @@ test("commentsApi calls same-origin review paths and never a git-host URL", asyn
     { body: "also", clientOperationId: "cop_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
     { signal: abort.signal },
   );
+  await commentsApi.update("r1", "t1", "c1", { body: "renamed" });
+  await commentsApi.delete("r1", "t1", "c1");
 
   const urls = fetchMock.mock.calls.map((call) => String(call[0]));
   expect(urls).toEqual([
     "/api/reviews/r1/comments",
     "/api/reviews/r1/comments",
     "/api/reviews/r1/comments/t1/replies",
+    "/api/reviews/r1/comments/t1/c1",
+    "/api/reviews/r1/comments/t1/c1",
   ]);
+  const updateInit = fetchMock.mock.calls[3]?.[1] as RequestInit;
+  expect(updateInit.method).toBe("PATCH");
+  expect(JSON.parse(String(updateInit.body))).toEqual({ body: "renamed" });
+  expect((fetchMock.mock.calls[4]?.[1] as RequestInit).method).toBe("DELETE");
   expect(urls.join(" ")).not.toMatch(/github\.com|dev\.azure\.com/);
   const createInit = fetchMock.mock.calls[1]?.[1] as RequestInit;
   expect(JSON.parse(String(createInit.body))).toEqual({

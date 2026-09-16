@@ -720,6 +720,109 @@ test("CommentService creates and replies through the injected GitHub adapter", a
   );
 });
 
+test("CommentService update and delete through the injected GitHub adapter reject other authors and omit deleted comments", async () => {
+  const owned = reviewComment({ id: 10, body: "line note" });
+  const other = reviewComment({
+    id: 11,
+    in_reply_to_id: 10,
+    user: user(OTHER),
+    body: "line reply",
+  });
+  let reviews: unknown[] = [owned, other];
+  let denyPatch = false;
+  const { fetch, calls } = recordingFetch((url, init) => {
+    const method = (init?.method ?? "GET").toUpperCase();
+    if (method === "GET" && url.pathname === "/repos/octocat/Hello-World/pulls/1347/comments") {
+      return jsonResponse(reviews);
+    }
+    if (method === "GET" && url.pathname === "/repos/octocat/Hello-World/issues/1347/comments") {
+      return jsonResponse([]);
+    }
+    if (method === "PATCH" && url.pathname === "/repos/octocat/Hello-World/pulls/comments/10") {
+      if (denyPatch) return jsonResponse({ message: "Resource not accessible by integration" }, { status: 403 });
+      const body = readJson(init) as { body?: string };
+      owned.body = body.body ?? "renamed";
+      owned.updated_at = "2011-04-14T17:00:00Z";
+      return jsonResponse(owned);
+    }
+    if (method === "DELETE" && url.pathname === "/repos/octocat/Hello-World/pulls/comments/10") {
+      reviews = reviews.filter((row) => (row as { id?: number }).id !== 10);
+      return emptyResponse(204);
+    }
+    if (url.pathname === "/repos/octocat/Hello-World/pulls/comments/11") {
+      throw new Error("must not mutate another author's comment");
+    }
+    throw new Error(`unexpected ${method} ${url.pathname}`);
+  });
+  const comments = createCommentService({
+    reviews: githubRepos(),
+    credentials: connectedCredentials(),
+    providers: {
+      ado: createFakeCommentProvider({ provider: "azure-devops" }),
+      github: createGithubCommentProvider({ credentials: connectedCredentials(), fetch }),
+    },
+  });
+
+  await assert.rejects(
+    () => comments.update("r1", "review:10", "review:11", { body: "forged" }),
+    (error: unknown) => {
+      assert.ok(error instanceof CommentError);
+      assert.equal(error.code, "not-owned");
+      return true;
+    },
+  );
+  await assert.rejects(
+    () => comments.delete("r1", "review:10", "review:11"),
+    (error: unknown) => {
+      assert.ok(error instanceof CommentError);
+      assert.equal(error.code, "not-owned");
+      return true;
+    },
+  );
+  await assert.rejects(
+    () => comments.update("r1", "review:99", "review:99", { body: "cross-pr" }),
+    (error: unknown) => {
+      assert.ok(error instanceof CommentError);
+      assert.equal(error.code, "unknown-thread");
+      return true;
+    },
+  );
+  assert.equal(
+    calls.some((call) => {
+      const method = (call.init?.method ?? "GET").toUpperCase();
+      return method === "PATCH" || method === "DELETE";
+    }),
+    false,
+  );
+
+  const updated = await comments.update("r1", "review:10", "review:10", { body: "renamed" });
+  assert.equal(updated.body, "renamed");
+  assert.equal(updated.ownedByCurrentUser, true);
+
+  denyPatch = true;
+  await assert.rejects(
+    () => comments.update("r1", "review:10", "review:10", { body: "blocked" }),
+    (error: unknown) => {
+      assert.ok(error instanceof CommentError);
+      assert.equal(error.code, "denied");
+      return true;
+    },
+  );
+  denyPatch = false;
+
+  await comments.delete("r1", "review:10", "review:10");
+  const listed = await comments.list("r1");
+  assert.equal(
+    listed.threads[0]?.messages.some((row) => row.id === "review:10"),
+    false,
+  );
+  assert.deepEqual(listed.threads[0]?.messages.map((row) => row.id), ["review:11"]);
+  assert.equal(
+    calls.filter((call) => (call.init?.method ?? "GET").toUpperCase() === "DELETE").length,
+    1,
+  );
+});
+
 function githubRepos(): ReviewRepository {
   const source = PROVENANCE;
   const loaded: GuideV1 = {

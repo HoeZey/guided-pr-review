@@ -841,3 +841,89 @@ test("CommentService lists, creates, and replies through the injected ADO adapte
   );
   assert.equal(calls.some((call) => call.url.includes("evil.example")), false);
 });
+
+test("CommentService update and delete through the injected ADO adapter reject other authors and keep deleted flags", async () => {
+  const thread = threadRow(11, {
+    comments: [
+      commentRow(1, "line note"),
+      commentRow(2, "line reply", { author: author("other@contoso.com"), parentCommentId: 1 }),
+    ],
+  });
+  let denyPatch = false;
+  const { fetch, calls } = recordingFetch(async (url, request) => {
+    if (request.method === "GET" && isThreadList(url)) return jsonResponse({ value: [thread], count: 1 });
+    if (request.method === "GET" && isThreadGet(url, "11")) return jsonResponse(thread);
+    if (request.method === "PATCH" && isCommentItem(url, "11", "1")) {
+      if (denyPatch) return jsonResponse({ message: "denied" }, 403);
+      const payload = JSON.parse(await request.clone().text()) as { content?: string };
+      const next = commentRow(1, payload.content ?? "renamed");
+      (thread.comments as Record<string, unknown>[])[0] = next;
+      return jsonResponse(next);
+    }
+    if (request.method === "DELETE" && isCommentItem(url, "11", "1")) {
+      (thread.comments as Record<string, unknown>[])[0] = commentRow(1, "line note", { isDeleted: true });
+      return jsonResponse(undefined, 204);
+    }
+    if (request.method === "PATCH" && isCommentItem(url, "11", "2")) {
+      return jsonResponse({ message: "should not patch other author" }, 500);
+    }
+    if (request.method === "DELETE" && isCommentItem(url, "11", "2")) {
+      return jsonResponse({ message: "should not delete other author" }, 500);
+    }
+    return jsonResponse({ message: `unexpected ${request.method} ${url.pathname}` }, 500);
+  });
+  const comments = createCommentService({
+    reviews: repos({ r1: guide() }),
+    credentials: connectedCredentials(),
+    providers: {
+      ado: createAdoCommentAdapter({ credentials: connectedCredentials(), fetch }),
+      github: createFakeCommentProvider({ provider: "github" }),
+    },
+  });
+
+  await assert.rejects(
+    () => comments.update("r1", "11", "2", { body: "forged" }),
+    (err: unknown) => {
+      assert.equal((err as CommentError).code, "not-owned");
+      return true;
+    },
+  );
+  await assert.rejects(
+    () => comments.delete("r1", "11", "2"),
+    (err: unknown) => {
+      assert.equal((err as CommentError).code, "not-owned");
+      return true;
+    },
+  );
+  await assert.rejects(
+    () => comments.update("r1", "99", "1", { body: "cross-pr" }),
+    (err: unknown) => {
+      assert.equal((err as CommentError).code, "unknown-thread");
+      return true;
+    },
+  );
+  assert.equal(calls.some((call) => call.method === "PATCH" || call.method === "DELETE"), false);
+
+  const updated = await comments.update("r1", "11", "1", { body: "renamed" });
+  assert.equal(updated.body, "renamed");
+  assert.equal(updated.ownedByCurrentUser, true);
+
+  denyPatch = true;
+  await assert.rejects(
+    () => comments.update("r1", "11", "1", { body: "blocked" }),
+    (err: unknown) => {
+      assert.equal((err as CommentError).code, "denied");
+      return true;
+    },
+  );
+  denyPatch = false;
+
+  await comments.delete("r1", "11", "1");
+  const listed = await comments.list("r1");
+  assert.equal(listed.threads[0]?.messages[0]?.deleted, true);
+  assert.equal(listed.threads[0]?.messages[1]?.deleted, undefined);
+  assert.equal(
+    calls.filter((call) => call.method === "DELETE").length,
+    1,
+  );
+});

@@ -216,6 +216,14 @@ export function createFakeCommentProvider(options: {
       requireMatch(input.provenance.provider);
       const thread = threadOrThrow(input.threadId);
       const comment = commentOrThrow(thread, input.commentId);
+      if (options.provider === "github") {
+        thread.messages = thread.messages.filter((row) => row.id !== comment.id);
+        if (thread.messages.length === 0) {
+          const index = threads.indexOf(thread);
+          if (index >= 0) threads.splice(index, 1);
+        }
+        return { ok: true as const };
+      }
       comment.deleted = true;
       comment.ownedByCurrentUser = comment.author.login === input.identity.login;
       return { ok: true as const };

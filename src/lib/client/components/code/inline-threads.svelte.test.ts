@@ -400,3 +400,169 @@ test("Guide and Diff create a line comment and reply through one composer withou
   const commentUrls = fetchSpy.mock.calls.map(([url]) => String(url)).filter((url) => url.includes("/comments"));
   expect(commentUrls.join(" ")).not.toMatch(/github\.com|dev\.azure\.com/);
 });
+
+test("Guide and Diff edit and delete only owned messages and roll back a failed patch", async () => {
+  echoHighlighter();
+  const owned: CommentThread = thread(
+    "review:10",
+    { kind: "line", path: "src/maps.py", side: "current", line: 3 },
+    {
+      messages: [
+        {
+          id: "review:10",
+          author: { login: "ada" },
+          body: "line note",
+          createdAt: WHEN,
+          updatedAt: WHEN,
+          ownedByCurrentUser: true,
+        },
+        {
+          id: "review:11",
+          author: { login: "other-reviewer" },
+          body: "line reply",
+          createdAt: WHEN,
+          updatedAt: WHEN,
+          ownedByCurrentUser: false,
+        },
+      ],
+    },
+  );
+  const adoOwned: CommentThread = {
+    ...thread("ado_thr_line", { kind: "line", path: "src/maps.py", side: "current", line: 3 }),
+    provider: "azure-devops",
+    messages: [
+      {
+        id: "ado_cmt_line",
+        author: { login: "ada@contoso.com" },
+        body: "ado note",
+        createdAt: WHEN,
+        updatedAt: WHEN,
+        ownedByCurrentUser: true,
+      },
+    ],
+  };
+  let listed = [owned, adoOwned];
+  let patchOk = false;
+  const fetchSpy = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const method = (init?.method ?? "GET").toUpperCase();
+    if (url === "/api/reviews/hosted-1/comments" && method === "GET") {
+      return { ok: true, statusText: "OK", json: async () => ({ threads: listed }) };
+    }
+    if (url === "/api/reviews/hosted-1/comments/review%3A10/review%3A10" && method === "PATCH") {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { body?: string };
+      expect(body).toEqual({ body: "renamed" });
+      if (!patchOk) {
+        return {
+          ok: false,
+          statusText: "Forbidden",
+          json: async () => ({ error: "GitHub permission was denied", code: "denied" }),
+        };
+      }
+      return {
+        ok: true,
+        statusText: "OK",
+        json: async () => ({
+          id: "review:10",
+          author: { login: "ada" },
+          body: "renamed",
+          createdAt: WHEN,
+          updatedAt: "2026-09-16T12:00:00.000Z",
+          ownedByCurrentUser: true,
+        }),
+      };
+    }
+    if (url === "/api/reviews/hosted-1/comments/review%3A10/review%3A10" && method === "DELETE") {
+      listed = listed.map((row) =>
+        row.id === "review:10"
+          ? { ...row, messages: row.messages.filter((message) => message.id !== "review:10") }
+          : row,
+      );
+      return { ok: true, statusText: "OK", json: async () => ({ ok: true }) };
+    }
+    if (url === "/api/reviews/hosted-1/comments/ado_thr_line/ado_cmt_line" && method === "DELETE") {
+      listed = listed.map((row) =>
+        row.id === "ado_thr_line"
+          ? {
+              ...row,
+              messages: row.messages.map((message) =>
+                message.id === "ado_cmt_line" ? { ...message, deleted: true } : message,
+              ),
+            }
+          : row,
+      );
+      return { ok: true, statusText: "OK", json: async () => ({ ok: true }) };
+    }
+    return { ok: true, statusText: "OK", json: async () => ({}) };
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+  host = document.createElement("div");
+  document.body.appendChild(host);
+  mounted = mount(AppShell, { target: host, props: { data: hostedPage() } });
+  await vi.waitFor(() => {
+    expect(host?.querySelector('[data-thread="review:10"]')).toBeTruthy();
+  });
+  const card = () => host?.querySelector('[data-thread="review:10"]');
+  expect(card()?.querySelector('[data-comment-edit="review:10"]')).toBeTruthy();
+  expect(card()?.querySelector('[data-comment-delete="review:10"]')).toBeTruthy();
+  expect(card()?.querySelector('[data-comment-edit="review:11"]')).toBeNull();
+  expect(card()?.querySelector('[data-comment-delete="review:11"]')).toBeNull();
+  expect(host?.querySelector('[data-comment-edit="ado_cmt_line"]')).toBeTruthy();
+
+  (card()?.querySelector('[data-comment-edit="review:10"]') as HTMLButtonElement).click();
+  await tick();
+  const draft = card()?.querySelector("[data-comment-edit-draft]") as HTMLTextAreaElement;
+  draft.value = "renamed";
+  draft.dispatchEvent(new Event("input", { bubbles: true }));
+  await tick();
+  (card()?.querySelector("[data-comment-save]") as HTMLButtonElement).click();
+  await vi.waitFor(() => {
+    expect(card()?.textContent).toContain("line note");
+    expect(card()?.textContent).not.toContain("renamed");
+  });
+  (host.querySelector('[role="tab"][data-tab="diff"]') as HTMLButtonElement).click();
+  await tick();
+  expect(host.querySelector('[data-thread="review:10"]')?.textContent).toContain("line note");
+  (host.querySelector('[role="tab"][data-tab="guide"]') as HTMLButtonElement).click();
+  await tick();
+
+  patchOk = true;
+  (card()?.querySelector('[data-comment-edit="review:10"]') as HTMLButtonElement).click();
+  await tick();
+  const retryDraft = card()?.querySelector("[data-comment-edit-draft]") as HTMLTextAreaElement;
+  retryDraft.value = "renamed";
+  retryDraft.dispatchEvent(new Event("input", { bubbles: true }));
+  await tick();
+  (card()?.querySelector("[data-comment-save]") as HTMLButtonElement).click();
+  await vi.waitFor(() => {
+    expect(card()?.textContent).toContain("renamed");
+  });
+  (host.querySelector('[role="tab"][data-tab="diff"]') as HTMLButtonElement).click();
+  await tick();
+  expect(host.querySelector('[data-thread="review:10"]')?.textContent).toContain("renamed");
+  expect(host.querySelector('[data-thread="review:10"]')?.textContent).toContain("line reply");
+  (host.querySelector('[role="tab"][data-tab="guide"]') as HTMLButtonElement).click();
+  await tick();
+
+  (card()?.querySelector('[data-comment-delete="review:10"]') as HTMLButtonElement).click();
+  await tick();
+  (card()?.querySelector("[data-comment-delete-confirm]") as HTMLButtonElement).click();
+  await vi.waitFor(() => {
+    expect(card()?.textContent).not.toContain("renamed");
+    expect(card()?.textContent).toContain("line reply");
+  });
+  (host.querySelector('[data-comment-delete="ado_cmt_line"]') as HTMLButtonElement).click();
+  await tick();
+  (host.querySelector("[data-comment-delete-confirm]") as HTMLButtonElement).click();
+  await vi.waitFor(() => {
+    expect(host?.querySelector('[data-thread="ado_thr_line"]')?.textContent).toContain("Deleted");
+    expect(host?.querySelector('[data-comment-delete="ado_cmt_line"]')).toBeNull();
+  });
+  (host.querySelector('[role="tab"][data-tab="diff"]') as HTMLButtonElement).click();
+  await tick();
+  expect(host.querySelector('[data-thread="review:10"]')?.textContent).toContain("line reply");
+  expect(host.querySelector('[data-thread="review:10"]')?.textContent).not.toContain("renamed");
+  expect(host.querySelector('[data-thread="ado_thr_line"]')?.textContent).toContain("Deleted");
+  const commentUrls = fetchSpy.mock.calls.map(([url]) => String(url)).filter((url) => url.includes("/comments"));
+  expect(commentUrls.join(" ")).not.toMatch(/github\.com|dev\.azure\.com/);
+});
