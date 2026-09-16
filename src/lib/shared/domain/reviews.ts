@@ -62,13 +62,13 @@ function projectFromOwner(owner: string): string {
   return idx === -1 ? owner : owner.slice(idx + 1);
 }
 
-function catalogAsSource(
+export function catalogAsSource(
   item: CatalogPullRequest,
   sourceCommit: string,
   targetCommit: string,
 ): PullRequestSource {
-  return PullRequestSource.parse({
-    kind: "pull-request",
+  const shared = {
+    kind: "pull-request" as const,
     provider: item.provider,
     host: item.host,
     repository: item.repository,
@@ -78,10 +78,19 @@ function catalogAsSource(
     targetRef: item.targetRef,
     sourceCommit,
     targetCommit,
+  };
+  if (item.provider === "github") {
+    return PullRequestSource.parse({
+      ...shared,
+      providerContext: { kind: "github" },
+    });
+  }
+  return PullRequestSource.parse({
+    ...shared,
     providerContext: {
       kind: "azure-devops",
       project: projectFromOwner(item.repository.owner),
-      // ponytail: catalog has no iteration payload; Update Diff fills changes
+      // ponytail: catalog has no iteration payload; comment APIs fill changes
       firstComparingIteration: 0,
       secondComparingIteration: 0,
       changes: {},
@@ -94,8 +103,6 @@ export function adoptLocalsFromCatalog(
   pullRequests: CatalogPullRequest[],
 ): void {
   for (const item of pullRequests) {
-    if (item.provider !== "azure-devops") continue;
-    // ponytail: GitHub catalog rows skip local adoption until Open Diff owns GitHub PullRequestSource.
     const key = pullRequestSyncKey(item);
     if (
       reviews.some(

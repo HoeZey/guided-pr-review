@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import { hostActionHint, projectHomeOverview } from "$lib/shared/domain/overview";
+  import { projectHomeOverview } from "$lib/shared/domain/overview";
   import type { HomePageData } from "$lib/shared/page-data";
   import {
     formatLastSynced,
@@ -24,12 +24,10 @@
   const listed = $derived(homeListed(data));
   const configured = $derived(homeRepositories(data));
   const overview = $derived(projectHomeOverview(listed.reviews, listed.catalog));
-  const disconnected = $derived(hostActionHint(listed.agentConnected));
   const hasContent = $derived(
     overview.groups.length > 0 ||
       overview.catalogErrors.length > 0 ||
       Boolean(overview.lastSynced) ||
-      Boolean(disconnected) ||
       Boolean(homeUi.pasteError) ||
       Boolean(homeUi.refreshError) ||
       Boolean(homeUi.repositoryError) ||
@@ -135,9 +133,6 @@
       {/each}
       {#if overview.lastSynced}
         <p class="home-meta">Last synced {formatLastSynced(overview.lastSynced)}</p>
-      {/if}
-      {#if disconnected}
-        <p class="home-error">{disconnected}</p>
       {/if}
       {#if homeUi.pasteError}
         <p class="home-error">{homeUi.pasteError}</p>

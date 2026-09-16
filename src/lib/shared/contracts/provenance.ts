@@ -13,6 +13,21 @@ export function isGitHubHost(host: string): boolean {
   return host.toLowerCase() === "github.com";
 }
 
+export function refineProviderHost(
+  value: { provider: string; host: string },
+  ctx: z.RefinementCtx,
+): void {
+  const ok =
+    value.provider === "github" ? isGitHubHost(value.host) : isAzureDevOpsHost(value.host);
+  if (!ok) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "unsupported git host",
+      path: ["host"],
+    });
+  }
+}
+
 export const AzureDevOpsProviderContext = z
   .object({
     kind: z.literal("azure-devops"),
@@ -26,18 +41,22 @@ export const AzureDevOpsProviderContext = z
   })
   .strict();
 
+export const GitHubProviderContext = z
+  .object({
+    kind: z.literal("github"),
+  })
+  .strict();
+
 export const ProviderContext = z.discriminatedUnion("kind", [
   AzureDevOpsProviderContext,
+  GitHubProviderContext,
 ]);
 
 export const PullRequestSource = z
   .object({
     kind: z.literal("pull-request"),
-    provider: z.literal("azure-devops"),
-    host: z
-      .string()
-      .min(1)
-      .refine(isAzureDevOpsHost, { message: "unsupported git host" }),
+    provider: z.enum(["azure-devops", "github"]),
+    host: z.string().min(1),
     repository: z
       .object({
         id: z.string().min(1),
@@ -54,10 +73,21 @@ export const PullRequestSource = z
     targetCommit: Sha,
     providerContext: ProviderContext,
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    refineProviderHost(value, ctx);
+    if (value.provider !== value.providerContext.kind) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "provider context mismatch",
+        path: ["providerContext"],
+      });
+    }
+  });
 
 export type PullRequestSource = z.infer<typeof PullRequestSource>;
 export type AzureDevOpsProviderContext = z.infer<typeof AzureDevOpsProviderContext>;
+export type GitHubProviderContext = z.infer<typeof GitHubProviderContext>;
 
 export function pullRequestSyncKey(source: {
   provider: string;

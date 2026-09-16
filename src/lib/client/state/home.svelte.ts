@@ -1,5 +1,6 @@
 import type { CatalogSnapshot, ConfiguredRepository, OpenActionTarget, StoredAction } from "$lib/shared/contracts/catalog";
 import type { ListReviewsOutput, ReviewSummary } from "$lib/shared/contracts/persistence";
+import { pullRequestSyncKey } from "$lib/shared/contracts/provenance";
 import { CATALOG_REFRESH_STALE_MS } from "$lib/shared/domain/catalog";
 import { reviewPath } from "$lib/shared/domain/overview";
 import type { HomePageData } from "$lib/shared/page-data";
@@ -15,6 +16,8 @@ export type HomeListed = {
   repositories: ConfiguredRepository[];
 };
 
+export type DiffOp = { kind: "open" | "update-diff"; error?: string };
+
 type Navigate = (path: string) => Promise<void>;
 
 async function defaultNavigate(path: string): Promise<void> {
@@ -25,6 +28,7 @@ async function defaultNavigate(path: string): Promise<void> {
 let navigate: Navigate = defaultNavigate;
 let watchTimer: ReturnType<typeof setInterval> | null = null;
 let catalogRefreshInflight: Promise<void> | null = null;
+const diffInflight = new Map<string, Promise<void>>();
 
 export const homeUi = $state({
   pasteOpen: false,
@@ -38,6 +42,7 @@ export const homeUi = $state({
   refreshing: false,
   lastCatalogRefreshAt: null as number | null,
   refreshError: null as string | null,
+  diffOps: {} as Record<string, DiffOp>,
 });
 
 export function setHomeNavigate(fn: Navigate): void {
@@ -56,8 +61,10 @@ export function resetHomeUi(): void {
   homeUi.refreshing = false;
   homeUi.lastCatalogRefreshAt = null;
   homeUi.refreshError = null;
+  homeUi.diffOps = {};
   navigate = defaultNavigate;
   catalogRefreshInflight = null;
+  diffInflight.clear();
   stopHomeWatch();
   resetConnectionUi();
 }
@@ -73,6 +80,8 @@ export function leaveHome(): void {
   homeUi.repositoryBusy = false;
   homeUi.refreshing = false;
   homeUi.refreshError = null;
+  homeUi.diffOps = {};
+  diffInflight.clear();
   stopHomeWatch();
   resetConnectionUi();
 }
@@ -201,6 +210,44 @@ export async function refreshCatalog(reason: "focus" | "manual" = "manual"): Pro
   await catalogRefreshInflight;
 }
 
+async function runHostDiff(kind: "open" | "update-diff", target: OpenActionTarget): Promise<void> {
+  const key = pullRequestSyncKey(target);
+  const existing = diffInflight.get(key);
+  if (existing) {
+    await existing;
+    return;
+  }
+  homeUi.diffOps = { ...homeUi.diffOps, [key]: { kind } };
+  const run = (async () => {
+    try {
+      const result = await fetchJson<{ reviewId: string }>(
+        kind === "open" ? "/api/reviews/open" : "/api/reviews/update-diff",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ target }),
+        },
+      );
+      const next = { ...homeUi.diffOps };
+      delete next[key];
+      homeUi.diffOps = next;
+      await refreshHomeList();
+      await navigate(reviewPath(result.reviewId));
+    } catch (err) {
+      homeUi.diffOps = {
+        ...homeUi.diffOps,
+        [key]: { kind, error: err instanceof Error ? err.message : String(err) },
+      };
+    }
+  })();
+  diffInflight.set(key, run);
+  try {
+    await run;
+  } finally {
+    diffInflight.delete(key);
+  }
+}
+
 export async function queueHomeAction(
   payload:
     | { kind: "open" | "update-diff"; target: OpenActionTarget }
@@ -211,14 +258,20 @@ export async function queueHomeAction(
     await refreshCatalog("manual");
     return;
   }
+  if (payload.kind === "open") {
+    await runHostDiff("open", payload.target);
+    return;
+  }
+  if (payload.kind === "update-diff") {
+    await runHostDiff("update-diff", payload.target);
+    return;
+  }
   const created = await fetchJson<{ id: string }>("/api/actions", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(payload),
   });
-  if (payload.kind === "open" || payload.kind === "update-diff") {
-    homeUi.pendingActionId = created.id;
-  }
+  homeUi.pendingActionId = created.id;
   await refreshHomeList();
 }
 

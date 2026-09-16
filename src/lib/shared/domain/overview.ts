@@ -105,11 +105,12 @@ export function inFlightGenerateGuideCopy(
 export function inFlightActionCopy(
   kind: StoredAction["kind"],
   status: StoredAction["status"],
-): "Waiting" | "Opening" | "Refreshing" | "Generating guide" | undefined {
+): "Waiting" | "Opening" | "Updating" | "Refreshing" | "Generating guide" | undefined {
   if (status === "queued") return "Waiting";
   if (status !== "claimed") return undefined;
   if (kind === "refresh") return "Refreshing";
   if (kind === "generate-guide") return "Generating guide";
+  if (kind === "update-diff") return "Updating";
   return "Opening";
 }
 
@@ -132,13 +133,13 @@ export function latestAction(
 
 export function homeCardAction(
   card: HomeCard,
-  agentConnected: boolean,
+  _agentConnected: boolean,
 ): HomeCardAction {
-  if (card.outdated && card.reviewId && card.openTarget && agentConnected && !card.archived) {
+  if (card.outdated && card.reviewId && card.openTarget && !card.archived) {
     return "queue-update-diff";
   }
   if (card.reviewId) return "open-saved";
-  if (card.openTarget && agentConnected) return "queue-open";
+  if (card.openTarget) return "queue-open";
   return "disabled-host";
 }
 

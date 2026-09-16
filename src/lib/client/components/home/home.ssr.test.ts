@@ -50,6 +50,8 @@ test("SSR Home renders waiting and disconnected action states from page data", (
   expect(waiting).not.toContain("data-queue-open");
 
   const disconnected = render(AppShell, { props: { data: HOME_FIXTURE_DISCONNECTED } }).body;
-  expect(disconnected).toContain("skill must be running");
+  expect(disconnected).toContain("Open from host");
+  expect(disconnected).toContain("data-queue-open");
+  expect(disconnected).not.toContain("skill must be running to open a pull request");
   expect(disconnected).toContain("Refresh");
 });

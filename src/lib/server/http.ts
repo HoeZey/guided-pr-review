@@ -1,3 +1,4 @@
+import { OpenActionTarget } from "../shared/contracts/catalog.ts";
 import { createMcpHandler } from "./mcp/handler.ts";
 import type { AppServices } from "./services/app.ts";
 
@@ -24,6 +25,14 @@ function jsonError(err: unknown, fallback: number): Response {
 
 function invalidJson(): Response {
   return Response.json({ error: "invalid JSON" }, { status: 400 });
+}
+
+function parseOpenTarget(payload: unknown): OpenActionTarget {
+  const raw =
+    payload && typeof payload === "object" && "target" in payload
+      ? (payload as { target: unknown }).target
+      : payload;
+  return OpenActionTarget.parse(raw);
 }
 
 export function createHttpHandlers(
@@ -157,6 +166,38 @@ export function createHttpHandlers(
           return Response.json(await services.catalogRefresh.refresh({ reason }));
         } catch (err) {
           return jsonError(err, 500);
+        }
+      },
+    },
+    openDiff: {
+      POST: async ({ request }: HttpEvent) => {
+        await seed();
+        let payload: unknown;
+        try {
+          payload = await readJson(request);
+        } catch {
+          return invalidJson();
+        }
+        try {
+          return Response.json(await services.reviews.openDiff(parseOpenTarget(payload)));
+        } catch (err) {
+          return jsonError(err, 400);
+        }
+      },
+    },
+    updateDiff: {
+      POST: async ({ request }: HttpEvent) => {
+        await seed();
+        let payload: unknown;
+        try {
+          payload = await readJson(request);
+        } catch {
+          return invalidJson();
+        }
+        try {
+          return Response.json(await services.reviews.updateDiff(parseOpenTarget(payload)));
+        } catch (err) {
+          return jsonError(err, 400);
         }
       },
     },

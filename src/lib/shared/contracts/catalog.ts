@@ -1,22 +1,7 @@
 import { z } from "zod";
-import { Sha, isAzureDevOpsHost, isGitHubHost } from "./provenance.ts";
+import { Sha, refineProviderHost } from "./provenance.ts";
 
 const GitProvider = z.enum(["azure-devops", "github"]);
-
-function refineProviderHost(
-  value: { provider: string; host: string },
-  ctx: z.RefinementCtx,
-): void {
-  const ok =
-    value.provider === "github" ? isGitHubHost(value.host) : isAzureDevOpsHost(value.host);
-  if (!ok) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "unsupported git host",
-      path: ["host"],
-    });
-  }
-}
 
 const CatalogRepositoryIdentity = z
   .object({

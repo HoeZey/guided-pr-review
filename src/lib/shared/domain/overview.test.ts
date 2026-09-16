@@ -599,7 +599,7 @@ test("host-backed actions explain that the skill must be running when disconnect
   assert.equal(inFlightOpenCopy("claimed"), "Opening");
   assert.equal(inFlightActionCopy("refresh", "queued"), "Waiting");
   assert.equal(inFlightActionCopy("refresh", "claimed"), "Refreshing");
-  assert.equal(inFlightActionCopy("update-diff", "claimed"), "Opening");
+  assert.equal(inFlightActionCopy("update-diff", "claimed"), "Updating");
 });
 
 test("Generate guide shows Waiting, Generating guide, and a disconnected hint", () => {
@@ -648,7 +648,7 @@ test("current saved reviews remain openable while disconnected", () => {
   assert.equal(homeCardAction(saved, false), "open-saved");
   const catalog = projectHomeOverview([], [originSnapshot([catalogItem()])]).groups[0]
     .cards[0];
-  assert.equal(homeCardAction(catalog, false), "disabled-host");
+  assert.equal(homeCardAction(catalog, false), "queue-open");
   assert.equal(homeCardAction(catalog, true), "queue-open");
 });
 
@@ -686,7 +686,7 @@ test("a changed source commit shows Outdated with Update Diff plus Open saved", 
   assert.equal(card.archived, false);
   assert.equal(card.reviewId, "saved-1101");
   assert.equal(homeCardAction(card, true), "queue-update-diff");
-  assert.equal(homeCardAction(card, false), "open-saved");
+  assert.equal(homeCardAction(card, false), "queue-update-diff");
 });
 
 test("Open saved keeps the old review and a persistent Outdated warning", () => {
@@ -776,7 +776,7 @@ test("a leftover hosted Other saved PR is Outdated with Update Diff when the cat
   assert.equal(card.archived, false);
   assert.equal(card.openTarget?.number, 1301);
   assert.equal(homeCardAction(card, true), "queue-update-diff");
-  assert.equal(homeCardAction(card, false), "open-saved");
+  assert.equal(homeCardAction(card, false), "queue-update-diff");
 });
 
 test("a saved merged or abandoned PR moves to collapsed Archived and stays openable", () => {

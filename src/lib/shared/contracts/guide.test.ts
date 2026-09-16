@@ -68,7 +68,41 @@ test("parses valid pull-request provenance", () => {
   assert.equal(parsed.source?.kind, "pull-request");
   assert.equal(parsed.source?.number, 1027);
   assert.equal(parsed.source?.providerContext.kind, "azure-devops");
-  assert.equal(parsed.source?.providerContext.project, "BRAID");
+  assert.equal(
+    parsed.source?.providerContext.kind === "azure-devops"
+      ? parsed.source.providerContext.project
+      : undefined,
+    "BRAID",
+  );
+
+  const github = GuideV1.parse({
+    ...sample,
+    source: {
+      kind: "pull-request",
+      provider: "github",
+      host: "github.com",
+      repository: {
+        id: "1296269",
+        owner: "octocat",
+        name: "Hello-World",
+        webUrl: "https://github.com/octocat/Hello-World",
+      },
+      number: 42,
+      webUrl: "https://github.com/octocat/Hello-World/pull/42",
+      sourceRef: "refs/heads/feature/review-me",
+      targetRef: "refs/heads/develop",
+      sourceCommit: SOURCE_A,
+      targetCommit: TARGET,
+      providerContext: { kind: "github" },
+    },
+  });
+  assert.equal(github.source?.provider, "github");
+  assert.equal(github.source?.host, "github.com");
+  assert.equal(github.source?.repository.id, "1296269");
+  assert.equal(github.source?.number, 42);
+  assert.equal(github.source?.sourceCommit, SOURCE_A);
+  assert.equal(github.source?.targetCommit, TARGET);
+  assert.equal(github.source?.providerContext.kind, "github");
 });
 
 test("rejects ADO-only data outside providerContext", () => {

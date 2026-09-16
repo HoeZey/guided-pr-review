@@ -42,6 +42,8 @@ function fakeServices(overrides: {
       remove: unused("remove"),
       setActive: unused("setActive"),
       seedIfEmpty: unused("seedIfEmpty"),
+      openDiff: unused("openDiff"),
+      updateDiff: unused("updateDiff"),
       completeOpen: unused("completeOpen"),
       completeUpdateDiff: unused("completeUpdateDiff"),
     },

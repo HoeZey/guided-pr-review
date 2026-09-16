@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { StoredAction } from "$lib/shared/contracts/catalog";
+  import { pullRequestSyncKey } from "$lib/shared/contracts/provenance";
   import type { HomeCard } from "$lib/shared/domain/overview";
   import {
     homeCardAction,
@@ -12,7 +13,7 @@
     offersGenerateGuide,
     reviewPath,
   } from "$lib/shared/domain/overview";
-  import { queueHomeAction } from "$lib/client/state/home.svelte";
+  import { homeUi, queueHomeAction } from "$lib/client/state/home.svelte";
 
   let {
     card,
@@ -28,8 +29,16 @@
   const latestUpdate = $derived(
     card.openTarget ? latestAction(actions, "update-diff", card.openTarget) : undefined,
   );
+  const diffOp = $derived(
+    card.openTarget ? homeUi.diffOps[pullRequestSyncKey(card.openTarget)] : undefined,
+  );
   const inflight = $derived(
-    (latestOpen ? inFlightOpenCopy(latestOpen.status) : undefined) ||
+    (diffOp && !diffOp.error
+      ? diffOp.kind === "update-diff"
+        ? "Updating"
+        : "Opening"
+      : undefined) ||
+      (latestOpen ? inFlightOpenCopy(latestOpen.status) : undefined) ||
       (latestUpdate ? inFlightActionCopy("update-diff", latestUpdate.status) : undefined),
   );
   const generateLatest = $derived(
@@ -39,13 +48,14 @@
     generateLatest ? inFlightGenerateGuideCopy(generateLatest.status) : undefined,
   );
   const failed = $derived(
-    generateLatest?.status === "failed"
-      ? generateLatest.error?.message
-      : latestOpen?.status === "failed"
-        ? latestOpen.error?.message
-        : latestUpdate?.status === "failed"
-          ? latestUpdate.error?.message
-          : undefined,
+    diffOp?.error ||
+      (generateLatest?.status === "failed"
+        ? generateLatest.error?.message
+        : latestOpen?.status === "failed"
+          ? latestOpen.error?.message
+          : latestUpdate?.status === "failed"
+            ? latestUpdate.error?.message
+            : undefined),
   );
   const kind = $derived(homeCardAction(card, agentConnected));
   const busy = $derived(Boolean(inflight));

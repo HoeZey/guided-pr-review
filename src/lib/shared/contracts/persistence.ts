@@ -44,7 +44,7 @@ export const ReviewSummary = z
     unchaptered: z.boolean().optional(),
     pullRequest: z
       .object({
-        provider: z.literal("azure-devops"),
+        provider: z.enum(["azure-devops", "github"]),
         host: z.string(),
         repository: z
           .object({

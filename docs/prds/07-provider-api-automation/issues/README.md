@@ -60,6 +60,6 @@ PRD behavior unchanged. Issue Touches fields now name HEAD symbols:
 - [04 Manage explicit configured repositories](04-manage-repositories.md) — done
 - [05 Fetch exact commits through managed bare caches](05-managed-git-caches.md) — done
 - [06 Refresh configured PR catalogs](06-refresh-catalogs.md) — done
-- [07 Open and update Diff without an agent](07-open-and-update-diff.md) — todo
+- [07 Open and update Diff without an agent](07-open-and-update-diff.md) — done
 - [08 Retire deterministic agent actions](08-retire-agent-actions.md) — todo
 - [09 Integrate and verify provider automation](09-integrate-provider-automation.md) — todo

@@ -1,5 +1,10 @@
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { AppRepositories, ConfiguredRepositoryPort } from "../repositories/ports.ts";
 import type { CredentialSource } from "../auth/ports.ts";
+import type { GitDiff, ManagedGitCache } from "../git/ports.ts";
+import { createManagedGitCache } from "../git/managed-cache.ts";
+import { createGitProcessRunner } from "../git/process.ts";
 import type { ProviderPullRequestReader, ProviderRepositoryReader } from "../providers/ports.ts";
 import { createCliCredentialSource } from "../auth/cli-credentials.ts";
 import { createProcessCommandRunner } from "../auth/command-runner.ts";
@@ -31,6 +36,13 @@ export type AppServices = {
   repositories: ConfiguredRepositoryService;
 };
 
+function defaultDataDir(): string {
+  return (
+    process.env.GUIDED_PR_REVIEW_DATA ||
+    join(fileURLToPath(new URL("../../../../", import.meta.url)), "data")
+  );
+}
+
 export function createAppServices(
   repos: AppRepositories,
   options: {
@@ -42,6 +54,7 @@ export function createAppServices(
       ado: ProviderRepositoryReader & Partial<ProviderPullRequestReader>;
       github: ProviderRepositoryReader & Partial<ProviderPullRequestReader>;
     };
+    git?: ManagedGitCache & GitDiff;
   } = {},
 ): AppServices {
   const credentials =
@@ -57,17 +70,30 @@ export function createAppServices(
     originRemoteUrl: options.originRemoteUrl ?? (async () => undefined),
     readers,
   });
+  const prReaders = {
+    ado: pullRequestReader(readers.ado),
+    github: pullRequestReader(readers.github),
+  };
+  const git =
+    options.git ??
+    createManagedGitCache({
+      dataDir: defaultDataDir(),
+      runner: createGitProcessRunner(),
+      credentials,
+    });
   return {
-    reviews: createReviewService(repos),
+    reviews: createReviewService(repos, {
+      readers: prReaders,
+      repositoryReaders: { ado: readers.ado, github: readers.github },
+      listConfigured: async () => (await repositories.list()).repositories,
+      git,
+    }),
     catalog,
     catalogRefresh: createCatalogRefreshService({
       listRepositories: () => repositories.list(),
       replaceCatalog: catalog.replace,
       listReviews: repos.listReviews,
-      readers: {
-        ado: pullRequestReader(readers.ado),
-        github: pullRequestReader(readers.github),
-      },
+      readers: prReaders,
     }),
     actions: createActionService(repos),
     outcomes: createOutcomeService(repos),
@@ -103,4 +129,3 @@ function emptyConfigured(): ConfiguredRepositoryPort {
     remove: async () => ({ ok: true as const }),
   };
 }
-
