@@ -5,8 +5,12 @@
   import {
     formatLastSynced,
     homeListed,
+    homeRepositories,
     homeUi,
     leaveHome,
+    loadRepositories,
+    addRepository,
+    removeRepository,
     pasteGuide,
     stopHomeWatch,
     syncHomeWatch,
@@ -17,6 +21,7 @@
   let { data }: { data: HomePageData } = $props();
 
   const listed = $derived(homeListed(data));
+  const configured = $derived(homeRepositories(data));
   const overview = $derived(projectHomeOverview(listed.reviews, listed.catalog));
   const refresh = $derived(latestAction(listed.actions, "refresh"));
   const refreshFailed = $derived(
@@ -30,6 +35,8 @@
       Boolean(disconnected) ||
       Boolean(refreshFailed) ||
       Boolean(homeUi.pasteError) ||
+      Boolean(homeUi.repositoryError) ||
+      configured.length > 0 ||
       connectionUi.busy ||
       connectionUi.connections.length > 0 ||
       Boolean(connectionUi.error),
@@ -42,6 +49,7 @@
 
   onMount(() => {
     void loadConnections();
+    void loadRepositories();
   });
 
   onDestroy(() => {
@@ -56,6 +64,40 @@
 
 <main class="home-main">
   <div class="main-inner">
+    {#each configured as repo (repo.provider + repo.host + repo.id)}
+      <p class="home-meta" data-configured-repository={repo.id}>
+        {repo.owner} / {repo.name}{repo.origin ? " · origin" : ""}
+        <button
+          type="button"
+          class="ghost"
+          data-remove-repository={repo.id}
+          disabled={homeUi.repositoryBusy}
+          onclick={() => void removeRepository(repo.id)}
+        >
+          Remove
+        </button>
+      </p>
+    {/each}
+    {#if homeUi.repositoryError}
+      <p class="home-error" data-repository-error>{homeUi.repositoryError}</p>
+    {/if}
+    <form
+      class="home-repo-form"
+      onsubmit={(event) => {
+        event.preventDefault();
+        void addRepository();
+      }}
+    >
+      <input
+        data-add-repository-input
+        bind:value={homeUi.repositoryInput}
+        placeholder="Repository URL"
+        aria-label="Repository URL"
+      />
+      <button type="button" class="ghost" data-add-repository disabled={homeUi.repositoryBusy} onclick={() => void addRepository()}>
+        Add repository
+      </button>
+    </form>
     {#if hasContent}
       {#if connectionUi.busy && connectionUi.connections.length === 0}
         <p class="home-meta">Connecting</p>

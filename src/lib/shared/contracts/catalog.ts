@@ -35,6 +35,7 @@ export const ConfiguredRepository = z
     owner: z.string().min(1),
     name: z.string().min(1),
     webUrl: z.string().url(),
+    cloneUrl: z.string().min(1).optional(),
     origin: z.boolean(),
   })
   .strict()

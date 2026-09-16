@@ -201,6 +201,36 @@ export function createHttpHandlers(
         return Response.json(await services.connections.retry());
       },
     },
+    repositories: {
+      GET: async () => {
+        await seed();
+        return Response.json(await services.repositories.list());
+      },
+      POST: async ({ request }: HttpEvent) => {
+        await seed();
+        let payload: unknown;
+        try {
+          payload = await readJson(request);
+        } catch {
+          return invalidJson();
+        }
+        try {
+          return Response.json(await services.repositories.add(payload), { status: 201 });
+        } catch (err) {
+          return jsonError(err, 400);
+        }
+      },
+      DELETE: async ({ params }: HttpEvent) => {
+        await seed();
+        const id = params.id;
+        if (!id) return Response.json({ error: "missing id" }, { status: 400 });
+        try {
+          return Response.json(await services.repositories.remove(id));
+        } catch (err) {
+          return jsonError(err, 500);
+        }
+      },
+    },
     mcp: {
       GET: async ({ request }: HttpEvent) => {
         await seed();

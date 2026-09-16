@@ -1,4 +1,4 @@
-import type { CatalogSnapshot, OpenActionTarget, StoredAction } from "$lib/shared/contracts/catalog";
+import type { CatalogSnapshot, ConfiguredRepository, OpenActionTarget, StoredAction } from "$lib/shared/contracts/catalog";
 import type { ListReviewsOutput, ReviewSummary } from "$lib/shared/contracts/persistence";
 import { reviewPath } from "$lib/shared/domain/overview";
 import type { HomePageData } from "$lib/shared/page-data";
@@ -11,6 +11,7 @@ export type HomeListed = {
   actions: StoredAction[];
   agentConnected: boolean;
   activeId: string | null;
+  repositories: ConfiguredRepository[];
 };
 
 type Navigate = (path: string) => Promise<void>;
@@ -28,6 +29,10 @@ export const homeUi = $state({
   pasteError: null as string | null,
   pendingActionId: null as string | null,
   listed: null as HomeListed | null,
+  configured: null as ConfiguredRepository[] | null,
+  repositoryError: null as string | null,
+  repositoryInput: "",
+  repositoryBusy: false,
 });
 
 export function setHomeNavigate(fn: Navigate): void {
@@ -39,6 +44,10 @@ export function resetHomeUi(): void {
   homeUi.pasteError = null;
   homeUi.pendingActionId = null;
   homeUi.listed = null;
+  homeUi.configured = null;
+  homeUi.repositoryError = null;
+  homeUi.repositoryInput = "";
+  homeUi.repositoryBusy = false;
   navigate = defaultNavigate;
   stopHomeWatch();
   resetConnectionUi();
@@ -49,6 +58,10 @@ export function leaveHome(): void {
   homeUi.pasteError = null;
   homeUi.pendingActionId = null;
   homeUi.listed = null;
+  homeUi.configured = null;
+  homeUi.repositoryError = null;
+  homeUi.repositoryInput = "";
+  homeUi.repositoryBusy = false;
   stopHomeWatch();
   resetConnectionUi();
 }
@@ -61,8 +74,13 @@ export function homeListed(data: HomePageData): HomeListed {
       actions: data.actions,
       agentConnected: data.agentConnected,
       activeId: data.activeId,
+      repositories: homeUi.configured ?? data.repositories,
     }
   );
+}
+
+export function homeRepositories(data: HomePageData): ConfiguredRepository[] {
+  return homeUi.configured ?? homeUi.listed?.repositories ?? data.repositories;
 }
 
 function applyList(listed: ListReviewsOutput): void {
@@ -72,7 +90,56 @@ function applyList(listed: ListReviewsOutput): void {
     actions: listed.actions,
     agentConnected: listed.agentConnected,
     activeId: listed.activeId,
+    repositories: homeUi.configured ?? listed.repositories,
   };
+}
+
+export async function loadRepositories(): Promise<void> {
+  homeUi.repositoryBusy = true;
+  try {
+    const listed = await fetchJson<{
+      repositories: ConfiguredRepository[];
+      error?: { code: string; message: string };
+    }>("/api/repositories");
+    homeUi.configured = listed.repositories;
+    homeUi.repositoryError = listed.error?.message ?? null;
+    if (homeUi.listed) {
+      homeUi.listed = { ...homeUi.listed, repositories: listed.repositories };
+    }
+  } catch (err) {
+    homeUi.repositoryError = err instanceof Error ? err.message : String(err);
+  } finally {
+    homeUi.repositoryBusy = false;
+  }
+}
+
+export async function addRepository(input = homeUi.repositoryInput): Promise<void> {
+  const value = input.trim();
+  if (!value) return;
+  homeUi.repositoryBusy = true;
+  try {
+    await fetchJson("/api/repositories", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url: value }),
+    });
+    homeUi.repositoryInput = "";
+    await loadRepositories();
+  } catch (err) {
+    homeUi.repositoryError = err instanceof Error ? err.message : String(err);
+    homeUi.repositoryBusy = false;
+  }
+}
+
+export async function removeRepository(id: string): Promise<void> {
+  homeUi.repositoryBusy = true;
+  try {
+    await fetchJson(`/api/repositories/${encodeURIComponent(id)}`, { method: "DELETE" });
+    await loadRepositories();
+  } catch (err) {
+    homeUi.repositoryError = err instanceof Error ? err.message : String(err);
+    homeUi.repositoryBusy = false;
+  }
 }
 
 export async function refreshHomeList(): Promise<void> {

@@ -36,6 +36,7 @@ test("SSR Home HTML contains projected groups, badges, ranges, and states before
   expect(body).toContain("Open saved");
   expect(body).toContain("Generate guide");
   expect(body).toContain("Refresh");
+  expect(body).toContain("Add repository");
   expect(body).toContain('href="' + reviewPath("saved-current") + '"');
   expect(body).toContain('href="' + reviewPath("saved-local") + '"');
   expect(body).toContain("home-group is-archived");

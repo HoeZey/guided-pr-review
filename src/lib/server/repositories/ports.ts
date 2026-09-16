@@ -44,7 +44,7 @@ export type ConfiguredRepositoryRecord = {
   origin: boolean;
 };
 
-/** Configured-repository persistence for PRD 07. Not implemented on the JSON adapter yet. */
+/** Configured-repository persistence for PRD 07. */
 export type ConfiguredRepositoryPort = {
   list: () => Promise<ConfiguredRepositoryRecord[]>;
   add: (input: ConfiguredRepositoryRecord) => Promise<{ ok: true }>;

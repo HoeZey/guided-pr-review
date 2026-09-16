@@ -55,6 +55,11 @@ function fakeServices(overrides: {
       list: unused("connections.list"),
       retry: unused("connections.retry"),
     },
+    repositories: {
+      list: unused("repositories.list"),
+      add: unused("repositories.add"),
+      remove: unused("repositories.remove"),
+    },
   };
 }
 

@@ -13,10 +13,16 @@ import {
   findLocalReviewToAdopt,
   reviewSummary,
 } from "../../../shared/domain/reviews.ts";
-import type { AppRepositories } from "../ports.ts";
-import { locked, mutateStore, readStore, resetJsonStoreCache, writeStore } from "./file.ts";
-
-export { resetJsonStoreCache };
+import type { AppRepositories, ConfiguredRepositoryPort, ConfiguredRepositoryRecord } from "../ports.ts";
+import {
+  configuredRepositoriesCollectionPresent,
+  locked,
+  markConfiguredRepositoriesCollection,
+  mutateStore,
+  readStore,
+  resetJsonStoreCache,
+  writeStore,
+} from "./file.ts";
 
 function httpError(message: string, status: number): Error {
   return Object.assign(new Error(message), { status });
@@ -291,6 +297,40 @@ export async function seedIfEmpty(guide: GuideV1): Promise<void> {
     await writeStore(store);
   });
 }
+
+export async function listConfiguredRepositories(): Promise<ConfiguredRepositoryRecord[]> {
+  const store = await readStore();
+  return store.repositories.map((row) => ({ ...row }));
+}
+
+export async function addConfiguredRepository(
+  input: ConfiguredRepositoryRecord,
+): Promise<{ ok: true }> {
+  return mutateStore((store) => {
+    markConfiguredRepositoriesCollection();
+    store.repositories = store.repositories.filter(
+      (row) => !(row.provider === input.provider && row.host === input.host && row.id === input.id),
+    );
+    store.repositories.push(input);
+    return { ok: true as const };
+  });
+}
+
+export async function removeConfiguredRepository(id: string): Promise<{ ok: true }> {
+  return mutateStore((store) => {
+    markConfiguredRepositoriesCollection();
+    store.repositories = store.repositories.filter((row) => row.id !== id);
+    return { ok: true as const };
+  });
+}
+
+export const jsonConfiguredRepositories: ConfiguredRepositoryPort = {
+  list: listConfiguredRepositories,
+  add: addConfiguredRepository,
+  remove: removeConfiguredRepository,
+};
+
+export { configuredRepositoriesCollectionPresent, resetJsonStoreCache };
 
 export const jsonRepositories: AppRepositories = {
   listReviews,
