@@ -207,14 +207,17 @@ test("tab away and back keeps Diff selection, layout, collapse, and scroll", asy
   (root.querySelector("#diff-file-2 .chevron") as HTMLButtonElement).click();
   (root.querySelector('[data-diff-mode="unified"]') as HTMLButtonElement).click();
   await tick();
-  const main = root.querySelector("main") as HTMLElement;
+  const main = root.querySelector("#diff-file-2")?.closest("main") as HTMLElement;
   Object.defineProperty(main, "scrollTop", { value: 42, writable: true, configurable: true });
   main.scrollTop = 42;
 
   (root.querySelector('[data-tab="guide"]') as HTMLButtonElement).click();
   await tick();
   expect(root.querySelector("#app")?.getAttribute("data-tab")).toBe("guide");
-  expect(root.querySelector("[data-tab-panel]")?.textContent).toContain("Guide");
+  expect(root.querySelector(".main-inner.is-guide")?.closest("main")?.hasAttribute("hidden")).toBe(
+    false,
+  );
+  expect(root.querySelector("[data-tab-panel]")).toBeNull();
   expect((root.querySelector('nav[aria-label="Files"]') as HTMLElement).hidden).toBe(true);
 
   (root.querySelector('[data-tab="diff"]') as HTMLButtonElement).click();
@@ -225,6 +228,6 @@ test("tab away and back keeps Diff selection, layout, collapse, and scroll", asy
   expect(session.collapsed.has("pkg/src/a.ts")).toBe(true);
   expect(root.querySelector("#diff-file-2")?.getAttribute("data-collapsed")).toBe("true");
   expect(root.querySelector(".diff.split")).toBeNull();
-  expect((root.querySelector("main") as HTMLElement).scrollTop).toBe(42);
+  expect((root.querySelector("#diff-file-2")?.closest("main") as HTMLElement).scrollTop).toBe(42);
   expect((root.querySelector('nav[aria-label="Files"]') as HTMLElement).hidden).toBe(false);
 });
