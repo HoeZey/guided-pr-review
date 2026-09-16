@@ -130,6 +130,52 @@ export function resizeSplit(handle: HTMLElement) {
   };
 }
 
+function applyCommentSpacer(stack: HTMLElement): void {
+  const pane = stack.closest(".split-pane");
+  const split = pane?.closest(".diff.split");
+  if (!pane || !split) return;
+  const other = pane.classList.contains("left")
+    ? split.querySelector(".split-pane.right")
+    : split.querySelector(".split-pane.left");
+  if (!other) return;
+  const stacks = [...pane.querySelectorAll<HTMLElement>(".comment-stack")];
+  const spacer = other.querySelectorAll<HTMLElement>(".comment-stack-spacer")[stacks.indexOf(stack)];
+  if (spacer) spacer.style.height = `${stack.offsetHeight}px`;
+}
+
+export function syncSplitCommentSpacers(split: HTMLElement, _sync?: unknown) {
+  let resize: ResizeObserver | null = null;
+  let mutate: MutationObserver | null = null;
+  function bind() {
+    resize?.disconnect();
+    resize = null;
+    const stacks = split.querySelectorAll<HTMLElement>(".comment-stack");
+    stacks.forEach((stack) => applyCommentSpacer(stack));
+    if (typeof ResizeObserver !== "undefined") {
+      resize = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.target instanceof HTMLElement) applyCommentSpacer(entry.target);
+        }
+      });
+      stacks.forEach((stack) => resize?.observe(stack));
+    }
+  }
+  bind();
+  if (typeof MutationObserver !== "undefined") {
+    mutate = new MutationObserver(() => bind());
+    mutate.observe(split, { childList: true, subtree: true });
+  }
+  return {
+    update(_next?: unknown) {
+      bind();
+    },
+    destroy() {
+      resize?.disconnect();
+      mutate?.disconnect();
+    },
+  };
+}
+
 export function spyCurrent(
   node: HTMLElement,
   params: { active: boolean; selector: string; onHit: (el: HTMLElement) => void },

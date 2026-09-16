@@ -9,8 +9,10 @@
     stepGuide,
     unmarkViewed,
   } from "$lib/shared/domain/guide-view";
+  import { projectInlineThreads } from "$lib/shared/domain/comment-slots";
   import { prefs } from "$lib/client/state/preferences.svelte";
   import { persistViewed, session } from "$lib/client/state/review.svelte";
+  import { threadSession } from "$lib/client/state/threads.svelte";
   import { revealCurrentToc, suppressHoverToc } from "$lib/client/browser/interaction";
   import GenerateGuideEmpty from "../outcomes/GenerateGuideEmpty.svelte";
   import GuideChapter from "./GuideChapter.svelte";
@@ -38,6 +40,23 @@
 
   const walkthrough = $derived(guidePresentsWalkthrough(guide));
   const chapters = $derived(chaptersForNav(guide));
+  const walkFiles = $derived(chapters.flatMap((chapter) => (chapter._omitted ? [] : chapter.files)));
+  const chapterOffsets = $derived.by(() => {
+    const out: number[] = [];
+    let n = 0;
+    for (const chapter of chapters) {
+      out.push(n);
+      if (!chapter._omitted) n += chapter.files.length;
+    }
+    return out;
+  });
+  const slots = $derived(
+    projectInlineThreads(threadSession.threads, walkFiles, {
+      layout: prefs.guideLayout,
+      hideUnchanged: prefs.hideUnchanged,
+      surface: "guide",
+    }),
+  );
   const selectedChapter = $derived(
     chapters.find((chapter) => chapter.id === session.selectedChapterId) || chapters[0],
   );
@@ -189,6 +208,8 @@
             hideUnchanged={prefs.hideUnchanged}
             theme={prefs.theme}
             {tocOpen}
+            fileOffset={chapterOffsets[i] ?? 0}
+            {slots}
             onjumpFile={jumpFile}
             ontoggleToc={() => {
               session.tocOpen = !session.tocOpen;

@@ -1576,6 +1576,7 @@ main {
   font-family: var(--mono);
   font-size: 12px;
   line-height: 20px;
+  container-type: inline-size;
 }
 
 .line {
@@ -1634,6 +1635,7 @@ main {
   grid-template-columns: minmax(100%, max-content);
   overflow-x: auto;
   min-width: 0;
+  container-type: inline-size;
 }
 
 .line.split-cell {
@@ -1660,6 +1662,73 @@ main {
   content: "";
   position: absolute;
   inset: 0 -4px;
+}
+
+.file[data-collapsed="true"] > .comment-stack {
+  display: none;
+}
+
+.comment-stack {
+  width: 100cqi;
+  max-width: 100cqi;
+  justify-self: start;
+  position: sticky;
+  left: 0;
+}
+
+.file > .comment-stack {
+  width: 100%;
+  max-width: 100%;
+}
+
+.comment-thread {
+  margin: 8px 12px 12px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.thread-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.thread-flag {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  margin-left: 8px;
+}
+
+.thread-flag.is-outdated,
+.thread-flag.is-resolved {
+  color: var(--muted);
+}
+
+.thread-copy {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+}
+
+.thread-reply {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.comment-stack-spacer {
+  pointer-events: none;
+  margin: 8px 12px 12px;
+}
+
+.review-banner .ghost {
+  margin-left: 8px;
 }
 
 .split-handle:hover,

@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { GuideV1 } from "$lib/shared/contracts/guide";
   import { filesForDiff, fileTree } from "$lib/shared/domain/guide-view";
+  import { headerThreads, projectInlineThreads, threadsAfter } from "$lib/shared/domain/comment-slots";
   import CodeFile from "../code/CodeFile.svelte";
   import { prefs } from "$lib/client/state/preferences.svelte";
   import { resizeRail } from "$lib/client/browser/interaction";
@@ -11,6 +12,7 @@
     toggleCollapsed,
     toggleCollapsedDir,
   } from "$lib/client/state/review.svelte";
+  import { threadSession } from "$lib/client/state/threads.svelte";
   import FileTree from "./FileTree.svelte";
 
   let { guide, visible = true }: { guide: GuideV1; visible?: boolean } = $props();
@@ -28,6 +30,13 @@
   const viewed = $derived(session.viewed);
   const collapsed = $derived(session.collapsed);
   const collapsedDirs = $derived(session.collapsedDirs);
+  const slots = $derived(
+    projectInlineThreads(threadSession.threads, rows, {
+      layout: prefs.diffLayout,
+      hideUnchanged: prefs.hideUnchanged,
+      surface: "diff",
+    }),
+  );
 
   function jump(path: string, id: string, root: HTMLElement | null): void {
     selectDiffPath(path);
@@ -94,6 +103,8 @@
         collapsed={collapsed.has(file.path)}
         viewed={viewed.has(file.path)}
         theme={prefs.theme}
+        headerThreads={headerThreads(slots, i)}
+        afterThreads={(hunkIndex, itemIndex, side) => threadsAfter(slots, i, hunkIndex, itemIndex, side)}
         ontoggle={toggleCollapsed}
         onviewed={setPathViewed}
       />

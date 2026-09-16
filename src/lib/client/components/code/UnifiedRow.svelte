@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from "svelte";
   import type { Lined } from "$lib/shared/domain/guide-view";
   import CodeText from "./CodeText.svelte";
 
@@ -6,10 +7,12 @@
     line,
     lang,
     theme = "dark",
+    children,
   }: {
     line: Lined;
     lang: string;
     theme?: "light" | "dark";
+    children?: Snippet;
   } = $props();
 
   const mark = $derived(line.type === "added" ? "+" : line.type === "removed" ? "−" : "");
@@ -21,3 +24,4 @@
   <span class="mark">{mark}</span>
   <CodeText content={line.content} {lang} segments={line.segments} lineType={line.type} {theme} />
 </div>
+{@render children?.()}

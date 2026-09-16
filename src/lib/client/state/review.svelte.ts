@@ -27,6 +27,7 @@ import {
   writePref,
   writeTabCookie,
 } from "../browser/preferences";
+import { resetThreadSession } from "./threads.svelte";
 
 export type UiOp = {
   id: string;
@@ -73,6 +74,7 @@ function emptySession(): ReviewSession {
 export const session = $state<ReviewSession>(emptySession());
 
 export function resetReviewSession(): void {
+  resetThreadSession();
   const next = emptySession();
   session.reviewId = next.reviewId;
   session.tab = next.tab;
@@ -96,6 +98,7 @@ export function bindReview(
   initialTab?: ReviewTab,
 ): void {
   if (session.reviewId === reviewId) return;
+  resetThreadSession();
   const viewed = parseViewed(storage?.getItem(viewedKey(reviewId)) ?? null);
   const tab = initialTab ?? reviewLandingTab(guide);
   session.reviewId = reviewId;

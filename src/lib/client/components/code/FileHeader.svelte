@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from "svelte";
   import DiffStats from "./DiffStats.svelte";
   import { pathParts } from "./project";
 
@@ -10,6 +11,7 @@
     stats,
     ontoggle,
     onviewed,
+    children,
   }: {
     path: string;
     stage?: boolean;
@@ -18,6 +20,7 @@
     stats: { additions: number; deletions: number };
     ontoggle?: () => void;
     onviewed?: (viewed: boolean) => void;
+    children?: Snippet;
   } = $props();
 
   const parts = $derived(pathParts(path));
@@ -53,3 +56,4 @@
     {stage ? "Reviewed" : "Viewed"}
   </label>
 </div>
+{@render children?.()}

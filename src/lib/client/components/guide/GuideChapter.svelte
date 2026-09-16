@@ -4,6 +4,11 @@
   import DiffStats from "../code/DiffStats.svelte";
   import { fileDiffStats, pathParts } from "../code/project";
   import { formatCopy, type DiffLayout } from "$lib/shared/domain/guide-view";
+  import {
+    headerThreads,
+    threadsAfter,
+    type ProjectedInlineThreads,
+  } from "$lib/shared/domain/comment-slots";
   import { session } from "$lib/client/state/review.svelte";
   import { fileId, progressParts, sectionId, type GuideNavChapter } from "./project";
 
@@ -17,6 +22,8 @@
     hideUnchanged,
     theme,
     tocOpen,
+    fileOffset = 0,
+    slots,
     onjumpFile,
     ontoggleToc,
     onviewed,
@@ -32,6 +39,8 @@
     hideUnchanged: boolean;
     theme: "light" | "dark";
     tocOpen: boolean;
+    fileOffset?: number;
+    slots?: ProjectedInlineThreads;
     onjumpFile: (chapterId: string, path: string, id: string) => void;
     ontoggleToc: () => void;
     onviewed: (path: string, viewed: boolean) => void;
@@ -132,6 +141,9 @@
           viewed={session.viewed.has(file.path)}
           stage
           {theme}
+          headerThreads={slots ? headerThreads(slots, fileOffset + i) : []}
+          afterThreads={(hunkIndex, itemIndex, side) =>
+            slots ? threadsAfter(slots, fileOffset + i, hunkIndex, itemIndex, side) : []}
           {ontoggle}
           {onviewed}
         />

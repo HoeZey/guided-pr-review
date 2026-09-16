@@ -21,6 +21,11 @@
     session,
     setTab,
   } from "$lib/client/state/review.svelte";
+  import {
+    loadReviewThreads,
+    retryReviewThreads,
+    threadSession,
+  } from "$lib/client/state/threads.svelte";
   import DiffStats from "./code/DiffStats.svelte";
   import DiffView from "./diff/DiffView.svelte";
   import GuideView from "./guide/GuideView.svelte";
@@ -32,6 +37,7 @@
   let { data }: { data: HomePageData | ReviewPageData } = $props();
 
   let displayOpen = $state(false);
+  let openedCommentsFor = $state<string | null>(null);
 
   const view = $derived(data.kind);
   const review = $derived(data.kind === "review" ? currentReviewPage(data) : null);
@@ -56,6 +62,22 @@
 
   $effect(() => {
     if (typeof window === "undefined") return;
+    if (data.kind !== "review" || data.status !== "ok") {
+      openedCommentsFor = null;
+      return;
+    }
+    const id = data.reviewId;
+    if (openedCommentsFor === id) return;
+    openedCommentsFor = id;
+    void loadReviewThreads({
+      reviewId: id,
+      hosted: Boolean(data.guide?.source),
+      reason: "open",
+    });
+  });
+
+  $effect(() => {
+    if (typeof window === "undefined") return;
     if (data.kind !== "review" || data.status !== "ok") return;
     const page = currentReviewPage(data);
     if (!generateGuidePending(page)) return;
@@ -70,6 +92,22 @@
       void fetchJson(`/api/reviews/${data.reviewId}/active`, { method: "POST" }).catch(() => undefined);
     }
     void refreshCurrentReview();
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      const page = session.page;
+      if (!page || page.kind !== "review") return;
+      void loadReviewThreads({
+        reviewId: page.reviewId,
+        hosted: Boolean(page.guide?.source),
+        reason: "focus",
+      });
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
   });
 
   function selectTab(next: ReviewTab): void {
@@ -209,6 +247,15 @@
       </div>
       {#if review?.outdatedWarning}
         <div class="review-banner" role="status">{review.outdatedWarning}</div>
+      {/if}
+      {#if threadSession.loading && threadSession.threads.length === 0 && !threadSession.error}
+        <div class="review-banner" role="status">Loading comments…</div>
+      {/if}
+      {#if threadSession.error}
+        <div class="review-banner" role="alert">
+          {threadSession.error}
+          <button type="button" class="ghost" data-retry-comments onclick={() => void retryReviewThreads()}>Retry</button>
+        </div>
       {/if}
     {/if}
   </header>
