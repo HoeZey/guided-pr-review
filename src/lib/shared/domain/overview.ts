@@ -247,7 +247,7 @@ function isAuthoredByMe(item: CatalogPullRequest): boolean {
 }
 
 function isClosed(item: CatalogPullRequest): boolean {
-  return item.status === "completed" || item.status === "abandoned";
+  return item.status === "completed" || item.status === "abandoned" || item.status === "closed";
 }
 
 function catalogItemByKey(

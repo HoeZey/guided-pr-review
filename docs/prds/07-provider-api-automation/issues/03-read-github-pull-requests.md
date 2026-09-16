@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 blocked_by:
   - 01-connect-cli-identities
 blocks:
@@ -47,18 +47,42 @@ GitHostAdapter.fetchOpen here.
 
 **Acceptance criteria:**
 
-- [ ] GitHub repository and PR payloads map to the common contracts used by
+- [x] GitHub repository and PR payloads map to the common contracts used by
   Home.
-- [ ] Requested-reviewer and authored-draft grouping matches existing
+- [x] Requested-reviewer and authored-draft grouping matches existing
   precedence.
-- [ ] Pagination, rate headers, auth errors, deleted heads, and malformed
+- [x] Pagination, rate headers, auth errors, deleted heads, and malformed
   responses are covered.
-- [ ] Base/head commits are exact and never synthesized.
-- [ ] Adapter uses direct fetch and never invokes gh api.
-- [ ] Fixture tests make no live network calls.
+- [x] Base/head commits are exact and never synthesized.
+- [x] Adapter uses direct fetch and never invokes gh api.
+- [x] Fixture tests make no live network calls.
 
 **Blocked by:** 01 Connect CLI identities
 
 **Blocks:** 04, 06, and 07
 
 **Parallel-eligible:** yes, with 02 and 05
+
+## code-review
+
+Date: 16 September 2026
+
+base: 54ccbc054c8faf858bb3fd83361e85c3b08d91e9
+head: b38f334fac60a41eadf677de8701df53e3ce430d
+branch: feature/07-03-read-github-pull-requests
+
+Not blocking. Standards has no major. Spec has no missing or incorrect.
+
+Judged implementer notes: additive github union on catalog and provenance is required for Home contracts and is not a finding; existing azure-devops JSON still matches the widened schemas. PullRequestSource stays azure-devops-only, so GitHub guide upsert remains rejected until 07-07. Overview treats status closed as archived, which matches saved-closed archive behavior. reviews.ts skips GitHub rows in local adoption, with a ponytail comment, until Open Diff owns GitHub PullRequestSource. requested_reviewers only (no teams or submitted reviews) matches this story and the research note to use current requested-reviewer data. createGithubProvider is not wired into AppServices; that belongs to 06. API version 2026-03-10 is the current documented GitHub REST calendar version.
+
+### Standards
+
+major 0 / minor 0 / nit 0
+
+findings: []
+
+### Spec
+
+missing 0 / partial 0 / scope-creep 0 / incorrect 0
+
+findings: []

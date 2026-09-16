@@ -94,6 +94,8 @@ export function adoptLocalsFromCatalog(
   pullRequests: CatalogPullRequest[],
 ): void {
   for (const item of pullRequests) {
+    if (item.provider !== "azure-devops") continue;
+    // ponytail: GitHub catalog rows skip local adoption until Open Diff owns GitHub PullRequestSource.
     const key = pullRequestSyncKey(item);
     if (
       reviews.some(

@@ -9,6 +9,10 @@ export function isAzureDevOpsHost(host: string): boolean {
   );
 }
 
+export function isGitHubHost(host: string): boolean {
+  return host.toLowerCase() === "github.com";
+}
+
 export const AzureDevOpsProviderContext = z
   .object({
     kind: z.literal("azure-devops"),

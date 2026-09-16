@@ -1,5 +1,22 @@
 import { z } from "zod";
-import { Sha, isAzureDevOpsHost } from "./provenance.ts";
+import { Sha, isAzureDevOpsHost, isGitHubHost } from "./provenance.ts";
+
+const GitProvider = z.enum(["azure-devops", "github"]);
+
+function refineProviderHost(
+  value: { provider: string; host: string },
+  ctx: z.RefinementCtx,
+): void {
+  const ok =
+    value.provider === "github" ? isGitHubHost(value.host) : isAzureDevOpsHost(value.host);
+  if (!ok) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "unsupported git host",
+      path: ["host"],
+    });
+  }
+}
 
 const CatalogRepositoryIdentity = z
   .object({
@@ -12,26 +29,21 @@ const CatalogRepositoryIdentity = z
 
 export const ConfiguredRepository = z
   .object({
-    provider: z.literal("azure-devops"),
-    host: z
-      .string()
-      .min(1)
-      .refine(isAzureDevOpsHost, { message: "unsupported git host" }),
+    provider: GitProvider,
+    host: z.string().min(1),
     id: z.string().min(1),
     owner: z.string().min(1),
     name: z.string().min(1),
     webUrl: z.string().url(),
     origin: z.boolean(),
   })
-  .strict();
+  .strict()
+  .superRefine(refineProviderHost);
 
 export const CatalogPullRequest = z
   .object({
-    provider: z.literal("azure-devops"),
-    host: z
-      .string()
-      .min(1)
-      .refine(isAzureDevOpsHost, { message: "unsupported git host" }),
+    provider: GitProvider,
+    host: z.string().min(1),
     repository: CatalogRepositoryIdentity,
     number: z.number().int().positive(),
     title: z.string().min(1),
@@ -41,39 +53,36 @@ export const CatalogPullRequest = z
     sourceCommit: Sha,
     targetCommit: Sha,
     isDraft: z.boolean(),
-    status: z.enum(["active", "completed", "abandoned"]),
+    status: z.enum(["active", "completed", "abandoned", "closed"]),
     author: z.string().min(1),
     isReviewer: z.boolean(),
     isAuthor: z.boolean(),
     updatedAt: z.string().min(1),
   })
-  .strict();
+  .strict()
+  .superRefine(refineProviderHost);
 
 export const CatalogSnapshot = z
   .object({
-    provider: z.literal("azure-devops"),
-    host: z
-      .string()
-      .min(1)
-      .refine(isAzureDevOpsHost, { message: "unsupported git host" }),
+    provider: GitProvider,
+    host: z.string().min(1),
     repository: CatalogRepositoryIdentity,
     syncedAt: z.string().min(1).optional(),
     error: z.string().min(1).optional(),
     pullRequests: z.array(CatalogPullRequest),
   })
-  .strict();
+  .strict()
+  .superRefine(refineProviderHost);
 
 export const OpenActionTarget = z
   .object({
-    provider: z.literal("azure-devops"),
-    host: z
-      .string()
-      .min(1)
-      .refine(isAzureDevOpsHost, { message: "unsupported git host" }),
+    provider: GitProvider,
+    host: z.string().min(1),
     repository: CatalogRepositoryIdentity,
     number: z.number().int().positive(),
   })
-  .strict();
+  .strict()
+  .superRefine(refineProviderHost);
 
 export const ActionError = z
   .object({
