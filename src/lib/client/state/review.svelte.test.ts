@@ -83,6 +83,10 @@ test("setTab persists the selected tab without touching the review id", () => {
   expect(session.reviewId).toBe("a");
   expect(storage.getItem(TAB_KEY)).toBe("diff");
   expect(document.cookie).toContain(`${TAB_COOKIE}=diff`);
+  setTab("discussion", storage);
+  expect(session.tab).toBe("discussion");
+  expect(storage.getItem(TAB_KEY)).toBe("discussion");
+  expect(document.cookie).toContain(`${TAB_COOKIE}=discussion`);
 });
 
 test("bindReview uses the SSR tab when provided and otherwise the landing tab", () => {
@@ -101,6 +105,12 @@ test("adoptLegacyTab takes the stored tab after hydration and seeds the cookie",
   expect(session.tab).toBe("diff");
   expect(storage.getItem(TAB_KEY)).toBe("diff");
   expect(document.cookie).toContain(`${TAB_COOKIE}=diff`);
+
+  const leftover = memoryStorage({ [TAB_KEY]: "comments" });
+  bindReview("b", { unchaptered: false }, leftover, "guide");
+  adoptLegacyTab(leftover);
+  expect(session.tab).toBe("discussion");
+  expect(leftover.getItem(TAB_KEY)).toBe("discussion");
 });
 
 test("refreshCurrentReview ignores a stale overlay after the review id changes", async () => {

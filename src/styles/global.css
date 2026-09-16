@@ -69,7 +69,8 @@ body {
   transition: grid-template-columns 180ms ease;
 }
 
-#app[data-tab="guide"] {
+#app[data-tab="guide"],
+#app[data-tab="discussion"] {
   grid-template-columns: 1fr;
 }
 
@@ -668,7 +669,8 @@ main {
 }
 
 #app[data-tab="guide"] main::before,
-#app[data-tab="diff"] main::before {
+#app[data-tab="diff"] main::before,
+#app[data-tab="discussion"] main::before {
   content: "";
   position: sticky;
   top: 0;
@@ -1681,6 +1683,12 @@ main {
   max-width: 100%;
 }
 
+.discussion-list .comment-stack {
+  width: 100%;
+  max-width: 100%;
+  position: static;
+}
+
 .comment-thread {
   margin: 8px 12px 12px;
   padding: 10px;
@@ -1867,6 +1875,7 @@ main {
   }
 
   #app[data-tab="guide"],
+  #app[data-tab="discussion"],
   #app[data-view="home"] {
     grid-template-columns: 1fr;
     grid-template-rows: var(--header) 1fr;

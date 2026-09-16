@@ -74,6 +74,21 @@ test("fake review data renders tabs internally without fetch or route changes", 
   expect(root.querySelector(".guide-aside h2")?.textContent).toBe("Core");
 
   const diffTab = root.querySelector('[role="tab"][data-tab="diff"]') as HTMLButtonElement;
+  const discussionTab = root.querySelector('[role="tab"][data-tab="discussion"]') as HTMLButtonElement;
+  expect(root.querySelector('[role="tablist"]')?.querySelectorAll('[role="tab"]').length).toBe(4);
+  expect(root.querySelector('[role="tab"][data-tab="guide"]')?.textContent).toContain("Guide");
+  expect(diffTab?.textContent).toContain("Diff");
+  expect(root.querySelector('[role="tab"][data-tab="review"]')?.textContent).toContain("Code Review");
+  expect(discussionTab).toBeTruthy();
+  expect(discussionTab.getAttribute("aria-selected")).toBe("false");
+  expect(discussionTab.textContent).toContain("Discussion");
+  discussionTab.click();
+  await tick();
+  expect(app?.getAttribute("data-tab")).toBe("discussion");
+  expect(discussionTab.getAttribute("aria-selected")).toBe("true");
+  expect(root.querySelector('[role="tab"][data-tab="guide"]')?.getAttribute("aria-selected")).toBe("false");
+  expect(root.querySelector('[data-tab-panel="discussion"]')).toBeTruthy();
+  expect(root.querySelector(".comment-stack.is-pr")).toBeNull();
   diffTab.click();
   await tick();
   expect(app?.getAttribute("data-tab")).toBe("diff");

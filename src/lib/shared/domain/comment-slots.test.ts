@@ -3,8 +3,12 @@ import { test } from "node:test";
 import type { CommentThread } from "../contracts/comments.ts";
 import type { FileChange } from "../contracts/guide.ts";
 import {
+  allowsNestedReply,
+  discussionPlacementLabel,
+  discussionProviderLabel,
   headerThreads,
   projectComposerAnchor,
+  projectDiscussionThreads,
   projectInlineThreads,
   threadsAfter,
 } from "./comment-slots.ts";
@@ -167,6 +171,59 @@ test("duplicate paths and hunks receive a thread once at the first matching file
   assert.equal(hits.length, 1);
   assert.equal(hits[0]?.[0].startsWith("0:"), true);
   assert.equal(threadsAfter(projected, 1, 0, 1, "unified").length, 0);
+});
+
+test("Discussion lists PR-wide and stale threads once and leaves line and file threads inline", () => {
+  const files = [file("src/a.ts")];
+  const threads = [
+    thread("line-11", { kind: "line", path: "src/a.ts", side: "current", line: 11 }),
+    thread("file-a", { kind: "file", path: "src/a.ts" }),
+    thread("pr-gh", { kind: "pr" }),
+    thread("pr-ado", { kind: "pr" }, { status: "closed" }),
+    thread("stale-gone", { kind: "stale", reason: "unmappable", path: "src/gone.ts" }, { outdated: true }),
+    thread("stale-deleted", { kind: "stale", reason: "deleted-line", path: "src/a.ts" }),
+    thread("stale-old", { kind: "stale", reason: "outdated" }, { outdated: true }),
+  ];
+  threads[2] = { ...threads[2]!, provider: "github" };
+  threads[3] = { ...threads[3]!, provider: "azure-devops" };
+
+  const discussion = projectDiscussionThreads(threads);
+  assert.deepEqual(
+    discussion.map((row) => row.id),
+    ["pr-gh", "pr-ado", "stale-gone", "stale-deleted", "stale-old"],
+  );
+
+  const inline = projectInlineThreads(threads, files, {
+    layout: "unified",
+    hideUnchanged: false,
+    surface: "diff",
+  });
+  assert.deepEqual(
+    headerThreads(inline, 0).map((row) => row.id),
+    ["file-a"],
+  );
+  assert.deepEqual(
+    threadsAfter(inline, 0, 0, 1, "unified").map((row) => row.id),
+    ["line-11"],
+  );
+  assert.equal(
+    [...inline.header.values(), ...inline.after.values()]
+      .flat()
+      .some((row) => row.anchor.kind === "pr" || row.anchor.kind === "stale"),
+    false,
+  );
+
+  assert.equal(discussionProviderLabel("github"), "GitHub");
+  assert.equal(discussionProviderLabel("azure-devops"), "Azure DevOps");
+  assert.equal(discussionPlacementLabel(threads[2]!), "Pull request");
+  assert.equal(discussionPlacementLabel(threads[4]!), "Unmappable · src/gone.ts");
+  assert.equal(discussionPlacementLabel(threads[5]!), "Deleted line · src/a.ts");
+  assert.equal(discussionPlacementLabel(threads[6]!), "Outdated");
+  assert.equal(discussionPlacementLabel(threads[0]!), null);
+
+  assert.equal(allowsNestedReply(threads[2]!), false);
+  assert.equal(allowsNestedReply(threads[3]!), true);
+  assert.equal(allowsNestedReply(threads[0]!), true);
 });
 
 test("composer anchors use the same Guide and Diff slots as existing threads", () => {

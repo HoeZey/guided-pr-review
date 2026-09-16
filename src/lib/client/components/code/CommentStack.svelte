@@ -1,5 +1,10 @@
 <script lang="ts">
   import type { CommentMessage, CommentThread } from "$lib/shared/contracts/comments";
+  import {
+    allowsNestedReply,
+    discussionPlacementLabel,
+    discussionProviderLabel,
+  } from "$lib/shared/domain/comment-slots";
   import { composerSession, openReplyComposer } from "$lib/client/state/composer.svelte";
   import {
     deleteOwnedComment,
@@ -11,9 +16,11 @@
   let {
     threads,
     showComposer = false,
+    discussion = false,
   }: {
     threads: CommentThread[];
     showComposer?: boolean;
+    discussion?: boolean;
   } = $props();
 
   let editingId: string | null = $state(null);
@@ -125,6 +132,7 @@
   <div class="comment-stack">
     {#each threads as thread (thread.id)}
       {@const root = thread.messages[0]}
+      {@const placement = discussion ? discussionPlacementLabel(thread) : null}
       {#if root}
         <article class="comment-thread" data-thread={thread.id} data-status={thread.status}>
           <div class="thread-meta">
@@ -136,6 +144,10 @@
               <span class="thread-flag" class:is-resolved={thread.status === "closed"}>{thread.status}</span>
             {/if}
             {#if thread.outdated}<span class="thread-flag is-outdated">Outdated</span>{/if}
+            {#if discussion}
+              <span class="thread-flag">{discussionProviderLabel(thread.provider)}</span>
+              {#if placement}<span class="thread-flag">{placement}</span>{/if}
+            {/if}
           </div>
           <div class="thread-body">
             {@render messageBody(root)}
@@ -150,7 +162,7 @@
                 {@render messageBody(message)}
               </div>
             {/each}
-            {#if threadSession.hosted && threadSession.reviewId}
+            {#if threadSession.hosted && threadSession.reviewId && allowsNestedReply(thread)}
               {#if replyOpen(thread.id)}
                 <CommentComposer />
               {:else}

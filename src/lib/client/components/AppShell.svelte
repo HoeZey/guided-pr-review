@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { HOME_PATH, reviewLandingTab } from "$lib/shared/domain/overview";
+  import { projectDiscussionThreads } from "$lib/shared/domain/comment-slots";
   import type { HomePageData, ReviewPageData, ReviewTab } from "$lib/shared/page-data";
   import { fetchJson } from "$lib/client/browser/fetch";
   import {
@@ -28,6 +29,7 @@
   } from "$lib/client/state/threads.svelte";
   import DiffStats from "./code/DiffStats.svelte";
   import DiffView from "./diff/DiffView.svelte";
+  import DiscussionView from "./discussion/DiscussionView.svelte";
   import GuideView from "./guide/GuideView.svelte";
   import HomeActions from "./home/HomeActions.svelte";
   import HomeView from "./home/HomeView.svelte";
@@ -131,8 +133,10 @@
   const tabs: { id: ReviewTab; label: string }[] = [
     { id: "diff", label: "Diff" },
     { id: "guide", label: "Guide" },
+    { id: "discussion", label: "Discussion" },
     { id: "review", label: "Code Review" },
   ];
+  const discussionCount = $derived(projectDiscussionThreads(threadSession.threads).length);
 </script>
 
 <div
@@ -241,7 +245,7 @@
             aria-selected={tab === item.id ? "true" : "false"}
             onclick={() => selectTab(item.id)}
           >
-            {item.label}
+            {item.label}{item.id === "discussion" && discussionCount ? ` (${discussionCount})` : ""}
           </button>
         {/each}
       </div>
@@ -300,6 +304,8 @@
           {/if}
         </div>
       </main>
+    {:else if tab === "discussion"}
+      <DiscussionView />
     {:else if !review.guide && tab === "guide"}
       <main>
         <div class="main-inner">

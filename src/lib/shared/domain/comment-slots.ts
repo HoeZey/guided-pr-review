@@ -1,4 +1,4 @@
-import type { CommentThread, CreateCommentAnchor } from "../contracts/comments.ts";
+import type { CommentProviderKind, CommentThread, CreateCommentAnchor } from "../contracts/comments.ts";
 import type { FileChange } from "../contracts/guide.ts";
 import {
   isUnchangedGap,
@@ -212,4 +212,30 @@ export function projectInlineThreads(
     append(after, afterKey(placed.fileIndex, placed.slot.hunkIndex, placed.slot.itemIndex, placed.slot.side), thread);
   }
   return { header, after };
+}
+
+export function projectDiscussionThreads(threads: CommentThread[]): CommentThread[] {
+  return threads.filter((thread) => thread.anchor.kind === "pr" || thread.anchor.kind === "stale");
+}
+
+export function discussionProviderLabel(provider: CommentProviderKind): string {
+  return provider === "github" ? "GitHub" : "Azure DevOps";
+}
+
+const STALE_REASON_LABEL = {
+  unmappable: "Unmappable",
+  "deleted-line": "Deleted line",
+  outdated: "Outdated",
+} as const;
+
+export function discussionPlacementLabel(thread: CommentThread): string | null {
+  const { anchor } = thread;
+  if (anchor.kind === "pr") return "Pull request";
+  if (anchor.kind !== "stale") return null;
+  const reason = STALE_REASON_LABEL[anchor.reason];
+  return anchor.path ? `${reason} · ${anchor.path}` : reason;
+}
+
+export function allowsNestedReply(thread: CommentThread): boolean {
+  return !(thread.provider === "github" && thread.anchor.kind === "pr");
 }
