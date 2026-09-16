@@ -24,6 +24,45 @@ the same final interaction controls.
 Before 08 branches start, reconcile target paths and interfaces against actual
 07 develop. Product behavior stays locked.
 
+## Reconciled against develop
+
+Pinned 08 base: 0a9ffcd11cc64df218f833c3af425489dee906cf (07 implemented).
+PRD behavior unchanged. Issue Touches fields now name HEAD symbols:
+
+- No CommentService or CommentProvider yet. 08-01 adds them. GitHostAdapter is
+  gone after 07-08. Production has no az rest, ADO MCP, gh api, or agent
+  comment path. Do not revive leftover Astro src/pages/api/reviews/[id]/comments.ts.
+- feature/post-ado-comments at 90a7111 stays read-only. Inspect only salvage
+  listed in the PRD Branch salvage section. Never rebase, merge, or wholesale
+  cherry-pick.
+- Host identity: src/lib/shared/contracts/provenance.ts PullRequestSource,
+  AzureDevOpsProviderContext (firstComparingIteration,
+  secondComparingIteration, changes[path].changeTrackingId),
+  GitHubProviderContext. GuideV1.source is optional PullRequestSource in
+  src/lib/shared/contracts/guide.ts. Load via ReviewRepository.getReview.
+- AppServices: src/lib/server/services/app.ts createAppServices (reviews,
+  catalog, catalogRefresh, actions, outcomes, guides, connections,
+  repositories). Wire the new comment service here.
+- Credentials: src/lib/server/auth/ports.ts CredentialSource and
+  CredentialIdentity.login. CLI: src/lib/server/auth/cli-credentials.ts.
+- Providers today implement only ProviderRepositoryReader and
+  ProviderPullRequestReader: createAdoRestAdapter in
+  src/lib/server/providers/ado-rest.ts (api-version 7.1) and
+  createGithubProvider in src/lib/server/providers/github/rest.ts
+  (GITHUB_API_VERSION 2026-03-10). Comment REST is a new capability beside
+  those adapters in 08-02 and 08-03. Errors: ProviderError in
+  src/lib/server/providers/errors.ts; GithubProviderError in github/rest.ts.
+- HTTP: src/lib/server/http.ts createHttpHandlers; SvelteKit routes under
+  src/routes/api/. svelte.config.js csrf trustedOrigins is ["*"] (known 06
+  minor). Open/Update Diff: src/routes/api/reviews/open/+server.ts and
+  src/routes/api/reviews/update-diff/+server.ts.
+- Review UI: src/lib/client/state/review.svelte.ts ReviewSession. ReviewTab in
+  src/lib/shared/page-data.ts is "guide" | "diff" | "review". Discussion is
+  08-07. Client fetch: src/lib/client/browser/fetch.ts. Code-view:
+  src/lib/client/components/code/ (FileHeader.svelte, UnifiedRow.svelte,
+  SplitRow.svelte, projectHunkLines). DiffView.svelte and GuideView.svelte.
+  AppShell.svelte tabs. parseTab("comments") still maps to guide.
+
 ## Status
 
 - [01 Define provider-neutral comment services and contracts](01-define-comment-service.md) — todo

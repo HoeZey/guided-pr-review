@@ -42,8 +42,14 @@ comment vocabulary without leaking provider payloads or browser-selected URLs.
 - Remote thread persistence repository
 - Resolve/reactivate
 
-**Touches:** lib/shared comment contracts/domain, lib/server comment
-service/port, SvelteKit routes, Svelte client API types, fakes/tests
+**Touches:** new shared comment contracts beside
+src/lib/shared/contracts/provenance.ts (PullRequestSource stays host identity;
+comment payloads stay out of it); new CommentProvider port and CommentService
+under src/lib/server/; dispatch from stored GuideV1.source via
+ReviewRepository.getReview; wire into createAppServices in
+src/lib/server/services/app.ts; thin src/routes/api/reviews/[id]/ +server.ts
+plus typed client beside src/lib/client/browser/fetch.ts; fake CommentProvider
+fixtures. No createAdoRestAdapter or createGithubProvider HTTP in this story.
 
 **Acceptance criteria:**
 

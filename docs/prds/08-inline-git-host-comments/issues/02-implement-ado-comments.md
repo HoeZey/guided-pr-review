@@ -38,8 +38,11 @@ delete ADO PR comments through direct REST.
 - Exact deleted-line placement without valid provider coordinates
 - UI
 
-**Touches:** lib/server/providers/ado comments capability, fixtures, provider
-contract tests
+**Touches:** comment REST beside src/lib/server/providers/ado-rest.ts
+createAdoRestAdapter (api-version 7.1, CredentialSource); iterations and
+changeTrackingId from AzureDevOpsProviderContext on stored PullRequestSource;
+ProviderError mapping in src/lib/server/providers/errors.ts; CommentProvider
+contract tests; fixtures. Do not call az rest or ADO MCP.
 
 **Acceptance criteria:**
 

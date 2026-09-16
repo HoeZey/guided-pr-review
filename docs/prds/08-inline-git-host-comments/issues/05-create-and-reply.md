@@ -39,9 +39,10 @@ Guide and Diff without duplicate sends or lost drafts.
 - Resolve/reactivate
 - Local-range review comments
 
-**Touches:** Svelte composer/delivery state and code-view slots,
-CommentService create/reply, ADO/GitHub adapters, local pending storage if
-needed, styles/tests
+**Touches:** composer and delivery reducer beside review thread state from 04;
+CommentService create/reply; both provider adapters; code-view slots in
+FileHeader.svelte, UnifiedRow.svelte, SplitRow.svelte; local pending only if
+Svelte state is insufficient; styles/tests.
 
 **Acceptance criteria:**
 

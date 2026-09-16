@@ -38,8 +38,10 @@ inline review comments and PR-wide issue comments as for ADO.
 - Commit comments outside pull-request review/timeline
 - UI
 
-**Touches:** lib/server/providers/github comments capability, fixtures,
-provider contract tests
+**Touches:** comment REST beside src/lib/server/providers/github/rest.ts
+createGithubProvider (GITHUB_API_VERSION 2026-03-10); CredentialIdentity.login
+for ownership; GithubProviderError; CommentProvider contract tests shared with
+02; fixtures. Do not call gh api.
 
 **Acceptance criteria:**
 

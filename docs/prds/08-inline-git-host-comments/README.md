@@ -1,5 +1,5 @@
 ---
-status: signed
+status: in_progress
 blocked_by:
   - ../07-provider-api-automation/
 ---

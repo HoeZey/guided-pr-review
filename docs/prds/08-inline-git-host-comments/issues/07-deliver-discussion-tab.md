@@ -35,8 +35,10 @@ pushing line comments into an always-open block above Diff.
 - Reactions, status changes, review summaries, votes, or merge
 - Separate top-of-Diff comment stack
 
-**Touches:** Svelte review tabs and Discussion components, shared thread
-projection/state, styles/tests
+**Touches:** extend ReviewTab in src/lib/shared/page-data.ts and setTab in
+src/lib/client/state/review.svelte.ts; AppShell.svelte tabs; new Discussion
+components; shared thread projection from 04; PR-wide create through
+CommentService.
 
 **Acceptance criteria:**
 

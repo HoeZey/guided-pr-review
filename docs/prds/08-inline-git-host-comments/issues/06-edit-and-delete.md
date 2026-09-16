@@ -38,8 +38,9 @@ comments while other authors remain read-only.
 - Resolve/reactivate thread
 - Bulk deletion, reactions, or moderation
 
-**Touches:** CommentService, ADO/GitHub adapters, shared Svelte thread state,
-thread controls/components/styles/tests
+**Touches:** CommentService update/delete; ownership from 01 contracts; shared
+thread state from 04; thread controls on GuideView.svelte and DiffView.svelte
+cards; styles/tests.
 
 **Acceptance criteria:**
 

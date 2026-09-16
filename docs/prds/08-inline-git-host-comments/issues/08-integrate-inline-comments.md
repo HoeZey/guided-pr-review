@@ -21,7 +21,8 @@ with complete ADO/GitHub parity and no obsolete transport.
 
 **Scope (in):**
 
-- Verify coordinator pinned post-07 develop and reconciled issue paths before
+- Verify coordinator pinned post-07 develop
+  0a9ffcd11cc64df218f833c3af425489dee906cf and reconciled issue paths before
   story work.
 - Verify the existing epic branch contains one accepted commit per story; do
   not reset or replay commits already integrated.

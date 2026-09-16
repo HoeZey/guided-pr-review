@@ -40,8 +40,12 @@ they concern in both review modes instead of one block above Diff.
 - PR-wide Discussion tab
 - Pixel-perfect reuse of old viewer patches
 
-**Touches:** lib/shared anchor projection, Svelte review thread state,
-Guide/Diff/code-view components, styles, tests
+**Touches:** new anchor projection under src/lib/shared; review-scoped thread
+state beside src/lib/client/state/review.svelte.ts ReviewSession; slots in
+src/lib/client/components/code/ FileHeader.svelte, UnifiedRow.svelte,
+SplitRow.svelte and consumers DiffView.svelte, GuideView.svelte; fake
+CommentService from 01; styles/tests. Do not add Discussion. ReviewTab stays
+guide, diff, review.
 
 **Acceptance criteria:**
 
