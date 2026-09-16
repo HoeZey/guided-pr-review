@@ -54,7 +54,7 @@ containing every accepted provider story before develop or main moves.
   shows material friction.
 - [x] No token appears in logs, process arguments, persisted data, or browser.
 - [x] No deterministic path requires an agent.
-- [ ] Standards has no major finding; Spec has no missing/incorrect finding.
+- [x] Standards has no major finding; Spec has no missing/incorrect finding.
 - [ ] Integration reaches develop before any stable-main promotion.
 - [ ] Main promotion requires explicit user authorization.
 
