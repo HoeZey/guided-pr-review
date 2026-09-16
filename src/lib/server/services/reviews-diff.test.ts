@@ -17,6 +17,8 @@ import type {
   ProviderRepositoryReader,
 } from "../providers/ports.ts";
 import type { AppRepositories, ConfiguredRepositoryRecord } from "../repositories/ports.ts";
+import type { CredentialResult, CredentialSource } from "../auth/ports.ts";
+import { createAdoRestAdapter } from "../providers/ado-rest.ts";
 import { createReviewService } from "./reviews.ts";
 
 const SOURCE = "1111111111111111111111111111111111111111";
@@ -493,3 +495,97 @@ function runGit(argv: string[], cwd: string): Promise<{ stdout: string; stderr: 
     child.on("close", (code) => resolve({ stdout, stderr, code }));
   });
 }
+
+test("openDiff stores ADO iteration and change-tracking ids returned by REST", async () => {
+  const credentials: CredentialSource = {
+    async getAccessToken(input): Promise<CredentialResult> {
+      if (input.provider !== "azure-devops") {
+        return { status: "malformed", provider: input.provider, host: input.host, recovery: "az login" };
+      }
+      return {
+        status: "connected",
+        identity: { provider: "azure-devops", host: input.host, login: "ada@contoso.com" },
+        token: "ado_FIXTURE_TOKEN_not_for_network",
+      };
+    },
+  };
+  const seen: string[] = [];
+  const fetchFn: typeof fetch = async (input) => {
+    const url = String(input instanceof Request ? input.url : input);
+    seen.push(url);
+    if (url.includes("/iterations/") && url.includes("/changes")) {
+      return new Response(
+        JSON.stringify({
+          changeEntries: [
+            { changeTrackingId: 7, change: { item: { path: "/src/open.ts" } } },
+            { changeTrackingId: 8, change: { item: { path: "/docs/readme.md" } } },
+            { change: { item: { path: "/no-tracking.ts" } } },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
+    if (url.includes("/iterations")) {
+      return new Response(JSON.stringify({ value: [{ id: 1 }, { id: 2 }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (url.includes("/pullrequests/1101")) {
+      return new Response(
+        JSON.stringify({
+          pullRequestId: 1101,
+          title: "PR 1101",
+          status: "active",
+          createdBy: { uniqueName: "ada@contoso.com", displayName: "Ada" },
+          creationDate: "2026-09-16T11:00:00.000Z",
+          sourceRefName: "refs/heads/feature/review-me",
+          targetRefName: "refs/heads/develop",
+          lastMergeSourceCommit: { commitId: SOURCE },
+          lastMergeTargetCommit: { commitId: TARGET },
+          reviewers: [],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  };
+  const ado = createAdoRestAdapter({ credentials, fetch: fetchFn });
+  const unusedGithub = fakeReaders([]);
+  let upserted: GuideV1 | undefined;
+  const reviews = createReviewService(
+    repos({
+      listReviews: async () => emptyList(),
+      upsertReview: async (input) => {
+        upserted = input as GuideV1;
+        return { id: "r-ado" };
+      },
+    }),
+    {
+      readers: { ado, github: unusedGithub.github },
+      repositoryReaders: { ado, github: unusedGithub.github },
+      listConfigured: async () => [configured(ADO_REPO)],
+      git: recordingGit(),
+    },
+  );
+  await reviews.openDiff(targetOf(ADO_REPO, 1101));
+  const context = upserted?.source?.providerContext;
+  assert.equal(context?.kind, "azure-devops");
+  if (context?.kind !== "azure-devops") throw new Error("expected azure-devops context");
+  assert.equal(context.firstComparingIteration, 1);
+  assert.equal(context.secondComparingIteration, 2);
+  assert.deepEqual(context.changes["src/open.ts"], { changeTrackingId: 7 });
+  assert.deepEqual(context.changes["docs/readme.md"], { changeTrackingId: 8 });
+  assert.equal("no-tracking.ts" in context.changes, false);
+  assert.equal(Object.keys(context.changes).length > 0, true);
+  assert.equal(
+    seen.some((url) => url.includes("/pullrequests/1101/iterations") && url.includes("api-version=7.1")),
+    true,
+  );
+  assert.equal(
+    seen.some((url) => url.includes("/iterations/2/changes") && url.includes("api-version=7.1")),
+    true,
+  );
+  assert.equal(seen.some((url) => /az\s+rest|gh\s+api/i.test(url)), false);
+});
+

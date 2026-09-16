@@ -3,6 +3,7 @@ import { GuideV1 } from "../contracts/guide.ts";
 import type { ListReviewsOutput, ReviewRecord } from "../contracts/persistence.ts";
 import {
   PullRequestSource,
+  type AzureDevOpsProviderContext,
   pullRequestSyncKey,
 } from "../contracts/provenance.ts";
 
@@ -66,6 +67,10 @@ export function catalogAsSource(
   item: CatalogPullRequest,
   sourceCommit: string,
   targetCommit: string,
+  adoContext?: Pick<
+    AzureDevOpsProviderContext,
+    "firstComparingIteration" | "secondComparingIteration" | "changes"
+  >,
 ): PullRequestSource {
   const shared = {
     kind: "pull-request" as const,
@@ -90,10 +95,10 @@ export function catalogAsSource(
     providerContext: {
       kind: "azure-devops",
       project: projectFromOwner(item.repository.owner),
-      // ponytail: catalog has no iteration payload; comment APIs fill changes
-      firstComparingIteration: 0,
-      secondComparingIteration: 0,
-      changes: {},
+      // ponytail: catalog rows still omit iterations; Open Diff passes REST ids.
+      firstComparingIteration: adoContext?.firstComparingIteration ?? 0,
+      secondComparingIteration: adoContext?.secondComparingIteration ?? 0,
+      changes: adoContext?.changes ?? {},
     },
   });
 }

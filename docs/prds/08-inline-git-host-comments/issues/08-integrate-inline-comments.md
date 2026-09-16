@@ -159,10 +159,20 @@ Pending, no named test PR and live comment posts are not authorized:
 No comments posted. No user working tree checkout. feature/post-ado-comments
 worktree/branch not deleted.
 
+### Remediation
+
+Open Diff and Update Diff now fetch ADO iterations and changeTrackingId through
+createAdoRestAdapter.getCommentContext (REST 7.1 fetch, not az rest) and pass
+them into catalogAsSource. Paths without a tracking id stay absent so
+createPayload still throws invalid-anchor for that path only. Catalog adopt
+without Open still writes zeros. Already-saved ADO reviews skip Update Diff
+when sourceCommit is unchanged, so empty stored changes stay until a non-skip
+upsert. No live comment POST.
+
 ### Leftover notes from 01-07 (unfixed)
 
 - 08-01 mutation parse skip; re-list before mutate
-- 08-02 catalogAsSource empty iterations
+- 08-02 catalog adopt via catalogAsSource still stores empty iterations; Open/Update Diff now persist REST ids
 - 08-04 hunk-walk duplicate; double focus list
 - 08-05 mouse-only composers; 5-minute reconcile ponytail
 - 08-06 failed-edit drops draft; delete heuristic

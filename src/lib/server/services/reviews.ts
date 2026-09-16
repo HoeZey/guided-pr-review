@@ -149,7 +149,7 @@ export function createReviewService(
       throw Object.assign(new Error("diff sync is not configured"), { status: 500 });
     }
     const reader = target.provider === "github" ? options.readers.github : options.readers.ado;
-    const meta = await reader.getPullRequest({
+    const prInput = {
       provider: target.provider,
       host: target.host,
       repository: {
@@ -158,7 +158,8 @@ export function createReviewService(
         name: target.repository.name,
       },
       number: target.number,
-    });
+    };
+    const meta = await reader.getPullRequest(prInput);
     const listed = await repos.listReviews();
     const key = pullRequestSyncKey({
       provider: meta.provider,
@@ -188,7 +189,14 @@ export function createReviewService(
       targetCommit: meta.targetCommit,
     });
     const files = raw.map((file) => FileChange.parse(file));
-    const source = catalogAsSource(toCatalogItem(meta), meta.sourceCommit, meta.targetCommit);
+    const adoContext =
+      target.provider === "azure-devops" ? await reader.getCommentContext?.(prInput) : undefined;
+    const source = catalogAsSource(
+      toCatalogItem(meta),
+      meta.sourceCommit,
+      meta.targetCommit,
+      adoContext,
+    );
     const { id: reviewId } = await repos.upsertReview(
       unchapteredGuide({ title: meta.title, files, source }),
     );

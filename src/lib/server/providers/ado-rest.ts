@@ -1,4 +1,7 @@
-import { isAzureDevOpsHost } from "../../shared/contracts/provenance.ts";
+import {
+  isAzureDevOpsHost,
+  type AzureDevOpsProviderContext,
+} from "../../shared/contracts/provenance.ts";
 import type { CredentialSource } from "../auth/ports.ts";
 import { ProviderError, type ProviderErrorCode } from "./errors.ts";
 import type {
@@ -83,6 +86,18 @@ export function createAdoRestAdapter(options: {
         webUrl: repoWebUrl(parsed),
       };
       return normalizePullRequest(payload, identity, parsed, session.login);
+    },
+
+    async getCommentContext(input) {
+      const parsed = parseIdentity({
+        provider: input.provider,
+        host: input.host,
+        owner: input.repository.owner,
+        name: input.repository.name,
+      });
+      if (input.repository.id.trim() === "") throw fail("not-found", parsed.host);
+      const session = await connectedSession(options.credentials, parsed.host);
+      return loadCommentContext(fetchFn, parsed, input.repository.id, input.number, session.token);
     },
   };
 }
@@ -308,6 +323,76 @@ function asText(value: unknown): string | undefined {
 
 function sameText(left: string | undefined, right: string | undefined): boolean {
   return Boolean(left && right && left.toLowerCase() === right.toLowerCase());
+}
+
+async function loadCommentContext(
+  fetchFn: typeof fetch,
+  parsed: ParsedIdentity,
+  repositoryId: string,
+  number: number,
+  token: string,
+): Promise<AzureDevOpsProviderContext> {
+  const empty: AzureDevOpsProviderContext = {
+    kind: "azure-devops",
+    project: parsed.project,
+    firstComparingIteration: 0,
+    secondComparingIteration: 0,
+    changes: {},
+  };
+  const iterationsUrl = gitUrl(
+    parsed,
+    `repositories/${encodeURIComponent(repositoryId)}/pullrequests/${number}/iterations`,
+  );
+  const iterationPayload = await adoGet(fetchFn, iterationsUrl, parsed.host, token);
+  const iterationIds = asArray(iterationPayload, parsed.host)
+    .map((row) => asRecord(row)?.id)
+    .filter((id): id is number => typeof id === "number" && Number.isInteger(id) && id > 0);
+  if (iterationIds.length === 0) return empty;
+  const firstComparingIteration = Math.min(...iterationIds);
+  const secondComparingIteration = Math.max(...iterationIds);
+  const changes: AzureDevOpsProviderContext["changes"] = {};
+  // ponytail: page changes; raise MAX_PAGES if one iteration can exceed pageSize * MAX_PAGES files.
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    const changesUrl = gitUrl(
+      parsed,
+      `repositories/${encodeURIComponent(repositoryId)}/pullrequests/${number}/iterations/${secondComparingIteration}/changes`,
+    );
+    changesUrl.searchParams.set("$top", String(DEFAULT_PAGE_SIZE));
+    changesUrl.searchParams.set("$skip", String(page * DEFAULT_PAGE_SIZE));
+    const changePayload = await adoGet(fetchFn, changesUrl, parsed.host, token);
+    const entries = changeEntries(changePayload, parsed.host);
+    for (const entry of entries) {
+      const tracking = entry.changeTrackingId;
+      const path = itemPath(entry);
+      if (typeof tracking !== "number" || !Number.isInteger(tracking) || !path) continue;
+      changes[path] = { changeTrackingId: tracking };
+    }
+    if (entries.length < DEFAULT_PAGE_SIZE) break;
+  }
+  return {
+    kind: "azure-devops",
+    project: parsed.project,
+    firstComparingIteration,
+    secondComparingIteration,
+    changes,
+  };
+}
+
+function changeEntries(payload: unknown, host: string): Record<string, unknown>[] {
+  if (!payload || typeof payload !== "object") throw fail("malformed-response", host);
+  const row = payload as { changeEntries?: unknown; value?: unknown };
+  const raw = row.changeEntries ?? row.value;
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) throw fail("malformed-response", host);
+  return raw.map((item) => asRecord(item) ?? {});
+}
+
+function itemPath(entry: Record<string, unknown>): string | undefined {
+  const change = asRecord(entry.change);
+  const item = change ? asRecord(change.item) : asRecord(entry.item);
+  const path = item ? asText(item.path) : undefined;
+  if (!path) return undefined;
+  return path.replace(/^\/+/, "");
 }
 
 function fail(code: ProviderErrorCode, host: string, retryAfterSec?: number): ProviderError {

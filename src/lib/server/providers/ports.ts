@@ -1,3 +1,5 @@
+import type { AzureDevOpsProviderContext } from "../../shared/contracts/provenance.ts";
+
 export type GitProviderKind = "azure-devops" | "github";
 
 export type ProviderRepositoryIdentity = {
@@ -49,4 +51,10 @@ export type ProviderPullRequestReader = {
     repository: Pick<ProviderRepositoryIdentity, "id" | "owner" | "name">;
     number: number;
   }) => Promise<ProviderPullRequestMetadata>;
+  getCommentContext?: (input: {
+    provider: GitProviderKind;
+    host: string;
+    repository: Pick<ProviderRepositoryIdentity, "id" | "owner" | "name">;
+    number: number;
+  }) => Promise<AzureDevOpsProviderContext>;
 };
