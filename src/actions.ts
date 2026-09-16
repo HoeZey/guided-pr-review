@@ -2,7 +2,7 @@ import type { OpenActionTarget } from "./lib/shared/contracts/catalog.ts";
 import { GuideV1, type FileChange } from "./lib/shared/contracts/guide.ts";
 import type { PullRequestSource } from "./lib/shared/contracts/provenance.ts";
 import { filesForDiff } from "./lib/shared/domain/guide-view.ts";
-import { completeAction, getReview, listReviews, upsertReview } from "./store.ts";
+import { completeAction, getReview, listReviews, upsertReview } from "./lib/server/repositories/json/store.ts";
 
 export type GitHostAdapter = {
   fetchOpen: (target: OpenActionTarget) => Promise<{

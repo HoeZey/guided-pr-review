@@ -9,7 +9,7 @@
     "build": "astro build",
     "build:svelte": "vite build --config vite.svelte.config.ts",
     "start": "HOST=localhost PORT=8765 node dist/server/entry.mjs",
-    "test": "tsx --test src/store.test.ts src/actions.test.ts src/lib/shared/**/*.test.ts",
+    "test": "tsx --test src/actions.test.ts src/lib/shared/**/*.test.ts src/lib/server/repositories/json/store.test.ts",
     "test:svelte": "vitest run && vitest run --config vitest.ssr.config.ts",
     "check:architecture": "tsx --test scripts/check-architecture.test.ts",
     "check:svelte": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.svelte.json"

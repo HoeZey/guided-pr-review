@@ -3,20 +3,19 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { GuideV1 } from "./lib/shared/contracts/guide.ts";
-import { projectHomeOverview } from "./lib/shared/domain/overview.ts";
+import { GuideV1 } from "../../../shared/contracts/guide.ts";
+import { projectHomeOverview } from "../../../shared/domain/overview.ts";
+import { agentIsConnected } from "../../../shared/domain/reviews.ts";
 import {
   addReview,
-  agentIsConnected,
   completeAction,
-  dataFile,
   getReview,
   listReviews,
   publishReviewOutcome,
   queueAction,
   removeReview,
   replaceCatalog,
-  resetStoreCache,
+  resetJsonStoreCache,
   setActive,
   upsertReview,
   waitForAction,
@@ -90,11 +89,11 @@ async function withStore(fn: () => Promise<void>): Promise<void> {
   const dir = await mkdtemp(join(tmpdir(), "gpr-"));
   const prev = process.env.GUIDED_PR_REVIEW_DATA;
   process.env.GUIDED_PR_REVIEW_DATA = dir;
-  resetStoreCache();
+  resetJsonStoreCache();
   try {
     await fn();
   } finally {
-    resetStoreCache();
+    resetJsonStoreCache();
     if (prev === undefined) delete process.env.GUIDED_PR_REVIEW_DATA;
     else process.env.GUIDED_PR_REVIEW_DATA = prev;
     await rm(dir, { recursive: true, force: true });
@@ -227,7 +226,7 @@ test("unknown review id or invalid outcome is rejected", async () => {
 test("old Store v1 JSON without source still loads", async () => {
   await withStore(async () => {
     await writeFile(
-      dataFile(),
+      join(process.env.GUIDED_PR_REVIEW_DATA!, "reviews.json"),
       `${JSON.stringify({
         version: 1,
         activeId: "r1",
@@ -240,7 +239,7 @@ test("old Store v1 JSON without source still loads", async () => {
         ],
       })}\n`,
     );
-    resetStoreCache();
+    resetJsonStoreCache();
     const listed = await listReviews();
     assert.equal(listed.reviews.length, 1);
     assert.equal(listed.reviews[0].id, "r1");
@@ -624,6 +623,46 @@ test("waitForAction claims a queued Open and marks the agent connected", async (
     listed = await listReviews();
     assert.equal(listed.agentConnected, true);
     assert.equal(listed.actions[0].status, "claimed");
+  });
+});
+
+
+test("a reconnecting waiter returns the in-flight claim before a queued backlog", async () => {
+  await withStore(async () => {
+    const inFlight = await queueAction({ kind: "open", target: openTarget(1101) });
+    const claimed = await waitForAction({ timeoutMs: 0 });
+    assert.equal(claimed?.id, inFlight.id);
+    const backlog = await queueAction({ kind: "open", target: openTarget(1102) });
+    const again = await waitForAction({ timeoutMs: 0 });
+    assert.equal(again?.id, inFlight.id);
+    assert.equal(again?.status, "claimed");
+    const listed = await listReviews();
+    assert.equal(listed.actions.find((row) => row.id === inFlight.id)?.status, "claimed");
+    assert.equal(listed.actions.find((row) => row.id === backlog.id)?.status, "queued");
+    assert.equal(listed.actions.filter((row) => row.status === "claimed").length, 1);
+  });
+});
+
+test("concurrent claims cannot return the same queued action twice", async () => {
+  await withStore(async () => {
+    const first = await queueAction({ kind: "open", target: openTarget(1101) });
+    const claimed = await waitForAction({ timeoutMs: 0 });
+    assert.equal(claimed?.id, first.id);
+    const second = await queueAction({ kind: "open", target: openTarget(1102) });
+    const [a, b] = await Promise.all([
+      waitForAction({ timeoutMs: 0 }),
+      waitForAction({ timeoutMs: 0 }),
+    ]);
+    assert.ok(a);
+    assert.ok(b);
+    assert.equal(a.id, first.id);
+    assert.equal(b.id, first.id);
+    assert.notEqual(a.id, second.id);
+    const listed = await listReviews();
+    assert.equal(listed.actions.find((row) => row.id === first.id)?.status, "claimed");
+    assert.equal(listed.actions.find((row) => row.id === second.id)?.status, "queued");
+    assert.equal(listed.actions.filter((row) => row.status === "claimed").length, 1);
+    assert.equal(listed.actions.filter((row) => row.status === "queued").length, 1);
   });
 });
 

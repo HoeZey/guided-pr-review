@@ -14,9 +14,9 @@ import {
   getReview,
   listReviews,
   queueAction,
-  resetStoreCache,
+  resetJsonStoreCache,
   waitForAction,
-} from "./store.ts";
+} from "./lib/server/repositories/json/store.ts";
 
 const SOURCE = "1111111111111111111111111111111111111111";
 const TARGET = "2222222222222222222222222222222222222222";
@@ -107,11 +107,11 @@ async function withStore(fn: () => Promise<void>): Promise<void> {
   const dir = await mkdtemp(join(tmpdir(), "gpr-"));
   const prev = process.env.GUIDED_PR_REVIEW_DATA;
   process.env.GUIDED_PR_REVIEW_DATA = dir;
-  resetStoreCache();
+  resetJsonStoreCache();
   try {
     await fn();
   } finally {
-    resetStoreCache();
+    resetJsonStoreCache();
     if (prev === undefined) delete process.env.GUIDED_PR_REVIEW_DATA;
     else process.env.GUIDED_PR_REVIEW_DATA = prev;
     await rm(dir, { recursive: true, force: true });

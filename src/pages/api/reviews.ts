@@ -3,7 +3,7 @@ import {
   addReviewFromTool,
   listReviews,
   upsertReviewFromTool,
-} from "../../store.ts";
+} from "../../lib/server/repositories/json/store.ts";
 import { ensureSeed } from "../../seed.ts";
 
 export const prerender = false;

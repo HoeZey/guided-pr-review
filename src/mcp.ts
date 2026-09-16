@@ -12,7 +12,7 @@ import {
   setActive,
   upsertReviewFromTool,
   waitForAction,
-} from "./store.ts";
+} from "./lib/server/repositories/json/store.ts";
 
 const PROTOCOL = "2024-11-05";
 

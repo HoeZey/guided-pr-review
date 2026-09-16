@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { getReview, removeReview } from "../../../store.ts";
+import { getReview, removeReview } from "../../../lib/server/repositories/json/store.ts";
 import { ensureSeed } from "../../../seed.ts";
 
 export const prerender = false;
