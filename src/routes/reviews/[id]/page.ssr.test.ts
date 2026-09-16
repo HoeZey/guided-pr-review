@@ -22,3 +22,11 @@ test("initial review SSR contains readable Guide when Guide is the default view"
   expect(unchaptered).toContain("Generate a reading-order guide when you want one.");
   expect(unchaptered).not.toContain("The behavior change.");
 });
+
+test("unchaptered review page SSR includes readable Diff content", () => {
+  const { body } = render(ReviewPage, { props: { data: FAKE_UNCHAPTERED_REVIEW } });
+  expect(body).toContain('data-tab="diff"');
+  expect(body).toContain('aria-label="Files"');
+  expect(body).toContain("src/app.ts");
+  expect(body).toContain("Body omitted");
+});

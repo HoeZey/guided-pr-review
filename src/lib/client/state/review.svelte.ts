@@ -1,7 +1,9 @@
 import {
   collapsedOnDiff,
+  markViewed,
   parseViewed,
   serializeViewed,
+  unmarkViewed,
 } from "$lib/shared/domain/guide-view";
 import { reviewLandingTab } from "$lib/shared/domain/overview";
 import type { ReviewTab } from "$lib/shared/page-data";
@@ -103,4 +105,39 @@ export function setTab(
 export function persistViewed(storage: StorageLike | null = browserLocalStorage()): void {
   if (!session.reviewId) return;
   writePref(storage, viewedKey(session.reviewId), serializeViewed(session.viewed));
+}
+
+export function selectDiffPath(path: string | null): void {
+  session.selectedDiffPath = path;
+}
+
+export function toggleCollapsed(path: string): void {
+  const next = new Set(session.collapsed);
+  if (next.has(path)) next.delete(path);
+  else next.add(path);
+  session.collapsed = next;
+}
+
+export function toggleCollapsedDir(path: string): void {
+  const next = new Set(session.collapsedDirs);
+  if (next.has(path)) next.delete(path);
+  else next.add(path);
+  session.collapsedDirs = next;
+}
+
+export function setPathViewed(
+  path: string,
+  on: boolean,
+  storage: StorageLike | null = browserLocalStorage(),
+): void {
+  if (on) {
+    const next = markViewed(session.viewed, session.collapsed, path);
+    session.viewed = next.viewed;
+    session.collapsed = new Set([...next.collapsed, path]);
+  } else {
+    const next = unmarkViewed(session.viewed, session.collapsed, path);
+    session.viewed = next.viewed;
+    session.collapsed = next.collapsed;
+  }
+  persistViewed(storage);
 }

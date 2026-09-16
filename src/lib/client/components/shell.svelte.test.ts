@@ -80,7 +80,8 @@ test("fake review data renders tabs internally without fetch or route changes", 
   expect(root.querySelector('[role="tab"][data-tab="guide"]')?.getAttribute("aria-selected")).toBe(
     "false",
   );
-  expect(root.querySelector("[data-tab-panel]")?.textContent).toContain("Diff");
+  expect(root.querySelector('nav[aria-label="Files"]')).toBeTruthy();
+  expect(root.querySelector("[data-tab-panel]")).toBeNull();
   expect(fetchSpy).not.toHaveBeenCalled();
   expect(window.location.pathname).toBe(path);
   expect(session.reviewId).toBe("fake-review");

@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 blocked_by:
   - 05-preserve-http-mcp-and-ssr
   - 06-build-svelte-review-shell
@@ -44,16 +44,16 @@ domain helpers, focused Svelte tests
 
 **Acceptance criteria:**
 
-- [ ] Initial /reviews/:id response contains readable Diff content when Diff
+- [x] Initial /reviews/:id response contains readable Diff content when Diff
   is the selected/default server-safe view.
-- [ ] Every path renders exactly once in compact-tree order.
-- [ ] Split/unified rows, hidden unchanged gaps, word changes, stubs, stats,
+- [x] Every path renders exactly once in compact-tree order.
+- [x] Split/unified rows, hidden unchanged gaps, word changes, stubs, stats,
   and line numbers match existing behavior.
-- [ ] File jump/current highlighting and collapse/review state work without
+- [x] File jump/current highlighting and collapse/review state work without
   document-wide event delegation.
-- [ ] Tab switch away/back preserves selected file, layout, collapse, and
+- [x] Tab switch away/back preserves selected file, layout, collapse, and
   scroll state.
-- [ ] Focused tests cover multiple hunks, omitted path, replacement pairs,
+- [x] Focused tests cover multiple hunks, omitted path, replacement pairs,
   leftover adds/removes, gaps, and both layouts.
 
 **Blocked by:** 05, 06, and 08
@@ -61,3 +61,25 @@ domain helpers, focused Svelte tests
 **Blocks:** 12 interaction parity and 13 integration
 
 **Parallel-eligible:** yes, with 09
+
+## code-review
+
+Date: 16 September 2026
+
+base: 1bef2d0a422287a387ba8cf57ccdabf2a4b0e2f6
+head: b4a2275f3bb1049b209e376fbd0f6b5c7c8b0661
+branch: feature/06-10-port-diff-view
+
+Not blocking. Standards has no major. Spec has no missing or incorrect.
+
+### Standards
+
+major 0 / minor 0 / nit 0
+
+findings: []
+
+### Spec
+
+missing 0 / partial 0 / scope-creep 0 / incorrect 0
+
+findings: []

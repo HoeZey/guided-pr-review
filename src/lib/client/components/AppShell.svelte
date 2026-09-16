@@ -3,6 +3,7 @@
   import type { HomePageData, ReviewPageData, ReviewTab } from "$lib/shared/page-data";
   import { prefs, setTheme } from "$lib/client/state/preferences.svelte";
   import { bindReview, session, setTab } from "$lib/client/state/review.svelte";
+  import DiffView from "./diff/DiffView.svelte";
   import GuideView from "./guide/GuideView.svelte";
   import HomeActions from "./home/HomeActions.svelte";
   import HomeView from "./home/HomeView.svelte";
@@ -103,17 +104,24 @@
         agentConnected={data.agentConnected}
         hidden={tab !== "guide"}
       />
+      <DiffView guide={data.guide} visible={tab === "diff"} />
     {/if}
-    {#if tab !== "guide"}
+    {#if tab === "review"}
       <main>
         <div class="main-inner">
-          <div data-tab-panel={tab}>Fake {tab === "review" ? "Code Review" : "Diff"}</div>
+          <div data-tab-panel="review">Fake Code Review</div>
         </div>
       </main>
-    {:else if !data.guide}
+    {:else if !data.guide && tab === "guide"}
       <main>
         <div class="main-inner">
           <div data-tab-panel="guide">Fake Guide</div>
+        </div>
+      </main>
+    {:else if !data.guide && tab === "diff"}
+      <main>
+        <div class="main-inner">
+          <div data-tab-panel="diff">Fake Diff</div>
         </div>
       </main>
     {/if}

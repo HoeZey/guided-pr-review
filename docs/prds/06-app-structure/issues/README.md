@@ -36,7 +36,7 @@ reconciles browser-wide behavior only after those views exist.
 - [07 Render Home through SvelteKit SSR](07-render-ssr-home.md) — done
 - [08 Build shared Svelte code-view primitives](08-build-code-view-primitives.md) — done
 - [09 Port Guide to Svelte components](09-port-guide-view.md) — done
-- [10 Port Diff to Svelte components](10-port-diff-view.md) — todo
+- [10 Port Diff to Svelte components](10-port-diff-view.md) — done
 - [11 Port Code Review and Guide handoff](11-port-outcomes-and-guide-handoff.md) — todo
 - [12 Restore cross-view interaction parity](12-restore-interaction-parity.md) — todo
 - [13 Integrate the SvelteKit cutover and remove Astro](13-integrate-sveltekit-cutover.md) — todo

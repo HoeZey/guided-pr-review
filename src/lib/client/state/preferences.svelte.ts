@@ -1,4 +1,4 @@
-import { parseDiffLayout } from "$lib/shared/domain/guide-view";
+import { parseDiffLayout, type DiffLayout } from "$lib/shared/domain/guide-view";
 import {
   DIFF_KEY,
   GUIDE_DIFF_KEY,
@@ -88,4 +88,12 @@ export function persistRails(storage: StorageLike | null = browserLocalStorage()
 export function persistDiffLayout(storage: StorageLike | null = browserLocalStorage()): void {
   writePref(storage, GUIDE_DIFF_KEY, prefs.guideLayout);
   writePref(storage, DIFF_KEY, prefs.diffLayout);
+}
+
+export function setDiffLayout(
+  next: DiffLayout,
+  storage: StorageLike | null = browserLocalStorage(),
+): void {
+  prefs.diffLayout = next;
+  writePref(storage, DIFF_KEY, next);
 }
