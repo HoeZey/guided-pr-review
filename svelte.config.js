@@ -11,6 +11,7 @@ const config = {
       routes: "src/routes",
       lib: "src/lib",
       appTemplate: "src/app.html",
+      assets: "public",
     },
   },
 };
