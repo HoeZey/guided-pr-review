@@ -17,6 +17,7 @@ PRD moves under done/.
 - [06 App structure](prds/06-app-structure/) — implemented
 - [07 Provider API automation](prds/07-provider-api-automation/) — implemented
 - [08 Inline git-host comments](prds/08-inline-git-host-comments/) — implemented
+- [09 Demo home polish](prds/09-demo-home-polish/) — signed
 
 ## Status
 
@@ -35,15 +36,6 @@ doing, done, or cancelled. Cancelled work names the PRD that supersedes it.
 Product decisions live in each PRD's implementation notes and decided
 trade-offs. Issue files apply those decisions; they do not reopen them.
 Runtime review data stays local and is not committed.
-
-## Coordination
-
-- [Epics 06–08 execution plan](EXECUTION.md)
-- [Grok coordinator kickoff](GROK_KICKOFF.md)
-
-Deferred roadmap: assess Svelte UI polish only after 06 preserves parity.
-Isolated components should make that a normal follow-up; do not reserve PRD 09
-or expand the migration until concrete polish requirements exist.
 
 ## Git
 
