@@ -26,7 +26,7 @@ export async function loadReviewPage(
     listed.reviews.map((row) => row.id),
   );
   if (view.kind === "home") return homeFromList(listed);
-  const { guide, outcomes } = await services.reviews.get(view.reviewId);
+  const { guide, outcomes, diff } = await services.reviews.get(view.reviewId);
   const summary = listed.reviews.find((row) => row.id === view.reviewId);
   return {
     kind: "review",
@@ -41,5 +41,6 @@ export async function loadReviewPage(
     tab: parseStoredTab(cookieTab) ?? reviewLandingTab(guide),
     activeId: listed.activeId,
     outdatedWarning: summary ? reviewOutdatedWarning(summary, listed.catalog) : undefined,
+    ...(diff ? { diff } : {}),
   };
 }

@@ -10,6 +10,7 @@ import {
   addReview,
   completeAction,
   getReview,
+  jsonRepositories,
   listReviews,
   publishReviewOutcome,
   queueAction,
@@ -20,6 +21,8 @@ import {
   upsertReview,
   waitForAction,
 } from "./store.ts";
+import { createReviewService } from "../../services/reviews.ts";
+import { StoreV1 } from "../../../shared/contracts/persistence.ts";
 
 const sample = GuideV1.parse({
   version: 1,
@@ -904,8 +907,151 @@ test("Refresh leaves two locals with the same ticket in Local ranges", async () 
       [a.id, b.id],
     );
     assert.equal(
-      overview.groups.find((group) => group.id === "review-requests")?.cards[0].reviewId,
+      overview.groups.find((group) => group.id === "review-requests"),
       undefined,
     );
+  });
+});
+
+const DIFF_FILES = [
+  {
+    path: "a.py",
+    language: "python",
+    hunks: [{ lines: [{ type: "added" as const, content: "x = 1", newLine: 1 }] }],
+  },
+];
+
+test("old ReviewRecord rows without a diff still validate", () => {
+  const parsed = StoreV1.parse({
+    version: 1,
+    activeId: "r1",
+    reviews: [
+      {
+        id: "r1",
+        addedAt: "2026-09-14T00:00:00.000Z",
+        guide: sample,
+        outcomes: [],
+      },
+    ],
+    repositories: [],
+    catalog: [],
+    actions: [],
+  });
+  assert.equal(parsed.reviews[0].diff, undefined);
+});
+
+test("review service open returns the saved review with no provider or git call", async () => {
+  await withStore(async () => {
+    const saved = await upsertReview({
+      guide: GuideV1.parse({ ...sample, title: "Saved", source: prSource() }),
+      diff: {
+        sourceCommit: SOURCE_A,
+        targetCommit: TARGET,
+        files: DIFF_FILES,
+      },
+    });
+    const reviews = createReviewService(jsonRepositories, {
+      readers: {
+        ado: {
+          listPullRequests: async () => {
+            throw new Error("provider must not run on open");
+          },
+          getPullRequest: async () => {
+            throw new Error("provider must not run on open");
+          },
+        },
+        github: {
+          listPullRequests: async () => {
+            throw new Error("provider must not run on open");
+          },
+          getPullRequest: async () => {
+            throw new Error("provider must not run on open");
+          },
+        },
+      },
+      repositoryReaders: {
+        ado: {
+          getRepository: async () => {
+            throw new Error("git host must not run on open");
+          },
+        },
+        github: {
+          getRepository: async () => {
+            throw new Error("git host must not run on open");
+          },
+        },
+      },
+      listConfigured: async () => [],
+      git: {
+        ensureBare: async () => {
+          throw new Error("git must not run on open");
+        },
+        fetchCommits: async () => {
+          throw new Error("git must not run on open");
+        },
+        unifiedThreeDot: async () => {
+          throw new Error("git must not run on open");
+        },
+      },
+    });
+    const got = await reviews.get(saved.id);
+    assert.equal(got.guide.title, "Saved");
+    assert.equal(got.diff?.sourceCommit, SOURCE_A);
+    assert.deepEqual(
+      got.diff?.files.map((file) => file.path),
+      ["a.py"],
+    );
+    const opened = await reviews.openDiff({
+      provider: "azure-devops",
+      host: "dev.azure.com",
+      repository: {
+        id: "repo-1",
+        owner: "braidteam/BRAID",
+        name: "braid-connection-designer",
+        webUrl: "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer",
+      },
+      number: 1027,
+    });
+    assert.equal(opened.reviewId, saved.id);
+    assert.equal(opened.skipped, true);
+  });
+});
+
+test("review service upsert of a guide keeps the saved diff", async () => {
+  await withStore(async () => {
+    const saved = await upsertReview({
+      guide: GuideV1.parse({ ...sample, title: "Before", source: prSource() }),
+      diff: {
+        sourceCommit: SOURCE_A,
+        targetCommit: TARGET,
+        files: DIFF_FILES,
+      },
+    });
+    const reviews = createReviewService(jsonRepositories);
+    await reviews.upsert(
+      GuideV1.parse({
+        ...sample,
+        title: "Chaptered again",
+        source: prSource(),
+        chapters: [
+          {
+            id: "core",
+            kind: "core",
+            title: "Core",
+            why: "Updated why.",
+            files: DIFF_FILES,
+          },
+        ],
+      }),
+    );
+    const got = await reviews.get(saved.id);
+    assert.equal(got.guide.title, "Chaptered again");
+    assert.equal(got.diff?.sourceCommit, SOURCE_A);
+    assert.deepEqual(
+      got.diff?.files.map((file) => file.path),
+      ["a.py"],
+    );
+    const listed = await reviews.list();
+    assert.equal(listed.reviews[0].diffCommit, SOURCE_A);
   });
 });

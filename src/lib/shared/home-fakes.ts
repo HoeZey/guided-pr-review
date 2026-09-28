@@ -85,11 +85,24 @@ function originSnapshot(
   };
 }
 
-const current = hostedSummary("saved-current", 1101, "Current work");
-const outdated = hostedSummary("saved-outdated", 1102, "Outdated work");
-const archived = hostedSummary("saved-archived", 1103, "Archived work");
+const current = hostedSummary("saved-current", 1101, "Current work", {
+  diffCommit: SHA_A,
+});
+const outdated = hostedSummary("saved-outdated", 1102, "Outdated work", {
+  diffCommit: SHA_C,
+});
+const archived = hostedSummary("saved-archived", 1103, "Archived work", {
+  diffCommit: SHA_A,
+});
+const archivedClosed = hostedSummary("saved-closed", 1107, "Closed work", {
+  diffCommit: SHA_A,
+});
+const archivedAbandoned = hostedSummary("saved-abandoned", 1108, "Abandoned work", {
+  diffCommit: SHA_A,
+});
 const unchaptered = hostedSummary("saved-noguide", 1105, "Needs a guide", {
   unchaptered: true,
+  diffCommit: SHA_A,
 });
 const local: ReviewSummary = {
   id: "saved-local",
@@ -103,7 +116,7 @@ const local: ReviewSummary = {
 export const HOME_FIXTURE: HomePageData = {
   kind: "home",
   status: "ok",
-  reviews: [current, outdated, archived, unchaptered, local],
+  reviews: [current, outdated, archived, archivedClosed, archivedAbandoned, unchaptered, local],
   catalog: [
     originSnapshot([
       catalogItem({
@@ -129,6 +142,24 @@ export const HOME_FIXTURE: HomePageData = {
           "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1103",
         status: "completed",
         isReviewer: true,
+      }),
+      catalogItem({
+        number: 1107,
+        title: "Closed work",
+        webUrl:
+          "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1107",
+        status: "closed",
+        isReviewer: false,
+        isAuthor: true,
+      }),
+      catalogItem({
+        number: 1108,
+        title: "Abandoned work",
+        webUrl:
+          "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1108",
+        status: "abandoned",
+        isReviewer: false,
+        isAuthor: true,
       }),
       catalogItem({
         number: 1104,

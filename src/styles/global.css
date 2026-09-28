@@ -117,6 +117,18 @@ body {
   overflow: auto;
 }
 
+.home-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  gap: 24px;
+  align-items: start;
+}
+
+.home-column-controls {
+  position: sticky;
+  top: 0;
+}
+
 .home-meta,
 .home-error {
   margin: 0 0 12px;
@@ -148,6 +160,189 @@ body {
   font: inherit;
 }
 
+.host-section {
+  margin: 0 0 18px;
+}
+
+.host-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.host-name {
+  flex-shrink: 0;
+}
+
+.host-account {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.host-heading svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.home-ado-fields {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+
+.home-ado-fields label {
+  display: grid;
+  gap: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.home-ado-fields input {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  font: inherit;
+}
+
+.repo-add {
+  position: relative;
+}
+
+.repo-add-toggle {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.repo-menu {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 4px);
+  left: 0;
+  width: 100%;
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.repo-menu input {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 8px 10px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+
+.repo-list {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.repo-list:not(:has(.repo-row)) {
+  display: none;
+}
+
+.repo-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+  min-width: 0;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+}
+
+.repo-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repo-remove {
+  display: none;
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.repo-row:hover .repo-remove,
+.repo-row:focus-within .repo-remove {
+  display: inline-flex;
+}
+
+.repo-confirm {
+  position: absolute;
+  z-index: 6;
+  right: 0;
+  top: calc(100% + 4px);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elevated);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  white-space: nowrap;
+}
+
+.repo-menu button {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repo-menu button:hover,
+.repo-menu button:focus {
+  background: var(--accent-dim);
+}
+
 .home-group {
   display: grid;
   gap: 10px;
@@ -170,6 +365,7 @@ body {
 }
 
 .home-card {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -247,6 +443,61 @@ body {
 
 .home-card-status.is-outdated {
   color: var(--removed-text);
+}
+
+.home-card-status.is-merged {
+  color: var(--added-text);
+}
+
+.home-card-status.is-closed {
+  color: var(--removed-text);
+}
+
+.home-card-book {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--faint);
+}
+
+.home-card-book svg {
+  pointer-events: none;
+}
+
+.home-card-book::after {
+  content: attr(aria-label);
+  position: absolute;
+  z-index: 5;
+  right: 0;
+  bottom: calc(100% + 4px);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.home-card-book:hover::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+.home-card-book.is-grey {
+  color: var(--faint);
+}
+
+.home-card-book.is-yellow {
+  color: #b8860b;
+}
+
+.home-card-book.is-green {
+  color: var(--added-text);
 }
 
 .home-card-update,
@@ -391,6 +642,7 @@ header h1 {
 }
 
 .view-tabs.main-tabs {
+  position: relative;
   border: 0;
   border-top: 0;
   border-bottom: 1px solid var(--border);
@@ -401,6 +653,43 @@ header h1 {
   height: var(--header-tabs);
   box-sizing: border-box;
   background: var(--bg-sidebar);
+}
+
+.tab-loading {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.tab-dots span {
+  opacity: 0;
+  animation: tab-dot 1.2s infinite;
+}
+
+.tab-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.tab-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes tab-dot {
+  0%,
+  20% {
+    opacity: 0;
+  }
+  40%,
+  100% {
+    opacity: 1;
+  }
 }
 
 .view-tabs button {
@@ -463,6 +752,25 @@ header h1 {
 .display-menu[open] summary {
   color: var(--text);
   background: var(--bg-hover);
+}
+
+.refresh-btn {
+  position: relative;
+}
+
+.refresh-btn.is-spinning .refresh-icon {
+  animation: comment-spin 0.7s linear infinite;
+}
+
+.refresh-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  pointer-events: none;
 }
 
 .ado-link,
@@ -1074,6 +1382,10 @@ main {
 .main-inner.is-guide,
 #app[data-view="review"] .main-inner.is-guide {
   padding: 0;
+}
+
+.main-inner.is-guide > .outcome-empty {
+  padding: var(--stage-top) 48px 72px;
 }
 
 .guide-section {

@@ -23,21 +23,13 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function renderGuide(
-  guide = GUIDE_CHAPTERED,
-  opts: { reviewId?: string; agentConnected?: boolean } = {},
-) {
-  const reviewId = opts.reviewId ?? "rev-1";
+function renderGuide(guide = GUIDE_CHAPTERED, reviewId = "rev-1") {
   bindReview(reviewId, guide);
   host = document.createElement("div");
   document.body.appendChild(host);
   mounted = mount(GuideView, {
     target: host,
-    props: {
-      guide,
-      reviewId,
-      agentConnected: opts.agentConnected ?? false,
-    },
+    props: { guide },
   });
   return host;
 }
@@ -161,17 +153,15 @@ test("tab away and back keeps Guide selection and scroll", async () => {
   expect(guideMain.hasAttribute("hidden")).toBe(false);
 });
 
-test("unchaptered Guide button is an affordance and does not queue an action", async () => {
-  const fetchSpy = vi.fn();
-  vi.stubGlobal("fetch", fetchSpy);
-  const root = renderGuide(GUIDE_UNCHAPTERED, { agentConnected: true, reviewId: "rev-2" });
+test("unchaptered Guide shows coding-agent copy with no Generate guide button", async () => {
+  const root = renderGuide(GUIDE_UNCHAPTERED, "rev-2");
   await tick();
-  const btn = root.querySelector("[data-queue-generate]") as HTMLButtonElement;
-  expect(btn.textContent).toBe("Generate guide");
-  expect(btn.disabled).toBe(false);
-  btn.click();
-  await tick();
-  expect(fetchSpy).not.toHaveBeenCalled();
+  expect(root.querySelector(".outcome-empty h2")?.textContent).toBe("No guide");
+  expect(root.textContent).toContain(
+    "Ask your coding agent to generate a reading-order guide.",
+  );
+  expect(root.querySelector(".outcome-empty button")).toBeNull();
+  expect(root.querySelector("[data-queue-generate]")).toBeNull();
   expect(root.querySelector(".guide-section")).toBeNull();
 });
 

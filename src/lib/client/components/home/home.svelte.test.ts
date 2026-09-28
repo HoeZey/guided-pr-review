@@ -1,10 +1,14 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { mount, tick, unmount } from "svelte";
-import { HOME_FIXTURE, HOME_FIXTURE_DISCONNECTED, HOME_FIXTURE_WAITING } from "$lib/shared/home-fakes";
+import {
+  HOME_FIXTURE,
+  HOME_FIXTURE_DISCONNECTED,
+  HOME_FIXTURE_WAITING,
+  SHA_C,
+} from "$lib/shared/home-fakes";
 import { reviewPath } from "$lib/shared/domain/overview";
 import { CATALOG_REFRESH_STALE_MS } from "$lib/shared/domain/catalog";
-import { FAKE_GUIDE } from "$lib/shared/shell-fakes";
-import { resetHomeUi, setHomeNavigate, homeUi, addRepository } from "$lib/client/state/home.svelte";
+import { resetHomeUi, homeUi, addRepository } from "$lib/client/state/home.svelte";
 import { resetReviewSession } from "$lib/client/state/review.svelte";
 import AppShell from "../AppShell.svelte";
 
@@ -48,6 +52,34 @@ function homeFetch(handler?: (url: string, init?: RequestInit) => Promise<unknow
         json: async () => ({ repositories: [] }),
       });
     }
+    if (String(url).startsWith("/api/repositories/search") || String(url).startsWith("/api/repositories/search?")) {
+      return Promise.resolve({
+        ok: true,
+        statusText: "OK",
+        json: async () => ({ repositories: [] }),
+      });
+    }
+    if (url === "/api/catalog") {
+      return Promise.resolve({
+        ok: true,
+        statusText: "OK",
+        json: async () => ({ skipped: false }),
+      });
+    }
+    if (url === "/api/reviews") {
+      return Promise.resolve({
+        ok: true,
+        statusText: "OK",
+        json: async () => ({
+          reviews: HOME_FIXTURE.reviews,
+          catalog: HOME_FIXTURE.catalog,
+          actions: HOME_FIXTURE.actions,
+          agentConnected: HOME_FIXTURE.agentConnected,
+          activeId: HOME_FIXTURE.activeId,
+          repositories: HOME_FIXTURE.repositories,
+        }),
+      });
+    }
     return Promise.resolve({
       ok: true,
       statusText: "OK",
@@ -69,19 +101,75 @@ test("hydration renders projected Home from page data without refetching list or
   expect(root.querySelector(`[data-open-review="saved-current"]`)?.getAttribute("href")).toBe(
     reviewPath("saved-current"),
   );
+  expect(root.querySelector(`[data-open-review="saved-outdated"]`)?.getAttribute("href")).toBe(
+    reviewPath("saved-outdated"),
+  );
   expect(root.querySelector(`[data-open-review="saved-local"]`)?.getAttribute("href")).toBe(
     reviewPath("saved-local"),
   );
-  expect(root.querySelector("[data-queue-open]")?.textContent).toContain("Open from host");
-  expect(root.querySelector("[data-queue-update-diff]")?.textContent).toBe("Update Diff");
-  expect(root.querySelector("[data-queue-generate]")?.textContent).toBe("Generate guide");
-  expect(root.querySelector("[data-queue-refresh]")?.textContent).toBe("Refresh");
-  expect(root.querySelector("[data-open-paste]")?.textContent).toBe("Add");
-  expect(root.querySelector("[data-add-repository]")?.textContent).toBe("Add repository");
-  expect(root.querySelector(".home-group.is-archived summary h2")?.textContent).toBe("Archived");
-  expect(homeFetchUrls(fetchSpy).every((url) => url === "/api/connections" || url === "/api/repositories")).toBe(
-    true,
+  expect(root.querySelector("[data-queue-open]")).toBeNull();
+  expect(root.textContent).not.toContain("Open from host");
+  expect(root.querySelector("[data-queue-update-diff]")).toBeNull();
+  expect(root.querySelector("[data-queue-generate]")).toBeNull();
+  expect(root.querySelector(".home-card-status.is-outdated")).toBeNull();
+  expect(
+    [...root.querySelectorAll(".home-card-status")].map((el) => el.textContent),
+  ).not.toContain("No guide");
+  expect(root.textContent).not.toContain("Update Diff");
+  expect(root.textContent).not.toContain("Generate guide");
+  expect(root.textContent).not.toContain("Open saved");
+  expect(root.querySelector('[data-guide-book="green"]')?.getAttribute("aria-label")).toBe(
+    "The guide is up to date",
   );
+  expect(root.querySelector('[data-guide-book="yellow"]')?.getAttribute("aria-label")).toBe(
+    "Guide stale. Ask your coding agent to update the guide",
+  );
+  expect(root.querySelector('[data-guide-book="grey"]')?.getAttribute("aria-label")).toBe(
+    "Guide missing. Ask your coding agent to generate the guide",
+  );
+  expect(root.querySelector('[data-guide-book="grey"] svg path')?.getAttribute("d")).toContain(
+    "M4 19.5",
+  );
+  expect(root.querySelector('[data-guide-book="green"] svg path')?.getAttribute("d")).toContain(
+    "M12 5v16",
+  );
+  expect(root.querySelector('[data-guide-book="yellow"] svg path')?.getAttribute("d")).toContain(
+    "M12 5v16",
+  );
+  expect(
+    [...root.querySelectorAll("[data-archive-status]")].map((el) => el.textContent),
+  ).toEqual(["Merged", "Closed", "Closed"]);
+  expect(
+    [...root.querySelectorAll(".home-group.is-archived [data-guide-book]")].map((el) =>
+      el.getAttribute("data-guide-book"),
+    ),
+  ).toEqual(["green", "green", "green"]);
+  const refresh = root.querySelector("[data-queue-refresh]");
+  expect(refresh?.querySelector("svg.refresh-icon path")?.getAttribute("d")).toContain("M3 12a9");
+  expect(refresh?.textContent?.trim()).not.toBe("Refresh");
+  expect(root.querySelector("[data-open-paste]")).toBeNull();
+  expect(root.querySelector("#paste-modal")).toBeNull();
+  expect(root.querySelector("[data-home-controls] [data-repository-search]")).toBeNull();
+  expect(root.querySelector('[data-open-repo-menu="github"]')).toBeTruthy();
+  expect(root.querySelector('[data-open-repo-menu="azure-devops"]')).toBeTruthy();
+  expect((root.querySelector("[data-ado-organization]") as HTMLInputElement).value).toBe(
+    "braidteam",
+  );
+  expect((root.querySelector("[data-ado-project]") as HTMLInputElement).value).toBe("BRAID");
+  expect(root.querySelector("[data-add-repository-input]")).toBeNull();
+  expect(root.textContent).not.toContain("Repository URL");
+  expect(root.querySelector("[data-home-cards] .home-group")).toBeTruthy();
+  expect(root.querySelector(".home-group.is-archived summary h2")?.textContent).toBe("Archived");
+  expect(
+    homeFetchUrls(fetchSpy).every(
+      (url) =>
+        url === "/api/connections" ||
+        url === "/api/repositories" ||
+        String(url).startsWith("/api/repositories/search") ||
+        url === "/api/catalog" ||
+        url === "/api/reviews",
+    ),
+  ).toBe(true);
   unmount(mounted!);
   mounted = null;
   root.remove();
@@ -89,51 +177,85 @@ test("hydration renders projected Home from page data without refetching list or
   document.body.appendChild(host);
   mounted = mount(AppShell, { target: host, props: { data: HOME_FIXTURE_WAITING } });
   await tick();
-  expect([...host.querySelectorAll(".home-card-status")].map((el) => el.textContent)).toContain(
-    "Waiting",
-  );
-  expect(homeFetchUrls(fetchSpy).every((url) => url === "/api/connections" || url === "/api/repositories")).toBe(
-    true,
-  );
-  expect(homeFetchUrls(fetchSpy).some((url) => url.includes("reviews") || url.includes("catalog"))).toBe(
-    false,
-  );
+  expect(host.querySelector("[data-queue-generate]")).toBeNull();
+  expect(host.textContent).not.toContain("Waiting");
+  expect(homeFetchUrls(fetchSpy).some((url) => url.includes("actions"))).toBe(false);
 });
 
-test("Paste Guide posts the existing reviews API then navigates to the new review", async () => {
-  const goto = vi.fn().mockResolvedValue(undefined);
-  setHomeNavigate(goto);
+test("background catalog check dots the refresh icon without adding a card", async () => {
+  let catalogBody: { reviews: typeof HOME_FIXTURE.reviews; catalog: typeof HOME_FIXTURE.catalog } | null =
+    null;
   const fetchSpy = homeFetch((url) => {
-    if (url === "/api/reviews") {
+    if (url === "/api/catalog") {
       return {
         ok: true,
-        statusText: "Created",
-        json: async () => ({ id: "pasted-1" }),
+        statusText: "OK",
+        json: async () => ({ skipped: false }),
+      };
+    }
+    if (url === "/api/reviews") {
+      const nextCatalog = structuredClone(HOME_FIXTURE.catalog);
+      nextCatalog[0].pullRequests.push({
+        ...HOME_FIXTURE.catalog[0].pullRequests[0],
+        number: 9999,
+        title: "Brand new review request",
+        webUrl:
+          "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/9999",
+        sourceCommit: SHA_C,
+        isReviewer: true,
+        isAuthor: false,
+        status: "active",
+      });
+      catalogBody = {
+        reviews: HOME_FIXTURE.reviews,
+        catalog: nextCatalog,
+      };
+      return {
+        ok: true,
+        statusText: "OK",
+        json: async () => ({
+          reviews: catalogBody!.reviews,
+          catalog: catalogBody!.catalog,
+          actions: [],
+          agentConnected: true,
+          activeId: HOME_FIXTURE.activeId,
+          repositories: [],
+        }),
       };
     }
     return undefined;
   });
   vi.stubGlobal("fetch", fetchSpy);
   const root = renderHome();
-  (root.querySelector("[data-open-paste]") as HTMLButtonElement).click();
-  await tick();
-  const textarea = root.querySelector("#paste-json") as HTMLTextAreaElement;
-  textarea.value = JSON.stringify(FAKE_GUIDE);
-  (root.querySelector("[data-paste-save]") as HTMLButtonElement).click();
-  await tick();
-  await Promise.resolve();
-  const reviewCalls = fetchSpy.mock.calls.filter(([url]) => url === "/api/reviews");
-  expect(reviewCalls).toHaveLength(1);
-  const init = reviewCalls[0][1] as RequestInit;
-  expect(init.method).toBe("POST");
-  expect(JSON.parse(String(init.body))).toEqual({ guide: FAKE_GUIDE });
-  expect(goto).toHaveBeenCalledWith(reviewPath("pasted-1"));
+  await vi.waitFor(() => {
+    expect(homeFetchUrls(fetchSpy).filter((url) => url === "/api/catalog")).toHaveLength(1);
+  });
+  await vi.waitFor(() => {
+    expect(root.querySelector("[data-refresh-dot]")).toBeTruthy();
+  });
+  expect(root.querySelector("[data-queue-refresh]")?.getAttribute("title")).toBe("New changes to pull");
+  expect(root.textContent).not.toContain("Brand new review request");
+  expect(root.querySelector(".home-card-title")?.textContent).toBe("Current work");
+  expect(homeUi.refreshing).toBe(false);
+  expect(homeUi.hasNewChanges).toBe(true);
+  expect(JSON.parse(String((fetchSpy.mock.calls.find(([url]) => url === "/api/catalog")?.[1] as RequestInit).body))).toEqual(
+    { reason: "focus" },
+  );
 });
 
 test("host actions keep stale Home visible while the API request is in flight", async () => {
+  let catalogCalls = 0;
   let resolvePost: ((value: unknown) => void) | undefined;
   const fetchSpy = homeFetch((url) => {
     if (url === "/api/catalog") {
+      catalogCalls += 1;
+      if (catalogCalls === 1) {
+        return {
+          ok: true,
+          statusText: "OK",
+          json: async () => ({ skipped: false }),
+        };
+      }
       return new Promise((resolve) => {
         resolvePost = resolve;
       });
@@ -156,20 +278,28 @@ test("host actions keep stale Home visible while the API request is in flight", 
   });
   vi.stubGlobal("fetch", fetchSpy);
   const root = renderHome();
-  await tick();
+  await vi.waitFor(() => {
+    expect(catalogCalls).toBe(1);
+    expect(homeUi.refreshing).toBe(false);
+  });
+  homeUi.lastCatalogRefreshAt = null;
   (root.querySelector("[data-queue-refresh]") as HTMLButtonElement).click();
   await tick();
   expect(root.querySelector(".home-group h2")?.textContent).toBe("Review requests");
   expect(root.querySelector(".home-card-title")?.textContent).toBe("Current work");
-  expect(root.textContent).toContain("Refreshing");
-  expect(homeFetchUrls(fetchSpy).some((url) => url === "/api/catalog")).toBe(true);
+  expect(root.querySelector("[data-queue-refresh]")?.classList.contains("is-spinning")).toBe(true);
+  expect(root.querySelector("[data-queue-refresh]")?.getAttribute("aria-busy")).toBe("true");
+  expect(homeFetchUrls(fetchSpy).filter((url) => url === "/api/catalog").length).toBeGreaterThan(1);
   expect(homeFetchUrls(fetchSpy).some((url) => url === "/api/actions")).toBe(false);
   resolvePost?.({
     ok: true,
     statusText: "OK",
     json: async () => ({ skipped: false }),
   });
-  await tick();
+  await vi.waitFor(() => {
+    expect(homeFetchUrls(fetchSpy).some((url) => url === "/api/reviews/update-diff")).toBe(true);
+  });
+  expect(homeUi.refreshing).toBe(false);
 });
 
 test("Home shows provider recovery and Retry without leaking tokens", async () => {
@@ -229,6 +359,13 @@ test("Home add and remove repository call the thin handler and never queue agent
     webUrl: "https://github.com/octocat/Hello-World",
     origin: false,
   };
+  const candidate = {
+    provider: "github" as const,
+    host: "github.com",
+    owner: "octocat",
+    name: "Hello-World",
+    webUrl: "https://github.com/octocat/Hello-World",
+  };
   let rows = [origin];
   const fetchSpy = homeFetch((url, init) => {
     if (url === "/api/repositories" && (!init?.method || init.method === "GET")) {
@@ -238,9 +375,19 @@ test("Home add and remove repository call the thin handler and never queue agent
         json: async () => ({ repositories: rows }),
       };
     }
+    if (String(url).startsWith("/api/repositories/search")) {
+      return {
+        ok: true,
+        statusText: "OK",
+        json: async () => ({ repositories: [candidate] }),
+      };
+    }
     if (url === "/api/repositories" && init?.method === "POST") {
       expect(JSON.parse(String(init.body))).toEqual({
-        url: "https://github.com/octocat/Hello-World.git",
+        provider: "github",
+        host: "github.com",
+        owner: "octocat",
+        name: "Hello-World",
       });
       rows = [origin, github];
       return {
@@ -263,15 +410,18 @@ test("Home add and remove repository call the thin handler and never queue agent
   const root = renderHome();
   await vi.waitFor(() => {
     expect(root.querySelector('[data-configured-repository="ado-1"]')?.textContent).toContain(
-      "braidteam/BRAID / braid-connection-designer",
+      "braid-connection-designer",
+    );
+    expect(root.querySelector('[data-configured-repository="ado-1"]')?.textContent).not.toContain(
+      "braidteam/BRAID /",
     );
   });
   expect(root.querySelector('[data-configured-repository="ado-1"]')?.textContent).toContain("origin");
-  const input = root.querySelector("[data-add-repository-input]") as HTMLInputElement;
-  homeUi.repositoryInput = "https://github.com/octocat/Hello-World.git";
-  input.value = homeUi.repositoryInput;
-  input.dispatchEvent(new Event("input", { bubbles: true }));
-  (root.querySelector("[data-add-repository]") as HTMLButtonElement).click();
+  (root.querySelector('[data-open-repo-menu="github"]') as HTMLButtonElement).click();
+  await vi.waitFor(() => {
+    expect(root.querySelector('[data-add-repository="octocat/Hello-World"]')).toBeTruthy();
+  });
+  (root.querySelector('[data-add-repository="octocat/Hello-World"]') as HTMLButtonElement).click();
   await vi.waitFor(() => {
     expect(root.querySelector('[data-configured-repository="1296269"]')?.textContent).toContain(
       "octocat / Hello-World",
@@ -280,26 +430,65 @@ test("Home add and remove repository call the thin handler and never queue agent
   expect(homeFetchUrls(fetchSpy).some((url) => url === "/api/actions")).toBe(false);
   (root.querySelector('[data-remove-repository="1296269"]') as HTMLButtonElement).click();
   await vi.waitFor(() => {
+    expect(root.querySelector('[data-confirm-remove="1296269"]')).toBeTruthy();
+  });
+  (root.querySelector('[data-confirm-remove="1296269"]') as HTMLButtonElement).click();
+  await vi.waitFor(() => {
     expect(root.querySelector('[data-configured-repository="1296269"]')).toBeNull();
   });
   expect(root.querySelector('[data-configured-repository="ado-1"]')).not.toBeNull();
 });
 
-test("Home shows duplicate and unsupported repository errors from the handler", async () => {
+test("Home shows duplicate repository errors from the handler", async () => {
+  const candidate = {
+    provider: "github" as const,
+    host: "github.com",
+    owner: "octocat",
+    name: "Hello-World",
+  };
   const fetchSpy = homeFetch((url, init) => {
+    if (String(url).startsWith("/api/repositories/search")) {
+      return {
+        ok: true,
+        statusText: "OK",
+        json: async () => ({ repositories: [candidate] }),
+      };
+    }
     if (url === "/api/repositories" && init?.method === "POST") {
-      const body = JSON.parse(String(init.body)) as { url?: string };
-      if (String(body.url).includes("github.com")) {
-        return {
-          ok: false,
-          statusText: "Conflict",
-          json: async () => ({ error: "This repository is already configured" }),
-        };
-      }
       return {
         ok: false,
-        statusText: "Bad Request",
-        json: async () => ({ error: "unsupported git host" }),
+        statusText: "Conflict",
+        json: async () => ({ error: "This repository is already configured" }),
+      };
+    }
+    return undefined;
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+  const root = renderHome();
+  (root.querySelector('[data-open-repo-menu="github"]') as HTMLButtonElement).click();
+  await vi.waitFor(() => {
+    expect(root.querySelector("[data-repository-search]")).toBeTruthy();
+    expect(root.querySelector('[data-add-repository="octocat/Hello-World"]')).toBeTruthy();
+  });
+  await addRepository(candidate);
+  await vi.waitFor(() => {
+    expect(root.querySelector("[data-repository-error]")?.textContent).toBe(
+      "This repository is already configured",
+    );
+  });
+  expect(homeFetchUrls(fetchSpy).some((url) => url === "/api/actions")).toBe(false);
+});
+
+test("failed searchable list keeps the home column controls", async () => {
+  const fetchSpy = homeFetch((url) => {
+    if (String(url).startsWith("/api/repositories/search")) {
+      return {
+        ok: true,
+        statusText: "OK",
+        json: async () => ({
+          repositories: [],
+          error: { code: "unavailable", message: "gh list failed" },
+        }),
       };
     }
     return undefined;
@@ -307,20 +496,61 @@ test("Home shows duplicate and unsupported repository errors from the handler", 
   vi.stubGlobal("fetch", fetchSpy);
   const root = renderHome();
   await vi.waitFor(() => {
-    expect(root.querySelector("[data-add-repository-input]")).toBeTruthy();
-    expect((root.querySelector("[data-add-repository]") as HTMLButtonElement).disabled).toBe(false);
+    expect(root.querySelector("[data-repository-error]")?.textContent).toBe("gh list failed");
   });
-  await addRepository("https://github.com/octocat/Hello-World.git");
+  expect(root.querySelector("[data-home-controls]")).toBeTruthy();
+  expect(root.querySelector('[data-open-repo-menu="github"]')).toBeTruthy();
+  expect(root.querySelector("[data-repository-search]")).toBeNull();
+  expect(root.querySelector("[data-home-cards]")).toBeTruthy();
+});
+
+test("parallel repository loads keep busy and search errors until both finish", async () => {
+  let resolveList: ((value: unknown) => void) | undefined;
+  let resolveSearch: ((value: unknown) => void) | undefined;
+  const fetchSpy = homeFetch((url) => {
+    if (url === "/api/repositories") {
+      return new Promise((resolve) => {
+        resolveList = resolve;
+      });
+    }
+    if (String(url).startsWith("/api/repositories/search")) {
+      return new Promise((resolve) => {
+        resolveSearch = resolve;
+      });
+    }
+    return undefined;
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+  const root = renderHome();
   await vi.waitFor(() => {
-    expect(root.querySelector("[data-repository-error]")?.textContent).toBe(
-      "This repository is already configured",
-    );
+    expect(resolveList).toBeTypeOf("function");
+    expect(resolveSearch).toBeTypeOf("function");
   });
-  await addRepository("https://bitbucket.org/octocat/Hello-World.git");
+  expect(homeUi.repositoryBusy).toBe(true);
+
+  resolveSearch?.({
+    ok: true,
+    statusText: "OK",
+    json: async () => ({
+      repositories: [],
+      error: { code: "unavailable", message: "gh list failed" },
+    }),
+  });
   await vi.waitFor(() => {
-    expect(root.querySelector("[data-repository-error]")?.textContent).toBe("unsupported git host");
+    expect(root.querySelector("[data-repository-error]")?.textContent).toBe("gh list failed");
   });
-  expect(homeFetchUrls(fetchSpy).some((url) => url === "/api/actions")).toBe(false);
+  expect(homeUi.repositoryBusy).toBe(true);
+
+  resolveList?.({
+    ok: true,
+    statusText: "OK",
+    json: async () => ({ repositories: [] }),
+  });
+  await vi.waitFor(() => {
+    expect(homeUi.repositoryBusy).toBe(false);
+  });
+  expect(root.querySelector("[data-repository-error]")?.textContent).toBe("gh list failed");
+  expect(root.querySelector("[data-home-controls]")).toBeTruthy();
 });
 
 test("Refresh stays enabled without an agent and does not queue actions", async () => {
@@ -359,7 +589,9 @@ test("Refresh stays enabled without an agent and does not queue actions", async 
   await vi.waitFor(() => {
     expect(homeFetchUrls(fetchSpy).some((url) => url === "/api/catalog")).toBe(true);
   });
-  await tick();
+  await vi.waitFor(() => {
+    expect(homeFetchUrls(fetchSpy).some((url) => url === "/api/reviews/update-diff")).toBe(true);
+  });
   expect(homeFetchUrls(fetchSpy).some((url) => url === "/api/actions")).toBe(false);
   expect(host.querySelector(".home-card-title")?.textContent).toBe("Current work");
 });
@@ -388,8 +620,12 @@ test("failed catalog refresh keeps prior Home cards and shows the existing error
 });
 
 test("stale Home focus refreshes after 60 seconds and skips inside the window", async () => {
-  vi.useFakeTimers();
-  vi.setSystemTime(new Date("2026-09-16T12:00:00.000Z"));
+  let now = Date.parse("2026-09-16T12:00:00.000Z");
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    get: () => "visible",
+  });
   const fetchSpy = homeFetch((url) => {
     if (url === "/api/catalog") {
       return {
@@ -417,17 +653,82 @@ test("stale Home focus refreshes after 60 seconds and skips inside the window", 
   vi.stubGlobal("fetch", fetchSpy);
   const root = renderHome();
   await tick();
-  homeUi.lastCatalogRefreshAt = Date.now();
+  await vi.waitFor(() => {
+    expect(fetchSpy.mock.calls.filter(([url]) => url === "/api/catalog").length).toBeGreaterThan(0);
+    expect(fetchSpy.mock.calls.filter(([url]) => url === "/api/reviews").length).toBeGreaterThan(0);
+  });
+  await vi.waitFor(() => {
+    expect(homeUi.lastCatalogRefreshAt).not.toBeNull();
+  });
+  homeUi.lastCatalogRefreshAt = now;
+  const before = fetchSpy.mock.calls.filter(([url]) => url === "/api/catalog").length;
   document.dispatchEvent(new Event("visibilitychange"));
   await tick();
-  expect(fetchSpy.mock.calls.filter(([url]) => url === "/api/catalog")).toHaveLength(0);
-  vi.setSystemTime(Date.now() + CATALOG_REFRESH_STALE_MS);
+  expect(fetchSpy.mock.calls.filter(([url]) => url === "/api/catalog")).toHaveLength(before);
+  now += CATALOG_REFRESH_STALE_MS;
   document.dispatchEvent(new Event("visibilitychange"));
-  await tick();
-  expect(fetchSpy.mock.calls.filter(([url]) => url === "/api/catalog")).toHaveLength(1);
-  expect(JSON.parse(String((fetchSpy.mock.calls.find(([url]) => url === "/api/catalog")?.[1] as RequestInit).body))).toEqual(
-    { reason: "focus" },
-  );
+  await vi.waitFor(() => {
+    expect(fetchSpy.mock.calls.filter(([url]) => url === "/api/catalog")).toHaveLength(before + 1);
+  });
+  const focusBodies = fetchSpy.mock.calls
+    .filter(([url]) => url === "/api/catalog")
+    .map(([, init]) => JSON.parse(String((init as RequestInit).body)));
+  expect(focusBodies.every((body) => body.reason === "focus")).toBe(true);
   expect(root.querySelector(".home-card-title")?.textContent).toBe("Current work");
+});
+
+test("manual refresh coalesced with focus still persists diffs", async () => {
+  let resolveFocus: ((value: unknown) => void) | undefined;
+  const fetchSpy = homeFetch((url) => {
+    if (url === "/api/catalog") {
+      return new Promise((resolve) => {
+        resolveFocus = resolve;
+      });
+    }
+    if (url === "/api/reviews") {
+      return {
+        ok: true,
+        statusText: "OK",
+        json: async () => ({
+          reviews: HOME_FIXTURE.reviews,
+          catalog: HOME_FIXTURE.catalog,
+          actions: [],
+          agentConnected: true,
+          activeId: HOME_FIXTURE.activeId,
+          repositories: [],
+        }),
+      };
+    }
+    if (url === "/api/reviews/update-diff") {
+      return {
+        ok: true,
+        statusText: "OK",
+        json: async () => ({ reviewId: "saved-current" }),
+      };
+    }
+    return undefined;
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+  const root = renderHome();
+  await vi.waitFor(() => {
+    expect(resolveFocus).toBeTypeOf("function");
+  });
+  (root.querySelector("[data-queue-refresh]") as HTMLButtonElement).click();
+  await tick();
+  expect(homeFetchUrls(fetchSpy).filter((url) => url === "/api/reviews/update-diff")).toHaveLength(0);
+  resolveFocus?.({
+    ok: true,
+    statusText: "OK",
+    json: async () => ({ skipped: false }),
+  });
+  await vi.waitFor(() => {
+    expect(homeFetchUrls(fetchSpy).some((url) => url === "/api/reviews/update-diff")).toBe(true);
+  });
+  expect(homeFetchUrls(fetchSpy).filter((url) => url === "/api/catalog")).toHaveLength(1);
+  expect(
+    fetchSpy.mock.calls
+      .filter(([url]) => url === "/api/catalog")
+      .map(([, init]) => JSON.parse(String((init as RequestInit).body))),
+  ).toEqual([{ reason: "focus" }]);
 });
 

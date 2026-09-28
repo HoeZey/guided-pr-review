@@ -2,7 +2,7 @@ import type { CatalogSnapshot, ConfiguredRepository, OpenActionTarget, StoredAct
 import type { ListReviewsOutput, ReviewSummary } from "$lib/shared/contracts/persistence";
 import { pullRequestSyncKey } from "$lib/shared/contracts/provenance";
 import { CATALOG_REFRESH_STALE_MS } from "$lib/shared/domain/catalog";
-import { reviewPath } from "$lib/shared/domain/overview";
+import { catalogHasNewChanges, homeDiffSyncTargets, reviewPath } from "$lib/shared/domain/overview";
 import type { HomePageData } from "$lib/shared/page-data";
 import { fetchJson } from "../browser/fetch";
 import { resetConnectionUi } from "./connection.svelte";
@@ -18,6 +18,14 @@ export type HomeListed = {
 
 export type DiffOp = { kind: "open" | "update-diff"; error?: string };
 
+export type SearchableRepositoryCandidate = {
+  provider: "azure-devops" | "github";
+  host: string;
+  owner: string;
+  name: string;
+  webUrl?: string;
+};
+
 type Navigate = (path: string) => Promise<void>;
 
 async function defaultNavigate(path: string): Promise<void> {
@@ -28,7 +36,25 @@ async function defaultNavigate(path: string): Promise<void> {
 let navigate: Navigate = defaultNavigate;
 let watchTimer: ReturnType<typeof setInterval> | null = null;
 let catalogRefreshInflight: Promise<void> | null = null;
+let catalogRefreshAppliedList = false;
 const diffInflight = new Map<string, Promise<void>>();
+let repositoryLoadsInflight = 0;
+let configuredRepositoryError: string | null = null;
+let searchableRepositoryError: string | null = null;
+
+function beginRepositoryLoad(): void {
+  repositoryLoadsInflight += 1;
+  homeUi.repositoryBusy = true;
+}
+
+function endRepositoryLoad(): void {
+  repositoryLoadsInflight = Math.max(0, repositoryLoadsInflight - 1);
+  homeUi.repositoryBusy = repositoryLoadsInflight > 0;
+}
+
+function publishRepositoryError(): void {
+  homeUi.repositoryError = searchableRepositoryError ?? configuredRepositoryError;
+}
 
 export const homeUi = $state({
   pasteOpen: false,
@@ -36,12 +62,16 @@ export const homeUi = $state({
   pendingActionId: null as string | null,
   listed: null as HomeListed | null,
   configured: null as ConfiguredRepository[] | null,
+  searchable: null as SearchableRepositoryCandidate[] | null,
   repositoryError: null as string | null,
   repositoryInput: "",
+  adoOrganization: "braidteam",
+  adoProject: "BRAID",
   repositoryBusy: false,
   refreshing: false,
   lastCatalogRefreshAt: null as number | null,
   refreshError: null as string | null,
+  hasNewChanges: false,
   diffOps: {} as Record<string, DiffOp>,
 });
 
@@ -55,15 +85,23 @@ export function resetHomeUi(): void {
   homeUi.pendingActionId = null;
   homeUi.listed = null;
   homeUi.configured = null;
+  homeUi.searchable = null;
   homeUi.repositoryError = null;
   homeUi.repositoryInput = "";
+  homeUi.adoOrganization = "braidteam";
+  homeUi.adoProject = "BRAID";
   homeUi.repositoryBusy = false;
   homeUi.refreshing = false;
   homeUi.lastCatalogRefreshAt = null;
   homeUi.refreshError = null;
+  homeUi.hasNewChanges = false;
   homeUi.diffOps = {};
   navigate = defaultNavigate;
   catalogRefreshInflight = null;
+  catalogRefreshAppliedList = false;
+  repositoryLoadsInflight = 0;
+  configuredRepositoryError = null;
+  searchableRepositoryError = null;
   diffInflight.clear();
   stopHomeWatch();
   resetConnectionUi();
@@ -75,12 +113,19 @@ export function leaveHome(): void {
   homeUi.pendingActionId = null;
   homeUi.listed = null;
   homeUi.configured = null;
+  homeUi.searchable = null;
   homeUi.repositoryError = null;
   homeUi.repositoryInput = "";
+  homeUi.adoOrganization = "braidteam";
+  homeUi.adoProject = "BRAID";
   homeUi.repositoryBusy = false;
   homeUi.refreshing = false;
   homeUi.refreshError = null;
+  homeUi.hasNewChanges = false;
   homeUi.diffOps = {};
+  repositoryLoadsInflight = 0;
+  configuredRepositoryError = null;
+  searchableRepositoryError = null;
   diffInflight.clear();
   stopHomeWatch();
   resetConnectionUi();
@@ -115,36 +160,80 @@ function applyList(listed: ListReviewsOutput): void {
 }
 
 export async function loadRepositories(): Promise<void> {
-  homeUi.repositoryBusy = true;
+  beginRepositoryLoad();
   try {
     const listed = await fetchJson<{
       repositories: ConfiguredRepository[];
       error?: { code: string; message: string };
     }>("/api/repositories");
     homeUi.configured = listed.repositories;
-    homeUi.repositoryError = listed.error?.message ?? null;
+    configuredRepositoryError = listed.error?.message ?? null;
+    publishRepositoryError();
     if (homeUi.listed) {
       homeUi.listed = { ...homeUi.listed, repositories: listed.repositories };
     }
   } catch (err) {
-    homeUi.repositoryError = err instanceof Error ? err.message : String(err);
+    configuredRepositoryError = err instanceof Error ? err.message : String(err);
+    publishRepositoryError();
   } finally {
-    homeUi.repositoryBusy = false;
+    endRepositoryLoad();
   }
 }
 
-export async function addRepository(input = homeUi.repositoryInput): Promise<void> {
-  const value = input.trim();
-  if (!value) return;
+function searchUrl(): string {
+  const params = new URLSearchParams();
+  const organization = homeUi.adoOrganization.trim();
+  const project = homeUi.adoProject.trim();
+  if (organization) params.set("organization", organization);
+  if (project) params.set("project", project);
+  const query = params.toString();
+  return query ? `/api/repositories/search?${query}` : "/api/repositories/search";
+}
+
+export async function loadSearchableRepositories(): Promise<void> {
+  beginRepositoryLoad();
+  try {
+    const listed = await fetchJson<{
+      repositories: SearchableRepositoryCandidate[];
+      error?: { code: string; message: string };
+    }>(searchUrl());
+    homeUi.searchable = listed.repositories;
+    searchableRepositoryError = listed.error?.message ?? null;
+    publishRepositoryError();
+  } catch (err) {
+    homeUi.searchable = [];
+    searchableRepositoryError = err instanceof Error ? err.message : String(err);
+    publishRepositoryError();
+  } finally {
+    endRepositoryLoad();
+  }
+}
+
+export function filteredSearchableRepositories(): SearchableRepositoryCandidate[] {
+  const rows = homeUi.searchable ?? [];
+  const needle = homeUi.repositoryInput.trim().toLowerCase();
+  if (!needle) return rows;
+  return rows.filter((row) =>
+    `${row.owner}/${row.name} ${row.webUrl ?? ""}`.toLowerCase().includes(needle),
+  );
+}
+
+export async function addRepository(candidate: SearchableRepositoryCandidate): Promise<void> {
   homeUi.repositoryBusy = true;
   try {
     await fetchJson("/api/repositories", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ url: value }),
+      body: JSON.stringify({
+        provider: candidate.provider,
+        host: candidate.host,
+        owner: candidate.owner,
+        name: candidate.name,
+      }),
     });
     homeUi.repositoryInput = "";
     await loadRepositories();
+    await loadSearchableRepositories();
   } catch (err) {
     homeUi.repositoryError = err instanceof Error ? err.message : String(err);
     homeUi.repositoryBusy = false;
@@ -187,9 +276,18 @@ export async function refreshCatalog(reason: "focus" | "manual" = "manual"): Pro
   }
   if (catalogRefreshInflight) {
     await catalogRefreshInflight;
+    if (reason === "manual" && !catalogRefreshAppliedList) {
+      await refreshHomeList();
+      catalogRefreshAppliedList = true;
+      if (!homeUi.refreshError) await syncHomeDiffs();
+      const listed = homeUi.listed;
+      if (listed) homeUi.hasNewChanges = catalogHasNewChanges(listed.reviews, listed.catalog);
+    }
     return;
   }
-  homeUi.refreshing = true;
+  const animate = reason === "manual";
+  if (animate) homeUi.refreshing = true;
+  catalogRefreshAppliedList = false;
   catalogRefreshInflight = (async () => {
     try {
       await fetchJson("/api/catalog", {
@@ -199,15 +297,44 @@ export async function refreshCatalog(reason: "focus" | "manual" = "manual"): Pro
       });
       homeUi.refreshError = null;
       homeUi.lastCatalogRefreshAt = Date.now();
-      await refreshHomeList();
+      if (reason === "manual") {
+        await refreshHomeList();
+        catalogRefreshAppliedList = true;
+        await syncHomeDiffs();
+        const listed = homeUi.listed;
+        if (listed) homeUi.hasNewChanges = catalogHasNewChanges(listed.reviews, listed.catalog);
+      } else {
+        const listed = await fetchJson<ListReviewsOutput>("/api/reviews");
+        homeUi.hasNewChanges = catalogHasNewChanges(listed.reviews, listed.catalog);
+      }
     } catch (err) {
       homeUi.refreshError = err instanceof Error ? err.message : String(err);
     } finally {
-      homeUi.refreshing = false;
+      if (animate) homeUi.refreshing = false;
       catalogRefreshInflight = null;
     }
   })();
   await catalogRefreshInflight;
+}
+
+async function syncHomeDiffs(): Promise<void> {
+  const listed = homeUi.listed;
+  if (!listed) return;
+  const targets = homeDiffSyncTargets(listed.reviews, listed.catalog);
+  await Promise.all(
+    targets.map(async (target) => {
+      try {
+        await fetchJson<{ reviewId: string }>("/api/reviews/update-diff", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ target }),
+        });
+      } catch {
+        /* Keep successes; the next list refresh leaves the dot when any target failed. */
+      }
+    }),
+  );
+  await refreshHomeList();
 }
 
 async function runHostDiff(kind: "open" | "update-diff", target: OpenActionTarget): Promise<void> {

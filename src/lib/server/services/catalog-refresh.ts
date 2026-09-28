@@ -35,6 +35,17 @@ export function createCatalogStartupLatch(refresh: () => Promise<unknown>): () =
   };
 }
 
+/** Production composition for hooks.server.ts: kick startup refresh without blocking the request. */
+export function createCatalogStartupHandle(
+  refresh: () => Promise<unknown>,
+): <E, R>(input: { event: E; resolve: (event: E) => R | Promise<R> }) => Promise<R> {
+  const awaitStartup = createCatalogStartupLatch(refresh);
+  return async ({ event, resolve }) => {
+    void awaitStartup();
+    return resolve(event);
+  };
+}
+
 export function createCatalogRefreshService(options: {
   listRepositories: () => Promise<{ repositories: ConfiguredRepositoryRecord[] }>;
   replaceCatalog: (input: unknown) => Promise<{ ok: true }>;

@@ -47,8 +47,32 @@ export type ConfiguredRepositoryList = {
   error?: { code: ConfiguredRepositoryErrorCode; message: string };
 };
 
+export type SearchableRepository = {
+  provider: GitProviderKind;
+  host: string;
+  owner: string;
+  name: string;
+  webUrl?: string;
+};
+
+export type SearchableRepositoryList = {
+  repositories: SearchableRepository[];
+  error?: { code: ConfiguredRepositoryErrorCode; message: string };
+};
+
+export type AdoListScope = {
+  organization: string;
+  project: string;
+};
+
+export type HostRepositoryLister = {
+  listGithub: () => Promise<SearchableRepository[]>;
+  listAdo: (scope?: AdoListScope) => Promise<SearchableRepository[]>;
+};
+
 export type ConfiguredRepositoryService = {
   list: () => Promise<ConfiguredRepositoryList>;
+  search: (query?: string, ado?: AdoListScope) => Promise<SearchableRepositoryList>;
   add: (input: unknown) => Promise<{ repository: ConfiguredRepositoryRecord }>;
   remove: (id: string) => Promise<{ ok: true }>;
 };
@@ -75,6 +99,7 @@ export function createConfiguredRepositoryService(options: {
   collectionPresent: () => Promise<boolean>;
   originRemoteUrl: () => Promise<string | undefined>;
   readers: { ado: ProviderRepositoryReader; github: ProviderRepositoryReader };
+  hostList?: HostRepositoryLister;
 }): ConfiguredRepositoryService {
   async function persist(
     identity: ParsedGitRemote,
@@ -136,6 +161,37 @@ export function createConfiguredRepositoryService(options: {
       }
     },
 
+    async search(query, ado) {
+      const hostList = options.hostList;
+      if (!hostList) return { repositories: [] };
+      const organization = ado?.organization?.trim();
+      const project = ado?.project?.trim();
+      const adoScope = organization && project ? { organization, project } : undefined;
+      const rows: SearchableRepository[] = [];
+      let error: SearchableRepositoryList["error"];
+      const lists = [
+        () => hostList.listGithub(),
+        () => hostList.listAdo(adoScope),
+      ];
+      for (const list of lists) {
+        try {
+          rows.push(...(await list()));
+        } catch (err) {
+          error = {
+            code: "unavailable",
+            message: messageOf(err, "Repository list failed"),
+          };
+        }
+      }
+      const needle = query?.trim().toLowerCase() ?? "";
+      const repositories = needle
+        ? rows.filter((row) =>
+            `${row.owner}/${row.name} ${row.webUrl ?? ""}`.toLowerCase().includes(needle),
+          )
+        : rows;
+      return error ? { repositories, error } : { repositories };
+    },
+
     async add(input) {
       return { repository: await persist(parseAddInput(parseAddConfiguredRepositoryInput(input)), false) };
     },
@@ -149,6 +205,187 @@ export function createConfiguredRepositoryService(options: {
       return { ok: true as const };
     },
   };
+}
+
+export function createCliHostRepositoryLister(runner: CommandRunner): HostRepositoryLister {
+  const run = (argv: readonly string[]) =>
+    runner.run({ argv, timeoutMs: COMMAND_TIMEOUT_MS, maxOutputBytes: 256 * 1024 });
+
+  return {
+    async listGithub() {
+      const result = await run([
+        "gh",
+        "repo",
+        "list",
+        "--limit",
+        "100",
+        "--json",
+        "name,owner,url,nameWithOwner",
+      ]);
+      if (result.commandMissing || result.timedOut || result.code !== 0) {
+        throw fail("unavailable", messageOfCli(result, "gh repo list failed"));
+      }
+      let payload: unknown;
+      try {
+        payload = JSON.parse(result.stdout);
+      } catch {
+        throw fail("malformed-response", "gh repo list returned unexpected JSON");
+      }
+      if (!Array.isArray(payload)) {
+        throw fail("malformed-response", "gh repo list returned unexpected JSON");
+      }
+      const rows: SearchableRepository[] = [];
+      for (const item of payload) {
+        if (!item || typeof item !== "object") continue;
+        const row = item as Record<string, unknown>;
+        const name = typeof row.name === "string" ? row.name : "";
+        const ownerLogin =
+          row.owner && typeof row.owner === "object"
+            ? typeof (row.owner as { login?: unknown }).login === "string"
+              ? (row.owner as { login: string }).login
+              : ""
+            : typeof row.nameWithOwner === "string"
+              ? row.nameWithOwner.split("/")[0] ?? ""
+              : "";
+        if (!name || !ownerLogin) continue;
+        const webUrl =
+          typeof row.url === "string"
+            ? row.url
+            : typeof row.nameWithOwner === "string"
+              ? `https://github.com/${row.nameWithOwner}`
+              : undefined;
+        const entry: SearchableRepository = {
+          provider: "github",
+          host: "github.com",
+          owner: ownerLogin,
+          name,
+        };
+        if (webUrl) entry.webUrl = webUrl;
+        rows.push(entry);
+      }
+      return rows;
+    },
+
+    async listAdo(explicit?: AdoListScope) {
+      let scope: { organization: string; organizationUrl: string; project: string } | undefined;
+      if (explicit) {
+        scope = adoScopeFromNames(explicit.organization, explicit.project);
+        if (!scope) throw fail("unavailable", "Azure DevOps organization and project are required");
+      } else {
+        const defaults = await run(["az", "devops", "configure", "--list"]);
+        if (defaults.commandMissing || defaults.timedOut || defaults.code !== 0) {
+          throw fail("unavailable", messageOfCli(defaults, "az devops configure failed"));
+        }
+        scope = parseAzDevOpsDefaults(defaults.stdout);
+        if (!scope) throw fail("unavailable", "az devops has no organization or project defaults");
+      }
+      const result = await run([
+        "az",
+        "repos",
+        "list",
+        "--organization",
+        scope.organizationUrl,
+        "--project",
+        scope.project,
+        "--output",
+        "json",
+      ]);
+      if (result.commandMissing || result.timedOut || result.code !== 0) {
+        throw fail("unavailable", messageOfCli(result, "az repos list failed"));
+      }
+      let payload: unknown;
+      try {
+        payload = JSON.parse(result.stdout);
+      } catch {
+        throw fail("malformed-response", "az repos list returned unexpected JSON");
+      }
+      if (!Array.isArray(payload)) {
+        throw fail("malformed-response", "az repos list returned unexpected JSON");
+      }
+      const org = scope.organization;
+      const rows: SearchableRepository[] = [];
+      for (const item of payload) {
+        if (!item || typeof item !== "object") continue;
+        const row = item as Record<string, unknown>;
+        const name = typeof row.name === "string" ? row.name : "";
+        if (!name) continue;
+        const project =
+          row.project && typeof row.project === "object"
+            ? typeof (row.project as { name?: unknown }).name === "string"
+              ? (row.project as { name: string }).name
+              : scope.project
+            : scope.project;
+        const webUrl =
+          typeof row.webUrl === "string"
+            ? row.webUrl
+            : `https://dev.azure.com/${org}/${project}/_git/${name}`;
+        rows.push({
+          provider: "azure-devops",
+          host: "dev.azure.com",
+          owner: `${org}/${project}`,
+          name,
+          webUrl,
+        });
+      }
+      return rows;
+    },
+  };
+}
+
+function adoScopeFromNames(
+  organization: string,
+  project: string,
+): { organization: string; organizationUrl: string; project: string } | undefined {
+  const projectName = project.trim();
+  const raw = organization.trim();
+  if (!raw || !projectName) return undefined;
+  if (/^https?:\/\//i.test(raw) || /dev\.azure\.com|visualstudio\.com/i.test(raw)) {
+    return parseAzDevOpsDefaults(`organization = ${raw}\nproject = ${projectName}`);
+  }
+  return {
+    organization: raw,
+    organizationUrl: `https://dev.azure.com/${raw}`,
+    project: projectName,
+  };
+}
+
+function parseAzDevOpsDefaults(
+  text: string,
+): { organization: string; organizationUrl: string; project: string } | undefined {
+  let organizationUrl = "";
+  let project = "";
+  for (const line of text.split(/\r?\n/)) {
+    const match = line.match(/^\s*(organization|project)\s*=\s*(.+?)\s*$/i);
+    if (!match) continue;
+    if (match[1].toLowerCase() === "organization") organizationUrl = match[2];
+    else project = match[2];
+  }
+  if (!organizationUrl || !project) return undefined;
+  let organization = organizationUrl;
+  try {
+    const url = new URL(organizationUrl);
+    const parts = url.pathname.split("/").filter(Boolean);
+    organization = parts[0] || url.hostname.replace(/\.visualstudio\.com$/i, "");
+    if (!organizationUrl.startsWith("http")) organizationUrl = `https://dev.azure.com/${organization}`;
+  } catch {
+    organization = organizationUrl.replace(/^https?:\/\//i, "").replace(/\/.*$/, "");
+    if (organization.endsWith(".visualstudio.com")) {
+      organization = organization.slice(0, -".visualstudio.com".length);
+    } else if (organization.toLowerCase().startsWith("dev.azure.com/")) {
+      organization = organization.slice("dev.azure.com/".length);
+    }
+    organizationUrl = `https://dev.azure.com/${organization}`;
+  }
+  if (!organization) return undefined;
+  return { organization, organizationUrl, project };
+}
+
+function messageOfCli(
+  result: { stderr: string; stdout: string },
+  fallback: string,
+): string {
+  const text = `${result.stderr}\n${result.stdout}`.trim();
+  return text || fallback;
 }
 
 function parseAddConfiguredRepositoryInput(input: unknown): AddConfiguredRepositoryInput {

@@ -19,18 +19,8 @@ const listed = {
   agentConnected: false,
 };
 
-const claimed: StoredAction = {
-  id: "a1",
-  kind: "generate-guide",
-  status: "claimed",
-  queuedAt: "t",
-  claimedAt: "t",
-  reviewId: "r1",
-};
-
 function fakeServices(overrides: {
   list?: AppServices["reviews"]["list"];
-  wait?: AppServices["actions"]["wait"];
   publish?: AppServices["outcomes"]["publish"];
 }): AppServices {
   return {
@@ -51,11 +41,10 @@ function fakeServices(overrides: {
     catalogRefresh: { refresh: unused("catalogRefresh") },
     actions: {
       queue: unused("queue"),
-      wait: overrides.wait ?? unused("wait"),
+      wait: unused("wait"),
       complete: unused("complete"),
     },
     outcomes: { publish: overrides.publish ?? unused("publish") },
-    guides: { completeGenerateGuide: unused("completeGenerateGuide") },
     connections: {
       list: unused("connections.list"),
       retry: unused("connections.retry"),
@@ -64,6 +53,7 @@ function fakeServices(overrides: {
       list: unused("repositories.list"),
       add: unused("repositories.add"),
       remove: unused("repositories.remove"),
+      search: unused("repositories.search"),
     },
     comments: {
       list: unused("comments.list"),
@@ -75,14 +65,28 @@ function fakeServices(overrides: {
   };
 }
 
-test("MCP tools/call uses injected review and action services", async () => {
+test("MCP tools/list omits the retired action queue tools", async () => {
+  const { handleMcpJson } = createMcpHandler(fakeServices({ list: async () => listed }));
+  const listedRpc = await handleMcpJson({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "tools/list",
+  });
+  const tools = (
+    listedRpc as { result: { tools: { name: string }[] } }
+  ).result.tools.map((tool) => tool.name);
+  assert.ok(tools.includes("list_reviews"));
+  assert.ok(tools.includes("get_review"));
+  assert.ok(tools.includes("upsert_review"));
+  assert.equal(tools.includes("queue_action"), false);
+  assert.equal(tools.includes("wait_for_action"), false);
+  assert.equal(tools.includes("complete_action"), false);
+});
+
+test("MCP tools/call list_reviews uses the injected review service", async () => {
   const { handleMcpJson } = createMcpHandler(
     fakeServices({
       list: async () => listed,
-      wait: async (input) => {
-        assert.deepEqual(input, { timeoutMs: 0 });
-        return claimed;
-      },
     }),
   );
   const listedRpc = await handleMcpJson({
@@ -95,14 +99,17 @@ test("MCP tools/call uses injected review and action services", async () => {
     (listedRpc as { result: { structuredContent: unknown } }).result.structuredContent,
     listed,
   );
-  const waited = await handleMcpJson({
-    jsonrpc: "2.0",
-    id: 2,
-    method: "tools/call",
-    params: { name: "wait_for_action", arguments: { timeoutMs: 0 } },
-  });
-  assert.deepEqual(
-    (waited as { result: { structuredContent: unknown } }).result.structuredContent,
-    { action: claimed },
-  );
+});
+
+test("MCP tools/call rejects retired action queue tools", async () => {
+  const { handleMcpJson } = createMcpHandler(fakeServices({ list: async () => listed }));
+  for (const name of ["queue_action", "wait_for_action", "complete_action"] as const) {
+    const rpc = await handleMcpJson({
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/call",
+      params: { name, arguments: {} },
+    });
+    assert.equal((rpc as { error?: { code: number } }).error?.code, -32601);
+  }
 });

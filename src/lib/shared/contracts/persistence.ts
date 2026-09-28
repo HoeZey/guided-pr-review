@@ -4,8 +4,19 @@ import {
   ConfiguredRepository,
   StoredActions,
 } from "./catalog.ts";
-import { GuideV1 } from "./guide.ts";
+import { FileChange, GuideV1 } from "./guide.ts";
 import { StoredOutcome } from "./outcomes.ts";
+import { Sha } from "./provenance.ts";
+
+export const ReviewDiff = z
+  .object({
+    sourceCommit: Sha,
+    targetCommit: Sha,
+    files: z.array(FileChange),
+  })
+  .strict();
+
+export type ReviewDiff = z.infer<typeof ReviewDiff>;
 
 export const ReviewRecord = z
   .object({
@@ -13,6 +24,7 @@ export const ReviewRecord = z
     addedAt: z.string().min(1),
     guide: GuideV1,
     outcomes: z.array(StoredOutcome).default([]),
+    diff: ReviewDiff.optional(),
   })
   .strict();
 
@@ -41,6 +53,7 @@ export const ReviewSummary = z
     head: z.string(),
     syncKey: z.string().optional(),
     sourceCommit: z.string().optional(),
+    diffCommit: z.string().optional(),
     unchaptered: z.boolean().optional(),
     pullRequest: z
       .object({

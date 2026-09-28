@@ -4,12 +4,11 @@ import type { CatalogPullRequest, CatalogSnapshot } from "../contracts/catalog.t
 import type { ReviewSummary } from "../contracts/persistence.ts";
 import {
   HOME_PATH,
-  generateGuideHint,
+  guideBookHover,
   guidePresentsWalkthrough,
   homeCardAction,
-  inFlightGenerateGuideCopy,
-  latestGenerateGuideAction,
-  offersGenerateGuide,
+  catalogHasNewChanges,
+  homeDiffSyncTargets,
   projectHomeCards,
   projectHomeOverview,
   resolveOverviewView,
@@ -300,7 +299,14 @@ test("projectHomeOverview places each live catalog item once by reviewer then au
     isAuthor: true,
     isDraft: false,
   });
-  const overview = projectHomeOverview([], [originSnapshot([requested, draft, both])]);
+  const overview = projectHomeOverview(
+    [
+      hostedSummary("saved-1101", 1101, "Needs review", { diffCommit: SHA_A }),
+      hostedSummary("saved-1102", 1102, "My draft", { unchaptered: true, diffCommit: SHA_A }),
+      hostedSummary("saved-1103", 1103, "Mine and assigned", { diffCommit: SHA_A }),
+    ],
+    [originSnapshot([requested, draft, both])],
+  );
   assert.deepEqual(
     overview.groups.map((group) => ({
       id: group.id,
@@ -337,38 +343,33 @@ test("catalog cards say whether a saved Guide already exists", () => {
     isReviewer: true,
     isAuthor: false,
   });
-  const overview = projectHomeOverview(
-    [
-      summary({
-        id: "saved-1101",
-        title: "Needs review",
-        syncKey: "azure-devops:dev.azure.com:repo-1:1101",
-        pullRequest: {
-          provider: "azure-devops",
-          host: "dev.azure.com",
-          repository: {
-            id: "repo-1",
-            owner: "braidteam/BRAID",
-            name: "braid-connection-designer",
-          },
-          number: 1101,
-          webUrl:
-            "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1101",
-          targetRef: "develop",
-          sourceRef: "feature/review-me",
-        },
-      }),
-    ],
-    [originSnapshot([requested, leftover])],
-  );
+  const saved = summary({
+    id: "saved-1101",
+    title: "Needs review",
+    syncKey: "azure-devops:dev.azure.com:repo-1:1101",
+    diffCommit: SHA_A,
+    pullRequest: {
+      provider: "azure-devops",
+      host: "dev.azure.com",
+      repository: {
+        id: "repo-1",
+        owner: "braidteam/BRAID",
+        name: "braid-connection-designer",
+      },
+      number: 1101,
+      webUrl:
+        "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1101",
+      targetRef: "develop",
+      sourceRef: "feature/review-me",
+    },
+  });
+  const overview = projectHomeOverview([saved], [originSnapshot([requested, leftover])]);
   const cards = overview.groups.find((group) => group.id === "review-requests")?.cards ?? [];
-  assert.equal(cards.length, 2);
+  assert.equal(cards.length, 1);
   assert.equal(cards[0].title, "Needs review");
   assert.equal(cards[0].hasGuide, true);
   assert.equal(cards[0].reviewId, "saved-1101");
-  assert.equal(cards[1].title, "No guide yet");
-  assert.equal(cards[1].hasGuide, false);
-  assert.equal(cards[1].reviewId, undefined);
+  assert.equal(catalogHasNewChanges([saved], [originSnapshot([requested, leftover])]), true);
 });
 
 test("every host PR on the overview has a compact owner and repository badge", () => {
@@ -377,6 +378,8 @@ test("every host PR on the overview has a compact owner and repository badge", (
       summary({
         id: "saved-pr",
         title: "Saved PR",
+        syncKey: "azure-devops:dev.azure.com:repo-1:1027",
+        diffCommit: SHA_A,
         pullRequest: {
           provider: "azure-devops",
           host: "dev.azure.com",
@@ -391,6 +394,11 @@ test("every host PR on the overview has a compact owner and repository badge", (
           targetRef: "develop",
           sourceRef: "feature/example",
         },
+      }),
+      hostedSummary("saved-1101", 1101, "Needs review", { diffCommit: SHA_A }),
+      hostedSummary("saved-1102", 1102, "My draft", {
+        unchaptered: true,
+        diffCommit: SHA_A,
       }),
     ],
     [
@@ -518,95 +526,10 @@ test("the Guide tab does not present a placeholder walkthrough for an unchaptere
   assert.equal(reviewLandingTab({}), "guide");
 });
 
-test("Generate guide is offered only for an unchaptered saved review", () => {
-  const unchaptered = projectHomeCards([
-    summary({
-      id: "saved-1101",
-      title: "Needs review",
-      unchaptered: true,
-      pullRequest: {
-        provider: "azure-devops",
-        host: "dev.azure.com",
-        repository: {
-          id: "repo-1",
-          owner: "braidteam/BRAID",
-          name: "braid-connection-designer",
-        },
-        number: 1101,
-        webUrl:
-          "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1101",
-        targetRef: "develop",
-        sourceRef: "feature/review-me",
-      },
-    }),
-  ])[0];
-  const chaptered = projectHomeCards([
-    summary({
-      id: "saved-1101",
-      title: "Needs review",
-      pullRequest: {
-        provider: "azure-devops",
-        host: "dev.azure.com",
-        repository: {
-          id: "repo-1",
-          owner: "braidteam/BRAID",
-          name: "braid-connection-designer",
-        },
-        number: 1101,
-        webUrl:
-          "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1101",
-        targetRef: "develop",
-        sourceRef: "feature/review-me",
-      },
-    }),
-  ])[0];
-  const catalogOnly = projectHomeOverview([], [originSnapshot([catalogItem()])]).groups[0]
-    .cards[0];
-  const local = projectHomeCards([
-    summary({ id: "local-1", title: "Local", unchaptered: true }),
-  ])[0];
-  assert.equal(offersGenerateGuide(unchaptered), true);
-  assert.equal(offersGenerateGuide(chaptered), false);
-  assert.equal(offersGenerateGuide(catalogOnly), false);
-  assert.equal(offersGenerateGuide(local), false);
-});
-
-test("catalog cards without a saved review expose an Open target", () => {
+test("catalog rows without a saved review are not Home cards", () => {
   const overview = projectHomeOverview([], [originSnapshot([catalogItem()])]);
-  const card = overview.groups[0].cards[0];
-  assert.equal(card.reviewId, undefined);
-  assert.deepEqual(card.openTarget, {
-    provider: "azure-devops",
-    host: "dev.azure.com",
-    repository: {
-      id: "repo-1",
-      owner: "braidteam/BRAID",
-      name: "braid-connection-designer",
-      webUrl: "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer",
-    },
-    number: 1101,
-  });
-  assert.equal(homeCardAction(card, true), "queue-open");
-});
-
-test("Generate guide shows Waiting, Generating guide, and a disconnected hint", () => {
-  assert.equal(inFlightGenerateGuideCopy("queued"), "Waiting");
-  assert.equal(inFlightGenerateGuideCopy("claimed"), "Generating guide");
-  assert.equal(inFlightGenerateGuideCopy("succeeded"), undefined);
-  assert.equal(generateGuideHint(true), undefined);
-  assert.match(generateGuideHint(false) ?? "", /skill must be running/);
-  const latest = latestGenerateGuideAction("rev-1", [
-    {
-      id: "gen-1",
-      kind: "generate-guide",
-      status: "failed",
-      queuedAt: "2026-09-15T00:01:00.000Z",
-      reviewId: "rev-1",
-      error: { code: "generate-guide-failed", message: "chaptering timed out" },
-    },
-  ]);
-  assert.equal(latest?.id, "gen-1");
-  assert.equal(latest?.error?.message, "chaptering timed out");
+  assert.equal(overview.groups.length, 0);
+  assert.equal(catalogHasNewChanges([], [originSnapshot([catalogItem()])]), true);
 });
 
 test("current saved reviews remain openable while disconnected", () => {
@@ -615,15 +538,13 @@ test("current saved reviews remain openable while disconnected", () => {
     [],
   ).groups[0].cards[0];
   assert.equal(homeCardAction(saved, false), "open-saved");
-  const catalog = projectHomeOverview([], [originSnapshot([catalogItem()])]).groups[0]
-    .cards[0];
-  assert.equal(homeCardAction(catalog, false), "queue-open");
-  assert.equal(homeCardAction(catalog, true), "queue-open");
+  const catalogOnly = projectHomeOverview([], [originSnapshot([catalogItem()])]);
+  assert.equal(catalogOnly.groups.length, 0);
 });
 
 const SHA_C = "cccccccccccccccccccccccccccccccccccccccc";
 
-test("a changed source commit shows Outdated with Update Diff plus Open saved", () => {
+test("a changed saved diff marks the book yellow and the title still opens the saved review", () => {
   const item = catalogItem({ sourceCommit: SHA_C });
   const overview = projectHomeOverview(
     [
@@ -632,6 +553,7 @@ test("a changed source commit shows Outdated with Update Diff plus Open saved", 
         title: "Needs review",
         syncKey: "azure-devops:dev.azure.com:repo-1:1101",
         sourceCommit: SHA_A,
+        diffCommit: SHA_C,
         pullRequest: {
           provider: "azure-devops",
           host: "dev.azure.com",
@@ -652,10 +574,12 @@ test("a changed source commit shows Outdated with Update Diff plus Open saved", 
   );
   const card = overview.groups[0].cards[0];
   assert.equal(card.outdated, true);
+  assert.equal(card.bookStatus, "yellow");
   assert.equal(card.archived, false);
   assert.equal(card.reviewId, "saved-1101");
-  assert.equal(homeCardAction(card, true), "queue-update-diff");
-  assert.equal(homeCardAction(card, false), "queue-update-diff");
+  assert.equal(homeCardAction(card, true), "open-saved");
+  assert.equal(homeCardAction(card, false), "open-saved");
+  assert.equal(guideBookHover(card.bookStatus), "Guide stale. Ask your coding agent to update the guide");
 });
 
 test("Open saved keeps the old review and a persistent Outdated warning", () => {
@@ -665,6 +589,7 @@ test("Open saved keeps the old review and a persistent Outdated warning", () => 
     head: SHA_A,
     syncKey: "azure-devops:dev.azure.com:repo-1:1101",
     sourceCommit: SHA_A,
+    diffCommit: SHA_C,
     pullRequest: {
       provider: "azure-devops",
       host: "dev.azure.com",
@@ -717,8 +642,10 @@ function hostedSummary(
   });
 }
 
-test("a leftover hosted Other saved PR is Outdated with Update Diff when the catalog commit moved", () => {
-  const saved = hostedSummary("saved-other", 1301, "Someone else's PR");
+test("a leftover hosted Other saved PR marks the book yellow when the saved diff moved", () => {
+  const saved = hostedSummary("saved-other", 1301, "Someone else's PR", {
+    diffCommit: SHA_C,
+  });
   const overview = projectHomeOverview(
     [saved],
     [
@@ -742,17 +669,25 @@ test("a leftover hosted Other saved PR is Outdated with Update Diff when the cat
   const card = overview.groups[0].cards[0];
   assert.equal(card.reviewId, "saved-other");
   assert.equal(card.outdated, true);
+  assert.equal(card.bookStatus, "yellow");
   assert.equal(card.archived, false);
   assert.equal(card.openTarget?.number, 1301);
-  assert.equal(homeCardAction(card, true), "queue-update-diff");
-  assert.equal(homeCardAction(card, false), "queue-update-diff");
+  assert.equal(homeCardAction(card, true), "open-saved");
+  assert.equal(homeCardAction(card, false), "open-saved");
 });
 
-test("a saved merged or abandoned PR moves to collapsed Archived and stays openable", () => {
-  const merged = hostedSummary("saved-merged", 1201, "Merged work");
-  const abandoned = hostedSummary("saved-abandoned", 1202, "Abandoned work");
+test("archived cards say Merged or Closed and their book never turns yellow", () => {
+  const merged = hostedSummary("saved-merged", 1201, "Merged work", {
+    sourceCommit: SHA_A,
+  });
+  const closed = hostedSummary("saved-closed", 1202, "Closed work", {
+    sourceCommit: SHA_A,
+  });
+  const abandoned = hostedSummary("saved-abandoned", 1203, "Abandoned work", {
+    sourceCommit: SHA_A,
+  });
   const overview = projectHomeOverview(
-    [merged, abandoned],
+    [merged, closed, abandoned],
     [
       originSnapshot([
         catalogItem({
@@ -761,14 +696,26 @@ test("a saved merged or abandoned PR moves to collapsed Archived and stays opena
           webUrl:
             "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1201",
           status: "completed",
+          sourceCommit: SHA_C,
           isReviewer: true,
         }),
         catalogItem({
           number: 1202,
-          title: "Abandoned work",
+          title: "Closed work",
           webUrl:
             "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1202",
+          status: "closed",
+          sourceCommit: SHA_C,
+          isReviewer: false,
+          isAuthor: true,
+        }),
+        catalogItem({
+          number: 1203,
+          title: "Abandoned work",
+          webUrl:
+            "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1203",
           status: "abandoned",
+          sourceCommit: SHA_C,
           isReviewer: false,
           isAuthor: true,
         }),
@@ -780,23 +727,45 @@ test("a saved merged or abandoned PR moves to collapsed Archived and stays opena
       id: group.id,
       title: group.title,
       collapsed: group.collapsed,
-      titles: group.cards.map((card) => card.title),
+      cards: group.cards.map((card) => ({
+        title: card.title,
+        archivedLabel: card.archivedLabel,
+        bookStatus: card.bookStatus,
+        outdated: card.outdated,
+        action: homeCardAction(card, true),
+      })),
     })),
     [
       {
         id: "archived",
         title: "Archived",
         collapsed: true,
-        titles: ["Merged work", "Abandoned work"],
+        cards: [
+          {
+            title: "Merged work",
+            archivedLabel: "Merged",
+            bookStatus: "green",
+            outdated: false,
+            action: "open-saved",
+          },
+          {
+            title: "Closed work",
+            archivedLabel: "Closed",
+            bookStatus: "green",
+            outdated: false,
+            action: "open-saved",
+          },
+          {
+            title: "Abandoned work",
+            archivedLabel: "Closed",
+            bookStatus: "green",
+            outdated: false,
+            action: "open-saved",
+          },
+        ],
       },
     ],
   );
-  const [mergedCard, abandonedCard] = overview.groups[0].cards;
-  assert.equal(mergedCard.archived, true);
-  assert.equal(mergedCard.outdated, false);
-  assert.equal(homeCardAction(mergedCard, true), "open-saved");
-  assert.equal(abandonedCard.archived, true);
-  assert.equal(homeCardAction(abandonedCard, true), "open-saved");
 });
 
 test("a closed unguided catalog item disappears after refresh", () => {
@@ -823,23 +792,26 @@ test("a closed unguided catalog item disappears after refresh", () => {
       ]),
     ],
   );
-  assert.deepEqual(
-    overview.groups.map((group) => ({
-      id: group.id,
-      titles: group.cards.map((card) => card.title),
-    })),
-    [{ id: "review-requests", titles: ["Still open"] }],
-  );
+  assert.equal(overview.groups.length, 0);
 });
 
-test("projection covers current, outdated, archived, and removed-unguided catalog cases", () => {
-  const current = hostedSummary("saved-current", 1101, "Current work");
+test("projection covers grey, yellow, green, and archived book states", () => {
+  const current = hostedSummary("saved-current", 1101, "Current work", {
+    diffCommit: SHA_A,
+  });
   const outdated = hostedSummary("saved-outdated", 1102, "Outdated work", {
     sourceCommit: SHA_A,
+    diffCommit: SHA_C,
   });
-  const archived = hostedSummary("saved-archived", 1103, "Archived work");
+  const unchaptered = hostedSummary("saved-noguide", 1105, "Needs a guide", {
+    unchaptered: true,
+    diffCommit: SHA_A,
+  });
+  const archived = hostedSummary("saved-archived", 1103, "Archived work", {
+    diffCommit: SHA_A,
+  });
   const overview = projectHomeOverview(
-    [current, outdated, archived],
+    [current, outdated, unchaptered, archived],
     [
       originSnapshot([
         catalogItem({
@@ -857,6 +829,14 @@ test("projection covers current, outdated, archived, and removed-unguided catalo
           sourceCommit: SHA_C,
           isReviewer: false,
           isAuthor: true,
+        }),
+        catalogItem({
+          number: 1105,
+          title: "Needs a guide",
+          webUrl:
+            "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1105",
+          isReviewer: true,
+          isAuthor: false,
         }),
         catalogItem({
           number: 1103,
@@ -883,9 +863,12 @@ test("projection covers current, outdated, archived, and removed-unguided catalo
       collapsed: group.collapsed ?? false,
       cards: group.cards.map((card) => ({
         title: card.title,
+        bookStatus: card.bookStatus,
+        archivedLabel: card.archivedLabel,
         outdated: card.outdated,
         archived: card.archived,
         action: homeCardAction(card, true),
+        hover: guideBookHover(card.bookStatus),
       })),
     })),
     [
@@ -895,9 +878,21 @@ test("projection covers current, outdated, archived, and removed-unguided catalo
         cards: [
           {
             title: "Current work",
+            bookStatus: "green",
+            archivedLabel: undefined,
             outdated: false,
             archived: false,
             action: "open-saved",
+            hover: "The guide is up to date",
+          },
+          {
+            title: "Needs a guide",
+            bookStatus: "grey",
+            archivedLabel: undefined,
+            outdated: false,
+            archived: false,
+            action: "open-saved",
+            hover: "Guide missing. Ask your coding agent to generate the guide",
           },
         ],
       },
@@ -907,9 +902,12 @@ test("projection covers current, outdated, archived, and removed-unguided catalo
         cards: [
           {
             title: "Outdated work",
+            bookStatus: "yellow",
+            archivedLabel: undefined,
             outdated: true,
             archived: false,
-            action: "queue-update-diff",
+            action: "open-saved",
+            hover: "Guide stale. Ask your coding agent to update the guide",
           },
         ],
       },
@@ -919,12 +917,55 @@ test("projection covers current, outdated, archived, and removed-unguided catalo
         cards: [
           {
             title: "Archived work",
+            bookStatus: "green",
+            archivedLabel: "Merged",
             outdated: false,
             archived: true,
             action: "open-saved",
+            hover: "The guide is up to date",
           },
         ],
       },
     ],
+  );
+});
+
+test("a chaptered review with no saved diff stays green and still dots the refresh icon", () => {
+  const saved = hostedSummary("saved-current", 1101, "Current work");
+  const catalog = [originSnapshot([catalogItem({ number: 1101, sourceCommit: SHA_A })])];
+  const card = projectHomeOverview([saved], catalog).groups[0].cards[0];
+  assert.equal(card.bookStatus, "green");
+  assert.equal(catalogHasNewChanges([saved], catalog), true);
+});
+
+test("homeDiffSyncTargets covers reviewer authored rows and reviews missing a diff", () => {
+  const withDiff = hostedSummary("saved-current", 1101, "Current work", {
+    diffCommit: SHA_A,
+  });
+  const missingDiff = hostedSummary("saved-other", 1301, "Other");
+  const catalog = [
+    originSnapshot([
+      catalogItem({ number: 1101, sourceCommit: SHA_B, isReviewer: true }),
+      catalogItem({
+        number: 1106,
+        title: "New PR",
+        webUrl:
+          "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1106",
+        isReviewer: true,
+      }),
+      catalogItem({
+        number: 1301,
+        title: "Other",
+        webUrl:
+          "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1301",
+        isReviewer: false,
+        isAuthor: false,
+      }),
+    ]),
+  ];
+  const targets = homeDiffSyncTargets([withDiff, missingDiff], catalog);
+  assert.deepEqual(
+    targets.map((row) => row.number).sort((a, b) => a - b),
+    [1101, 1106, 1301],
   );
 });

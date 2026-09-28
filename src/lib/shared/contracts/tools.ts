@@ -7,7 +7,7 @@ import {
 } from "./catalog.ts";
 import { GuideV1 } from "./guide.ts";
 import { CodeReviewOutcome, StoredOutcome } from "./outcomes.ts";
-import { ListReviewsOutput } from "./persistence.ts";
+import { ListReviewsOutput, ReviewDiff } from "./persistence.ts";
 import { isAzureDevOpsHost, isGitHubHost } from "./provenance.ts";
 
 // Transport-only MCP tool input and output declarations.
@@ -120,6 +120,7 @@ export const tools = {
       .object({
         guide: GuideV1,
         outcomes: z.array(StoredOutcome),
+        diff: ReviewDiff.optional(),
       })
       .strict(),
   },

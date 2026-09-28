@@ -5,7 +5,7 @@ import { GUIDE_CHAPTERED, GUIDE_UNCHAPTERED } from "./fixture";
 
 test("chaptered Guide SSR includes order, why, progress, pills, hunks, and selected file", () => {
   const { body } = render(GuideView, {
-    props: { guide: GUIDE_CHAPTERED, reviewId: "rev-1" },
+    props: { guide: GUIDE_CHAPTERED },
   });
   const coreAt = body.indexOf('id="section-core"');
   const testsAt = body.indexOf('id="section-tests"');
@@ -23,12 +23,12 @@ test("chaptered Guide SSR includes order, why, progress, pills, hunks, and selec
   expect(body).toContain("maps = list_maps(model.workflow_id)");
   expect(body).toContain('class="file stage"');
   expect(body).toContain("guide-toc");
-  expect(body).not.toContain("Generate a reading-order guide when you want one.");
+  expect(body).not.toContain("Ask your coding agent to generate a reading-order guide.");
 });
 
 test("omitted Guide SSR lists paths without a fake file walkthrough", () => {
   const { body } = render(GuideView, {
-    props: { guide: GUIDE_CHAPTERED, reviewId: "rev-1" },
+    props: { guide: GUIDE_CHAPTERED },
   });
   expect(body).toContain("Not shown as diffs.");
   expect(body).toContain("docs/diagram.png");
@@ -37,14 +37,14 @@ test("omitted Guide SSR lists paths without a fake file walkthrough", () => {
   expect(body).not.toContain('data-path="docs/diagram.png"');
 });
 
-test("unchaptered Guide SSR offers Generate Guide and never a walkthrough", () => {
+test("unchaptered Guide SSR shows coding-agent copy and never a walkthrough", () => {
   const { body } = render(GuideView, {
-    props: { guide: GUIDE_UNCHAPTERED, reviewId: "rev-2", agentConnected: true },
+    props: { guide: GUIDE_UNCHAPTERED },
   });
-  expect(body).toContain("<h2>Generate guide</h2>");
-  expect(body).toContain("This review is a Diff. Generate a reading-order guide when you want one.");
-  expect(body).toContain("Generate guide");
-  expect(body).toContain('data-queue-generate="rev-2"');
+  expect(body).toContain("<h2>No guide</h2>");
+  expect(body).toContain("Ask your coding agent to generate a reading-order guide.");
+  expect(body).not.toContain("Generate guide");
+  expect(body).not.toContain("data-queue-generate");
   expect(body).not.toContain('id="section-unchaptered"');
   expect(body).not.toContain("Raw diff until a reading-order guide is generated.");
   expect(body).not.toContain('class="guide-section"');

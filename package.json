@@ -13,6 +13,7 @@
     "check:svelte": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.svelte.json"
   },
   "dependencies": {
+    "@lucide/svelte": "^1.48.0",
     "@modelcontextprotocol/sdk": "^1.18.2",
     "@sveltejs/adapter-node": "^5.5.4",
     "@sveltejs/kit": "^2.65.1",

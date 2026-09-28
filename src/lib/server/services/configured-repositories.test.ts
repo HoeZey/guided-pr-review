@@ -26,6 +26,7 @@ import { createHttpHandlers } from "../http.ts";
 import { createAppServices } from "./app.ts";
 import {
   ConfiguredRepositoryError,
+  createCliHostRepositoryLister,
   createConfiguredRepositoryService,
   parseGitRemote,
   readGitOriginUrl,
@@ -607,6 +608,7 @@ function jsonService(options: { origin?: string }) {
 test("HTTP repository handlers use the service without agent actions", async () => {
   await withStore(async () => {
     const pair = readers([ADO, GITHUB]);
+    let adoScope: { organization: string; project: string } | undefined;
     const http = createHttpHandlers(
       createAppServices(jsonRepositories, {
         configured: jsonConfiguredRepositories,
@@ -614,12 +616,57 @@ test("HTTP repository handlers use the service without agent actions", async () 
         originRemoteUrl: async () =>
           "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer",
         readers: pair,
+        hostList: {
+          listGithub: async () => [
+            {
+              provider: "github",
+              host: "github.com",
+              owner: "octocat",
+              name: "Hello-World",
+              webUrl: "https://github.com/octocat/Hello-World",
+            },
+          ],
+          listAdo: async (scope?: { organization: string; project: string }) => {
+            adoScope = scope;
+            return [
+              {
+                provider: "azure-devops",
+                host: "dev.azure.com",
+                owner: "braidteam/BRAID",
+                name: "braid-connection-designer",
+                webUrl: ADO.webUrl,
+              },
+            ];
+          },
+        },
       }),
     );
     const listed = await http.repositories.GET();
     assert.equal(listed.status, 200);
     const listedBody = (await listed.json()) as { repositories: ConfiguredRepositoryRecord[] };
     assert.deepEqual(listedBody.repositories, [record(ADO, true)]);
+
+    const searched = await http.repositories.SEARCH({
+      request: new Request("http://localhost/api/repositories/search?q=Hello"),
+      params: {},
+    });
+    assert.equal(searched.status, 200);
+    const searchedBody = (await searched.json()) as {
+      repositories: { provider: string; owner: string; name: string }[];
+    };
+    assert.deepEqual(
+      searchedBody.repositories.map((row) => `${row.provider}:${row.owner}/${row.name}`),
+      ["github:octocat/Hello-World"],
+    );
+    assert.equal(adoScope, undefined);
+    const scoped = await http.repositories.SEARCH({
+      request: new Request(
+        "http://localhost/api/repositories/search?organization=braidteam&project=BRAID",
+      ),
+      params: {},
+    });
+    assert.equal(scoped.status, 200);
+    assert.deepEqual(adoScope, { organization: "braidteam", project: "BRAID" });
 
     const created = await http.repositories.POST({
       request: new Request("http://localhost/api/repositories", {
@@ -709,3 +756,198 @@ test("listing origin after same-process replace_catalog does not report duplicat
   });
 });
 
+
+test("search lists repos from fake gh and az scoped lists and filters by query", async () => {
+  const repos = createConfiguredRepositoryService({
+    configured: memoryConfigured([]),
+    collectionPresent: async () => true,
+    originRemoteUrl: async () => undefined,
+    readers: readers([ADO, GITHUB]),
+    hostList: {
+      listGithub: async () => [
+        {
+          provider: "github",
+          host: "github.com",
+          owner: "octocat",
+          name: "Hello-World",
+          webUrl: "https://github.com/octocat/Hello-World",
+        },
+        {
+          provider: "github",
+          host: "github.com",
+          owner: "octocat",
+          name: "Spoon-Knife",
+          webUrl: "https://github.com/octocat/Spoon-Knife",
+        },
+      ],
+      listAdo: async () => [
+        {
+          provider: "azure-devops",
+          host: "dev.azure.com",
+          owner: "braidteam/BRAID",
+          name: "braid-connection-designer",
+          webUrl: "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer",
+        },
+        {
+          provider: "azure-devops",
+          host: "dev.azure.com",
+          owner: "braidteam/BRAID",
+          name: "braid-frontend",
+          webUrl: "https://dev.azure.com/braidteam/BRAID/_git/braid-frontend",
+        },
+      ],
+    },
+  });
+  const all = await repos.search();
+  assert.equal(all.error, undefined);
+  assert.equal(all.repositories.length, 4);
+  const filtered = await repos.search("braid-front");
+  assert.deepEqual(
+    filtered.repositories.map((row) => `${row.owner}/${row.name}`),
+    ["braidteam/BRAID/braid-frontend"],
+  );
+  const github = await repos.search("hello");
+  assert.deepEqual(
+    github.repositories.map((row) => `${row.owner}/${row.name}`),
+    ["octocat/Hello-World"],
+  );
+});
+
+test("failed gh or az list leaves configured repositories and returns search error", async () => {
+  const configured = memoryConfigured([record(ADO, true)]);
+  const repos = createConfiguredRepositoryService({
+    configured,
+    collectionPresent: async () => true,
+    originRemoteUrl: async () => undefined,
+    readers: readers([ADO, GITHUB]),
+    hostList: {
+      listGithub: async () => {
+        throw new Error("gh list failed");
+      },
+      listAdo: async () => {
+        throw new Error("az list failed");
+      },
+    },
+  });
+  const listed = await repos.list();
+  assert.deepEqual(listed.repositories, [record(ADO, true)]);
+  assert.equal(listed.error, undefined);
+  const searched = await repos.search("braid");
+  assert.deepEqual(searched.repositories, []);
+  assert.equal(searched.error?.code, "unavailable");
+  assert.match(searched.error?.message ?? "", /list failed/);
+});
+
+test("createConfiguredRepositoryService search uses createCliHostRepositoryLister over fake gh and az", async () => {
+  let configureCalls = 0;
+  const runner = {
+    async run(request: { argv: readonly string[] }) {
+      const argv = request.argv;
+      if (argv[0] === "gh" && argv[1] === "repo" && argv[2] === "list") {
+        return {
+          code: 0,
+          stdout: JSON.stringify([
+            {
+              name: "Hello-World",
+              owner: { login: "octocat" },
+              url: "https://github.com/octocat/Hello-World",
+              nameWithOwner: "octocat/Hello-World",
+            },
+          ]),
+          stderr: "",
+          timedOut: false,
+          commandMissing: false,
+        };
+      }
+      if (argv[0] === "az" && argv[1] === "devops" && argv[2] === "configure") {
+        configureCalls += 1;
+        return {
+          code: 0,
+          stdout: "[defaults]\norganization = https://dev.azure.com/braidteam\nproject = BRAID\n",
+          stderr: "",
+          timedOut: false,
+          commandMissing: false,
+        };
+      }
+      if (argv[0] === "az" && argv[1] === "repos" && argv[2] === "list") {
+        const organization = argv[argv.indexOf("--organization") + 1];
+        const project = argv[argv.indexOf("--project") + 1];
+        if (organization === "https://dev.azure.com/contoso") {
+          assert.equal(project, "Widgets");
+          return {
+            code: 0,
+            stdout: JSON.stringify([
+              {
+                name: "widget-api",
+                webUrl: "https://dev.azure.com/contoso/Widgets/_git/widget-api",
+                project: { name: "Widgets" },
+              },
+            ]),
+            stderr: "",
+            timedOut: false,
+            commandMissing: false,
+          };
+        }
+        assert.equal(organization, "https://dev.azure.com/braidteam");
+        assert.equal(project, "BRAID");
+        return {
+          code: 0,
+          stdout: JSON.stringify([
+            {
+              name: "braid-connection-designer",
+              webUrl: "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer",
+              project: { name: "BRAID" },
+            },
+          ]),
+          stderr: "",
+          timedOut: false,
+          commandMissing: false,
+        };
+      }
+      return {
+        code: 1,
+        stdout: "",
+        stderr: `unexpected ${argv.join(" ")}`,
+        timedOut: false,
+        commandMissing: false,
+      };
+    },
+  };
+  const repos = createConfiguredRepositoryService({
+    configured: memoryConfigured([]),
+    collectionPresent: async () => true,
+    originRemoteUrl: async () => undefined,
+    readers: readers([ADO, GITHUB]),
+    hostList: createCliHostRepositoryLister(runner),
+  });
+  const searched = await repos.search("braid");
+  assert.equal(searched.error, undefined);
+  assert.deepEqual(
+    searched.repositories.map((row) => ({
+      provider: row.provider,
+      owner: row.owner,
+      name: row.name,
+    })),
+    [
+      {
+        provider: "azure-devops",
+        owner: "braidteam/BRAID",
+        name: "braid-connection-designer",
+      },
+    ],
+  );
+  const github = await repos.search("Hello");
+  assert.deepEqual(
+    github.repositories.map((row) => `${row.provider}:${row.owner}/${row.name}`),
+    ["github:octocat/Hello-World"],
+  );
+  const beforeExplicit = configureCalls;
+  const named = await repos.search(undefined, { organization: "contoso", project: "Widgets" });
+  assert.equal(configureCalls, beforeExplicit);
+  assert.deepEqual(
+    named.repositories
+      .filter((row) => row.provider === "azure-devops")
+      .map((row) => `${row.owner}/${row.name}`),
+    ["contoso/Widgets/widget-api"],
+  );
+});

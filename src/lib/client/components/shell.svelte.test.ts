@@ -75,10 +75,10 @@ test("fake review data renders tabs internally without fetch or route changes", 
 
   const diffTab = root.querySelector('[role="tab"][data-tab="diff"]') as HTMLButtonElement;
   const discussionTab = root.querySelector('[role="tab"][data-tab="discussion"]') as HTMLButtonElement;
-  expect(root.querySelector('[role="tablist"]')?.querySelectorAll('[role="tab"]').length).toBe(4);
+  expect(root.querySelector('[role="tablist"]')?.querySelectorAll('[role="tab"]').length).toBe(3);
   expect(root.querySelector('[role="tab"][data-tab="guide"]')?.textContent).toContain("Guide");
   expect(diffTab?.textContent).toContain("Diff");
-  expect(root.querySelector('[role="tab"][data-tab="review"]')?.textContent).toContain("Code Review");
+  expect(root.querySelector('[role="tab"][data-tab="review"]')).toBeNull();
   expect(discussionTab).toBeTruthy();
   expect(discussionTab.getAttribute("aria-selected")).toBe("false");
   expect(discussionTab.textContent).toContain("Discussion");

@@ -16,9 +16,6 @@
     adoptReviewPage,
     bindReview,
     currentReviewPage,
-    generateGuidePending,
-    queueGenerateGuide,
-    refreshCurrentReview,
     session,
     setTab,
   } from "$lib/client/state/review.svelte";
@@ -78,22 +75,12 @@
     });
   });
 
-  $effect(() => {
-    if (typeof window === "undefined") return;
-    if (data.kind !== "review" || data.status !== "ok") return;
-    const page = currentReviewPage(data);
-    if (!generateGuidePending(page)) return;
-    const id = setInterval(() => void refreshCurrentReview(), 2000);
-    return () => clearInterval(id);
-  });
-
   onMount(() => {
     adoptLegacyTab();
     if (data.kind !== "review" || data.status !== "ok") return;
     if (data.activeId != null && data.activeId !== data.reviewId) {
       void fetchJson(`/api/reviews/${data.reviewId}/active`, { method: "POST" }).catch(() => undefined);
     }
-    void refreshCurrentReview();
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
       const page = session.page;
@@ -134,7 +121,6 @@
     { id: "diff", label: "Diff" },
     { id: "guide", label: "Guide" },
     { id: "discussion", label: "Discussion" },
-    { id: "review", label: "Code Review" },
   ];
   const discussionCount = $derived(projectDiscussionThreads(threadSession.threads).length);
 </script>
@@ -248,12 +234,14 @@
             {item.label}{item.id === "discussion" && discussionCount ? ` (${discussionCount})` : ""}
           </button>
         {/each}
+        {#if threadSession.loading && threadSession.threads.length === 0 && !threadSession.error}
+          <p class="tab-loading" role="status">
+            Loading comments<span class="tab-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>
+          </p>
+        {/if}
       </div>
       {#if review?.outdatedWarning}
         <div class="review-banner" role="status">{review.outdatedWarning}</div>
-      {/if}
-      {#if threadSession.loading && threadSession.threads.length === 0 && !threadSession.error}
-        <div class="review-banner" role="status">Loading comments…</div>
       {/if}
       {#if threadSession.error}
         <div class="review-banner" role="alert">
@@ -273,13 +261,9 @@
     {#if review.guide}
       <GuideView
         guide={review.guide}
-        reviewId={review.reviewId}
-        agentConnected={review.agentConnected}
-        actions={review.actions}
         hidden={tab !== "guide"}
-        onQueue={queueGenerateGuide}
       />
-      <DiffView guide={review.guide} visible={tab === "diff"} />
+      <DiffView guide={review.guide} files={review.diff?.files} visible={tab === "diff"} />
     {/if}
     {#if tab === "review"}
       <nav aria-label="Code Review">

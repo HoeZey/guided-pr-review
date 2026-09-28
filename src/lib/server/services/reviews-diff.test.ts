@@ -90,6 +90,7 @@ function emptyList() {
       head: string;
       syncKey?: string;
       sourceCommit?: string;
+      diffCommit?: string;
       unchaptered?: boolean;
     }[],
     activeId: null,
@@ -98,6 +99,13 @@ function emptyList() {
     actions: [],
     agentConnected: false,
   };
+}
+
+function asUpsert(input: unknown): { guide: GuideV1; diff?: { sourceCommit: string; targetCommit: string; files: FileChange[] } } {
+  if (input && typeof input === "object" && "guide" in input) {
+    return input as { guide: GuideV1; diff?: { sourceCommit: string; targetCommit: string; files: FileChange[] } };
+  }
+  return { guide: input as GuideV1 };
 }
 
 function targetOf(repo: ProviderRepositoryIdentity, number: number): OpenActionTarget {
@@ -260,6 +268,7 @@ for (const row of [
     const target = targetOf(row.repo, row.number);
     const metadata = metaOf(row.repo, row.number);
     let upserted: GuideV1 | undefined;
+    let savedDiff: { sourceCommit: string; targetCommit: string; files: FileChange[] } | undefined;
     const fetches: Array<{ identity: GitCacheIdentity; commits: readonly string[]; cloneUrl?: string }> = [];
     const git = recordingGit({
       onFetch: (identity, commits, cloneUrl) => {
@@ -270,7 +279,9 @@ for (const row of [
       repos: repos({
         listReviews: async () => emptyList(),
         upsertReview: async (input) => {
-          upserted = input as GuideV1;
+          const parsed = asUpsert(input);
+          upserted = parsed.guide;
+          savedDiff = parsed.diff;
           return { id: "r1" };
         },
       }),
@@ -291,6 +302,9 @@ for (const row of [
     assert.equal(upserted?.source?.sourceCommit, SOURCE);
     assert.equal(upserted?.source?.targetCommit, TARGET);
     assert.equal(upserted?.source?.providerContext.kind, row.repo.provider);
+    assert.equal(savedDiff?.sourceCommit, SOURCE);
+    assert.equal(savedDiff?.targetCommit, TARGET);
+    assert.deepEqual(savedDiff?.files, FILES);
     assert.deepEqual(fetches[0]?.commits, [SOURCE, TARGET]);
     assert.equal(fetches[0]?.cloneUrl, row.repo.cloneUrl);
     assert.equal(fetches[0]?.identity.repositoryId, row.repo.id);
@@ -298,7 +312,7 @@ for (const row of [
   });
 }
 
-test("updateDiff skips git and upsert when the saved source commit is current", async () => {
+test("updateDiff skips git and upsert when the saved diff commit is current", async () => {
   const target = targetOf(ADO_REPO, 1101);
   const git = recordingGit();
   let upserts = 0;
@@ -315,6 +329,7 @@ test("updateDiff skips git and upsert when the saved source commit is current", 
             head: SOURCE,
             syncKey: pullRequestSyncKey(target),
             sourceCommit: SOURCE,
+            diffCommit: SOURCE,
           },
         ],
       }),
@@ -332,6 +347,131 @@ test("updateDiff skips git and upsert when the saved source commit is current", 
   assert.equal(git.fetches, 0);
   assert.equal(git.diffs, 0);
   assert.equal(upserts, 0);
+});
+
+test("openDiff of a saved review never calls the host or git", async () => {
+  const target = targetOf(ADO_REPO, 1101);
+  const git = recordingGit();
+  let gets = 0;
+  const reviews = service({
+    repos: repos({
+      listReviews: async () => ({
+        ...emptyList(),
+        reviews: [
+          {
+            id: "saved-1",
+            title: "PR 1101",
+            addedAt: "t",
+            base: TARGET,
+            head: SOURCE,
+            syncKey: pullRequestSyncKey(target),
+            sourceCommit: SOURCE,
+          },
+        ],
+      }),
+      getReview: async () => {
+        gets += 1;
+        throw new Error("openDiff must not load the full review");
+      },
+      upsertReview: async () => {
+        throw new Error("openDiff must not upsert");
+      },
+    }),
+    rows: [],
+    git,
+  });
+  const result = await reviews.openDiff(target);
+  assert.equal(result.reviewId, "saved-1");
+  assert.equal(result.skipped, true);
+  assert.equal(git.fetches, 0);
+  assert.equal(git.diffs, 0);
+  assert.equal(gets, 0);
+});
+
+test("updateDiff of a chaptered review writes diff only and keeps the guide", async () => {
+  const target = targetOf(ADO_REPO, 1101);
+  const chaptered = {
+    version: 1 as const,
+    title: "Chaptered",
+    base: TARGET,
+    head: SOURCE,
+    unchaptered: undefined,
+    chapters: [
+      {
+        id: "core",
+        kind: "core" as const,
+        title: "Core",
+        why: "Why",
+        files: FILES,
+      },
+    ],
+    source: {
+      kind: "pull-request" as const,
+      provider: "azure-devops" as const,
+      host: "dev.azure.com",
+      repository: {
+        id: ADO_REPO.id,
+        owner: ADO_REPO.owner,
+        name: ADO_REPO.name,
+        webUrl: ADO_REPO.webUrl,
+      },
+      number: 1101,
+      webUrl: `${ADO_REPO.webUrl}/pullrequest/1101`,
+      sourceRef: "refs/heads/feature/review-me",
+      targetRef: "refs/heads/develop",
+      sourceCommit: SOURCE,
+      targetCommit: TARGET,
+      providerContext: {
+        kind: "azure-devops" as const,
+        project: "BRAID",
+        firstComparingIteration: 0,
+        secondComparingIteration: 1,
+        changes: {},
+      },
+    },
+  };
+  let upserted: ReturnType<typeof asUpsert> | undefined;
+  const reviews = service({
+    repos: repos({
+      listReviews: async () => ({
+        ...emptyList(),
+        reviews: [
+          {
+            id: "saved-1",
+            title: "Chaptered",
+            addedAt: "t",
+            base: TARGET,
+            head: SOURCE,
+            syncKey: pullRequestSyncKey(target),
+            sourceCommit: SOURCE,
+          },
+        ],
+      }),
+      getReview: async () => ({ guide: chaptered as GuideV1, outcomes: [] }),
+      upsertReview: async (input) => {
+        upserted = asUpsert(input);
+        return { id: "saved-1" };
+      },
+    }),
+    rows: [metaOf(ADO_REPO, 1101, { sourceCommit: SOURCE_B })],
+    git: recordingGit({
+      files: [
+        {
+          path: "src/newer.ts",
+          language: "typescript",
+          hunks: [{ lines: [{ type: "added", content: "export const n = 2;", newLine: 1 }] }],
+        },
+      ],
+    }),
+  });
+  const result = await reviews.updateDiff(target);
+  assert.equal(result.reviewId, "saved-1");
+  assert.equal(result.skipped, false);
+  assert.equal(upserted?.guide.title, "Chaptered");
+  assert.equal(upserted?.guide.unchaptered, undefined);
+  assert.equal(upserted?.guide.chapters[0]?.id, "core");
+  assert.equal(upserted?.diff?.sourceCommit, SOURCE_B);
+  assert.equal(upserted?.diff?.files[0]?.path, "src/newer.ts");
 });
 
 test("host, cache, parse, and empty-diff failures never call upsert", async () => {
@@ -418,7 +558,7 @@ test("openDiff builds a complete Diff from a local git cache fixture without a h
     repos: repos({
       listReviews: async () => emptyList(),
       upsertReview: async (input) => {
-        upserted = input as GuideV1;
+        upserted = asUpsert(input).guide;
         return { id: "fixture-1" };
       },
     }),
@@ -558,7 +698,7 @@ test("openDiff stores ADO iteration and change-tracking ids returned by REST", a
     repos({
       listReviews: async () => emptyList(),
       upsertReview: async (input) => {
-        upserted = input as GuideV1;
+        upserted = asUpsert(input).guide;
         return { id: "r-ado" };
       },
     }),
@@ -645,7 +785,7 @@ test("createAppServices openDiff keeps ADO comment context through pullRequestRe
     repos({
       listReviews: async () => emptyList(),
       upsertReview: async (input) => {
-        upserted = input as GuideV1;
+        upserted = asUpsert(input).guide;
         return { id: "r-ado" };
       },
     }),

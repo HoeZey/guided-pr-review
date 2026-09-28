@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CatalogPullRequest, CatalogSnapshot } from "../../../shared/contracts/catalog.ts";
 import { applyCatalogReplacement } from "../../../shared/domain/catalog.ts";
-import { projectHomeOverview } from "../../../shared/domain/overview.ts";
+import { catalogHasNewChanges, projectHomeOverview } from "../../../shared/domain/overview.ts";
 import { createCliCredentialSource } from "../../auth/cli-credentials.ts";
 import type {
   CommandRunRequest,
@@ -332,16 +332,8 @@ test("listPullRequests paginates active PRs and classifies author versus request
     pullRequests: catalogItems,
   });
   const overview = projectHomeOverview([], [snapshot]);
-  assert.deepEqual(
-    overview.groups.map((group) => ({
-      id: group.id,
-      titles: group.cards.map((card) => card.title),
-    })),
-    [
-      { id: "review-requests", titles: ["Needs review", "Mine and assigned"] },
-      { id: "authored-by-me", titles: ["My draft"] },
-    ],
-  );
+  assert.equal(overview.groups.length, 0);
+  assert.equal(catalogHasNewChanges([], [snapshot]), true);
   assert.equal(dumpPublic(listed).includes(GH_TOKEN), false);
   assert.equal(
     applyCatalogReplacement([], [], [], {

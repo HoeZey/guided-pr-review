@@ -20,6 +20,7 @@ export const appServices = createAppServices(jsonRepositories, {
   configured: jsonConfiguredRepositories,
   collectionPresent: async () => configuredRepositoriesCollectionPresent(),
   originRemoteUrl: () => readGitOriginUrl(runner),
+  commandRunner: runner,
   readers: {
     ado: createAdoRestAdapter({ credentials }),
     github: createGithubProvider({ credentials }),

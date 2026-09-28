@@ -1,7 +1,7 @@
 import type { StoredAction, CatalogSnapshot, ConfiguredRepository } from "./contracts/catalog";
 import type { GuideV1 } from "./contracts/guide";
 import type { StoredOutcome } from "./contracts/outcomes";
-import type { ReviewSummary } from "./contracts/persistence";
+import type { ReviewDiff, ReviewSummary } from "./contracts/persistence";
 
 export type PageStatus = "ok" | "loading" | "error";
 
@@ -10,7 +10,8 @@ export type ReviewTab = "guide" | "diff" | "review" | "discussion";
 export const TAB_COOKIE = "guided-pr-review-tab";
 
 export function parseStoredTab(raw: string | null | undefined): ReviewTab | null {
-  if (raw === "guide" || raw === "diff" || raw === "review" || raw === "discussion") return raw;
+  if (raw === "guide" || raw === "diff" || raw === "discussion") return raw;
+  if (raw === "review") return "guide";
   if (raw === "comments") return "discussion";
   return null;
 }
@@ -41,4 +42,5 @@ export type ReviewPageData = {
   tab?: ReviewTab;
   activeId?: string | null;
   outdatedWarning?: string;
+  diff?: ReviewDiff;
 };

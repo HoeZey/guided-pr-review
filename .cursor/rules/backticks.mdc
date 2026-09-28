@@ -1,0 +1,15 @@
+---
+description: No inline backticks in docs or docstrings.
+alwaysApply: true
+---
+
+# No inline backticks
+
+Do not wrap identifiers, extensions, paths, or examples in backticks in
+docstrings, comments, or markdown prose.
+
+- Wrong: ``supported_file_types``, `supported_file_types`, ``.csv``
+- Right: supported_file_types, .csv, [".csv"]
+
+Fenced code blocks (triple backticks) are the only backticks allowed.
+Copying an existing docstring is not an exception. Rewrite the wrap.

@@ -2,10 +2,13 @@ import {
   type CatalogPullRequest,
   type CatalogSnapshot,
   type OpenActionTarget,
-  type StoredAction,
 } from "../contracts/catalog.ts";
 import type { ReviewSummary } from "../contracts/persistence.ts";
 import { pullRequestSyncKey } from "../contracts/provenance.ts";
+
+export type GuideBookStatus = "grey" | "yellow" | "green";
+
+export type ArchivedCardLabel = "Merged" | "Closed";
 
 export type HomeCard = {
   id: string;
@@ -17,10 +20,12 @@ export type HomeCard = {
   hasGuide: boolean;
   outdated: boolean;
   archived: boolean;
+  bookStatus: GuideBookStatus;
+  archivedLabel?: ArchivedCardLabel;
   openTarget?: OpenActionTarget;
 };
 
-export type HomeCardAction = "open-saved" | "queue-open" | "queue-update-diff" | "disabled-host";
+export type HomeCardAction = "open-saved" | "queue-open" | "disabled-host";
 
 export type HomeGroupId =
   | "review-requests"
@@ -58,15 +63,8 @@ export function guidePresentsWalkthrough(guide: { unchaptered?: boolean }): bool
   return !guide.unchaptered;
 }
 
-export const GENERATE_GUIDE_DISCONNECTED_HINT =
-  "The guided-review skill must be running to generate a reading-order guide.";
-
 export const OUTDATED_WARNING =
   "This saved review is outdated. The pull request has new commits.";
-
-export function generateGuideHint(agentConnected: boolean): string | undefined {
-  return agentConnected ? undefined : GENERATE_GUIDE_DISCONNECTED_HINT;
-}
 
 export function reviewOutdatedWarning(
   review: Pick<ReviewSummary, "syncKey" | "sourceCommit">,
@@ -80,41 +78,19 @@ export function reviewOutdatedWarning(
     : undefined;
 }
 
-export function inFlightGenerateGuideCopy(
-  status: StoredAction["status"],
-): "Waiting" | "Generating guide" | undefined {
-  if (status === "queued") return "Waiting";
-  if (status === "claimed") return "Generating guide";
-  return undefined;
-}
-
-export function latestGenerateGuideAction(
-  reviewId: string,
-  actions: readonly StoredAction[],
-): StoredAction | undefined {
-  return [...actions]
-    .reverse()
-    .find(
-      (action) => action.kind === "generate-guide" && action.reviewId === reviewId,
-    );
-}
-
 export function homeCardAction(
   card: HomeCard,
   _agentConnected: boolean,
 ): HomeCardAction {
-  if (card.outdated && card.reviewId && card.openTarget && !card.archived) {
-    return "queue-update-diff";
-  }
   if (card.reviewId) return "open-saved";
   if (card.openTarget) return "queue-open";
   return "disabled-host";
 }
 
-export function offersGenerateGuide(
-  card: Pick<HomeCard, "reviewId" | "hasGuide" | "repository">,
-): boolean {
-  return Boolean(card.reviewId) && !card.hasGuide && Boolean(card.repository);
+export function guideBookHover(status: GuideBookStatus): string {
+  if (status === "grey") return "Guide missing. Ask your coding agent to generate the guide";
+  if (status === "yellow") return "Guide stale. Ask your coding agent to update the guide";
+  return "The guide is up to date";
 }
 
 export function resolveOverviewView(
@@ -131,22 +107,26 @@ export function resolveOverviewView(
 }
 
 export function projectHomeCards(reviews: readonly ReviewSummary[]): HomeCard[] {
-  return reviews.map((review) => ({
-    id: review.id,
-    title: review.title,
-    range: homeRange(review),
-    repository: review.pullRequest
-      ? {
-          owner: review.pullRequest.repository.owner,
-          name: review.pullRequest.repository.name,
-        }
-      : undefined,
-    webUrl: review.pullRequest?.webUrl,
-    reviewId: review.id,
-    hasGuide: !review.unchaptered,
-    outdated: false,
-    archived: false,
-  }));
+  return reviews.map((review) => {
+    const hasGuide = !review.unchaptered;
+    return {
+      id: review.id,
+      title: review.title,
+      range: homeRange(review),
+      repository: review.pullRequest
+        ? {
+            owner: review.pullRequest.repository.owner,
+            name: review.pullRequest.repository.name,
+          }
+        : undefined,
+      webUrl: review.pullRequest?.webUrl,
+      reviewId: review.id,
+      hasGuide,
+      outdated: false,
+      archived: false,
+      bookStatus: guideBookStatus({ hasGuide, archived: false }),
+    };
+  });
 }
 
 const GROUP_TITLE: Record<HomeGroupId, string> = {
@@ -165,7 +145,11 @@ function catalogCard(
   const syncKey = pullRequestSyncKey(item);
   const review = reviews.find((row) => row.syncKey === syncKey);
   const archived = Boolean(extra?.archived);
-  const outdated = !archived && sourceCommitMoved(review?.sourceCommit, item.sourceCommit);
+  const hasGuide = Boolean(review?.id) && !review?.unchaptered;
+  const outdated =
+    !archived &&
+    Boolean(review?.diffCommit) &&
+    sourceCommitMoved(review?.sourceCommit, review!.diffCommit!);
   return {
     id: review?.id ?? syncKey,
     title: item.title,
@@ -176,9 +160,16 @@ function catalogCard(
     },
     webUrl: item.webUrl,
     reviewId: review?.id,
-    hasGuide: Boolean(review?.id) && !review?.unchaptered,
+    hasGuide,
     outdated,
     archived,
+    bookStatus: guideBookStatus({
+      hasGuide,
+      archived,
+      reviewCommit: review?.sourceCommit,
+      diffCommit: review?.diffCommit,
+    }),
+    ...(archived ? { archivedLabel: archivedCardLabel(item.status) } : {}),
     openTarget: {
       provider: item.provider,
       host: item.host,
@@ -186,6 +177,26 @@ function catalogCard(
       number: item.number,
     },
   };
+}
+
+function guideBookStatus(opts: {
+  hasGuide: boolean;
+  archived: boolean;
+  reviewCommit?: string;
+  diffCommit?: string;
+}): GuideBookStatus {
+  if (!opts.hasGuide) return "grey";
+  if (opts.archived) return "green";
+  if (opts.diffCommit && sourceCommitMoved(opts.reviewCommit, opts.diffCommit)) {
+    return "yellow";
+  }
+  return "green";
+}
+
+function archivedCardLabel(
+  status: CatalogPullRequest["status"],
+): ArchivedCardLabel {
+  return status === "completed" ? "Merged" : "Closed";
 }
 
 function isReviewRequest(item: CatalogPullRequest): boolean {
@@ -218,6 +229,75 @@ function sourceCommitMoved(
   return Boolean(reviewCommit && reviewCommit.toLowerCase() !== catalogCommit.toLowerCase());
 }
 
+/** True when an active reviewer or authored catalog PR has no saved review, no saved diff, or a newer source commit than the saved diff. */
+export function catalogHasNewChanges(
+  reviews: readonly ReviewSummary[],
+  catalog: readonly CatalogSnapshot[],
+): boolean {
+  for (const snapshot of catalog) {
+    for (const item of snapshot.pullRequests) {
+      if (!(isReviewRequest(item) || isAuthoredByMe(item))) continue;
+      const key = pullRequestSyncKey(item);
+      const review = reviews.find((row) => row.syncKey === key);
+      if (!review) return true;
+      if (!review.diffCommit) return true;
+      if (sourceCommitMoved(review.diffCommit, item.sourceCommit)) return true;
+    }
+  }
+  for (const review of reviews) {
+    if (!review.pullRequest || review.diffCommit) continue;
+    const item = review.syncKey ? catalogItemByKey(catalog, review.syncKey) : undefined;
+    if (item && isClosed(item)) continue;
+    if (item && (isReviewRequest(item) || isAuthoredByMe(item))) continue;
+    return true;
+  }
+  return false;
+}
+
+/** Open targets the refresh click should syncDiff for. */
+export function homeDiffSyncTargets(
+  reviews: readonly ReviewSummary[],
+  catalog: readonly CatalogSnapshot[],
+): OpenActionTarget[] {
+  const seen = new Set<string>();
+  const targets: OpenActionTarget[] = [];
+  const push = (target: OpenActionTarget) => {
+    const key = pullRequestSyncKey(target);
+    if (seen.has(key)) return;
+    seen.add(key);
+    targets.push(target);
+  };
+  for (const snapshot of catalog) {
+    for (const item of snapshot.pullRequests) {
+      if (!(isReviewRequest(item) || isAuthoredByMe(item))) continue;
+      push({
+        provider: item.provider,
+        host: item.host,
+        repository: item.repository,
+        number: item.number,
+      });
+    }
+  }
+  for (const review of reviews) {
+    if (!review.pullRequest || review.diffCommit) continue;
+    const item = review.syncKey ? catalogItemByKey(catalog, review.syncKey) : undefined;
+    if (item && isClosed(item)) continue;
+    const pr = review.pullRequest;
+    push({
+      provider: pr.provider,
+      host: pr.host,
+      repository: {
+        id: pr.repository.id,
+        owner: pr.repository.owner,
+        name: pr.repository.name,
+        webUrl: pr.webUrl,
+      },
+      number: pr.number,
+    });
+  }
+  return targets;
+}
+
 export function projectHomeOverview(
   reviews: readonly ReviewSummary[],
   catalog: readonly CatalogSnapshot[],
@@ -237,6 +317,8 @@ export function projectHomeOverview(
         }
         continue;
       }
+      const review = reviews.find((row) => row.syncKey === key);
+      if (!review) continue;
       if (isReviewRequest(item)) {
         reviewRequests.push(catalogCard(item, reviews));
         placed.add(key);

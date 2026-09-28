@@ -52,6 +52,10 @@ export function setHighlighterLoader(next: HighlighterLoader | null): void {
 export function resetSyntax(): void {
   loader = null;
   highlighter = null;
+  bundled = null;
+  loadedLangs.clear();
+  loadingLangs.clear();
+  paintSlots = 0;
 }
 
 function isSyntaxLang(lang: string): lang is SyntaxLang {
@@ -82,19 +86,82 @@ function paintedToHtml(tokens: Painted[], wordClass: string, withColor: boolean)
     .join("");
 }
 
-async function defaultLoader(): Promise<HighlighterLike> {
-  const { createHighlighter } = await import("shiki");
-  return createHighlighter({
-    themes: ["github-light", "github-dark"],
-    langs: [...SYNTAX_LANGS],
+const langLoaders = {
+  python: () => import("@shikijs/langs/python"),
+  javascript: () => import("@shikijs/langs/javascript"),
+  typescript: () => import("@shikijs/langs/typescript"),
+  tsx: () => import("@shikijs/langs/tsx"),
+  jsx: () => import("@shikijs/langs/jsx"),
+  json: () => import("@shikijs/langs/json"),
+  bash: () => import("@shikijs/langs/bash"),
+  html: () => import("@shikijs/langs/html"),
+  css: () => import("@shikijs/langs/css"),
+  yaml: () => import("@shikijs/langs/yaml"),
+  markdown: () => import("@shikijs/langs/markdown"),
+  go: () => import("@shikijs/langs/go"),
+  rust: () => import("@shikijs/langs/rust"),
+  java: () => import("@shikijs/langs/java"),
+  toml: () => import("@shikijs/langs/toml"),
+};
+
+type LoadableHighlighter = HighlighterLike & {
+  loadLanguage: (...langs: SyntaxLang[]) => Promise<void>;
+};
+
+let bundled: Promise<LoadableHighlighter> | null = null;
+const loadedLangs = new Set<string>();
+const loadingLangs = new Map<string, Promise<void>>();
+let paintSlots = 0;
+
+function yieldPaintTurn(): Promise<void> {
+  paintSlots += 1;
+  if (paintSlots % 8 !== 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => resolve());
+    else setTimeout(resolve, 0);
   });
 }
 
-async function loadHighlighter(): Promise<HighlighterLike> {
-  if (highlighter) return highlighter;
-  const load = loader ?? defaultLoader;
-  highlighter = await load();
-  return highlighter;
+async function defaultHighlighter(lang: SyntaxLang): Promise<LoadableHighlighter> {
+  if (!bundled) {
+    bundled = (async () => {
+      const { createBundledHighlighter } = await import("shiki/core");
+      const { createJavaScriptRegexEngine } = await import("shiki/engine/javascript");
+      const createHighlighter = createBundledHighlighter({
+        langs: langLoaders,
+        themes: {
+          "github-light": () => import("@shikijs/themes/github-light"),
+          "github-dark": () => import("@shikijs/themes/github-dark"),
+        },
+        engine: () => createJavaScriptRegexEngine(),
+      });
+      return createHighlighter({
+        themes: ["github-light", "github-dark"],
+        langs: [],
+      }) as Promise<LoadableHighlighter>;
+    })();
+  }
+  const hl = await bundled;
+  if (!loadedLangs.has(lang)) {
+    let pending = loadingLangs.get(lang);
+    if (!pending) {
+      pending = hl.loadLanguage(lang).then(() => {
+        loadedLangs.add(lang);
+      });
+      loadingLangs.set(lang, pending);
+    }
+    await pending;
+  }
+  return hl;
+}
+
+async function loadHighlighter(lang: SyntaxLang): Promise<HighlighterLike> {
+  if (loader) {
+    if (highlighter) return highlighter;
+    highlighter = await loader();
+    return highlighter;
+  }
+  return defaultHighlighter(lang);
 }
 
 export async function paintLineHtml(params: PaintParams): Promise<string | null> {
@@ -109,7 +176,8 @@ export async function paintLineHtml(params: PaintParams): Promise<string | null>
     );
   }
   try {
-    const hl = await loadHighlighter();
+    const hl = await loadHighlighter(params.lang);
+    await yieldPaintTurn();
     const result = hl.codeToTokens(params.content, {
       lang: params.lang,
       theme: params.theme === "light" ? "github-light" : "github-dark",
@@ -145,10 +213,14 @@ export function syntaxPaint(node: HTMLElement, params: PaintParams) {
 
   function run(next: PaintParams): void {
     const thisGen = ++gen;
-    void paintLineHtml(next).then((html) => {
-      if (thisGen !== gen || html == null) return;
-      node.innerHTML = html;
-    });
+    const kick = () => {
+      void paintLineHtml(next).then((html) => {
+        if (thisGen !== gen || html == null) return;
+        node.innerHTML = html;
+      });
+    };
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(kick);
+    else kick();
   }
 
   run(params);

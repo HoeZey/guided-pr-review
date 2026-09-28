@@ -8,17 +8,9 @@ import {
   stepGuide,
   unmarkViewed,
 } from "$lib/shared/domain/guide-view";
-import {
-  inFlightGenerateGuideCopy,
-  latestGenerateGuideAction,
-  reviewLandingTab,
-} from "$lib/shared/domain/overview";
-import type { GuideV1 } from "$lib/shared/contracts/guide";
-import type { ListReviewsOutput } from "$lib/shared/contracts/persistence";
-import type { StoredOutcome } from "$lib/shared/contracts/outcomes";
+import { reviewLandingTab } from "$lib/shared/domain/overview";
 import { parseStoredTab, type ReviewPageData, type ReviewTab } from "$lib/shared/page-data";
 import { chaptersForNav, fileId, sectionId } from "../components/guide/project";
-import { fetchJson } from "../browser/fetch";
 import {
   TAB_KEY,
   type StorageLike,
@@ -127,63 +119,6 @@ export function currentReviewPage(ssr: ReviewPageData): ReviewPageData {
   return session.page?.reviewId === ssr.reviewId ? session.page : ssr;
 }
 
-export function generateGuidePending(page: ReviewPageData): boolean {
-  const latest = latestGenerateGuideAction(page.reviewId, page.actions);
-  if (latest && inFlightGenerateGuideCopy(latest.status)) return true;
-  return session.ops.some(
-    (op) =>
-      op.kind === "generate-guide" &&
-      op.reviewId === page.reviewId &&
-      op.status === "pending",
-  );
-}
-
-export async function refreshCurrentReview(force = false): Promise<void> {
-  const page = session.page;
-  if (!page || page.kind !== "review") return;
-  if (session.reviewId !== page.reviewId) return;
-  if (!force && !generateGuidePending(page)) return;
-  const reviewId = page.reviewId;
-  try {
-    const listed = await fetchJson<ListReviewsOutput>("/api/reviews");
-    const payload = await fetchJson<{ guide: GuideV1; outcomes?: StoredOutcome[] }>(
-      `/api/reviews/${reviewId}`,
-    );
-    if (session.reviewId !== reviewId) return;
-    session.page = {
-      ...page,
-      reviewId,
-      title: payload.guide.title,
-      guide: payload.guide,
-      outcomes: payload.outcomes ?? [],
-      actions: listed.actions,
-      catalog: listed.catalog,
-      agentConnected: listed.agentConnected,
-    };
-    const latest = latestGenerateGuideAction(reviewId, listed.actions);
-    if (latest?.status === "succeeded" || latest?.status === "failed") {
-      session.ops = session.ops.filter((op) => op.id !== latest.id);
-    }
-  } catch {
-    /* Keep the hydrated review readable if the agent refresh fails. */
-  }
-}
-
-export async function queueGenerateGuide(reviewId: string): Promise<void> {
-  const created = await fetchJson<{ id: string }>("/api/actions", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ kind: "generate-guide", reviewId }),
-  });
-  session.ops = [
-    ...session.ops.filter(
-      (op) => !(op.kind === "generate-guide" && op.reviewId === reviewId),
-    ),
-    { id: created.id, kind: "generate-guide", reviewId, status: "pending" },
-  ];
-  await refreshCurrentReview(true);
-}
-
 export function setTab(
   next: ReviewTab,
   storage: StorageLike | null = browserLocalStorage(),
@@ -215,7 +150,7 @@ export function nextReadingTarget(delta: number): ReadingTarget | null {
     return next ? { id: next } : null;
   }
   if (session.tab === "diff") {
-    const rows = filesForDiff(guide);
+    const rows = session.page?.diff?.files ?? filesForDiff(guide);
     const i = rows.findIndex((row) => row.path === session.selectedDiffPath);
     const next = rows[i + delta];
     return next ? { id: `diff-file-${i + delta}`, path: next.path } : null;

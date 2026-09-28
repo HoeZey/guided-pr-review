@@ -297,6 +297,19 @@ export function createHttpHandlers(
         await seed();
         return Response.json(await services.repositories.list());
       },
+      SEARCH: async ({ request }: HttpEvent) => {
+        await seed();
+        const params = new URL(request.url).searchParams;
+        const query = params.get("q") ?? undefined;
+        const organization = params.get("organization") ?? undefined;
+        const project = params.get("project") ?? undefined;
+        return Response.json(
+          await services.repositories.search(
+            query,
+            organization && project ? { organization, project } : undefined,
+          ),
+        );
+      },
       POST: async ({ request }: HttpEvent) => {
         await seed();
         let payload: unknown;

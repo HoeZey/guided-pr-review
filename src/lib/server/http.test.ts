@@ -27,7 +27,6 @@ const listed = {
 
 function fakeServices(overrides: {
   list?: AppServices["reviews"]["list"];
-  wait?: AppServices["actions"]["wait"];
   refresh?: AppServices["catalogRefresh"]["refresh"];
   queue?: AppServices["actions"]["queue"];
 }): AppServices {
@@ -49,11 +48,10 @@ function fakeServices(overrides: {
     catalogRefresh: { refresh: overrides.refresh ?? unused("catalogRefresh") },
     actions: {
       queue: overrides.queue ?? unused("queue"),
-      wait: overrides.wait ?? unused("wait"),
+      wait: unused("wait"),
       complete: unused("complete"),
     },
     outcomes: { publish: unused("publish") },
-    guides: { completeGenerateGuide: unused("completeGenerateGuide") },
     connections: {
       list: unused("connections.list"),
       retry: unused("connections.retry"),
@@ -62,6 +60,7 @@ function fakeServices(overrides: {
       list: unused("repositories.list"),
       add: unused("repositories.add"),
       remove: unused("repositories.remove"),
+      search: unused("repositories.search"),
     },
     comments: {
       list: unused("comments.list"),
@@ -73,25 +72,12 @@ function fakeServices(overrides: {
   };
 }
 
-test("HTTP and MCP list_reviews and wait_for_action call the same services", async () => {
+test("HTTP and MCP list_reviews call the same review service", async () => {
   const seen: string[] = [];
-  const claimed: StoredAction = {
-    id: "a1",
-    kind: "generate-guide",
-    status: "claimed",
-    queuedAt: "t",
-    claimedAt: "t",
-    reviewId: "r1",
-  };
   const services = fakeServices({
     list: async () => {
       seen.push("list");
       return listed;
-    },
-    wait: async (input) => {
-      seen.push("wait");
-      assert.deepEqual(input, { timeoutMs: 0 });
-      return claimed;
     },
   });
   const http = createHttpHandlers(services);
@@ -111,29 +97,7 @@ test("HTTP and MCP list_reviews and wait_for_action call the same services", asy
     (listedMcp as { result: { structuredContent: unknown } }).result.structuredContent,
     listed,
   );
-
-  const waitedHttp = await http.wait.POST({
-    request: new Request("http://localhost/api/actions/wait", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ timeoutMs: 0 }),
-    }),
-    params: {},
-  });
-  assert.equal(waitedHttp.status, 200);
-  assert.deepEqual(await waitedHttp.json(), { action: claimed });
-
-  const waitedMcp = await mcp.handleMcpJson({
-    jsonrpc: "2.0",
-    id: 2,
-    method: "tools/call",
-    params: { name: "wait_for_action", arguments: { timeoutMs: 0 } },
-  });
-  assert.deepEqual(
-    (waitedMcp as { result: { structuredContent: unknown } }).result.structuredContent,
-    { action: claimed },
-  );
-  assert.deepEqual(seen, ["list", "list", "wait", "wait"]);
+  assert.deepEqual(seen, ["list", "list"]);
 });
 
 test("POST /api/catalog refreshes through the catalog service and never queues an agent", async () => {

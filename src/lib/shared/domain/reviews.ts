@@ -142,6 +142,7 @@ export function reviewSummary(record: ReviewRecord): ListReviewsOutput["reviews"
     base: record.guide.base,
     head: record.guide.head,
     ...(record.guide.unchaptered ? { unchaptered: true as const } : {}),
+    ...(record.diff ? { diffCommit: record.diff.sourceCommit } : {}),
   };
   if (!source) return summary;
   return {

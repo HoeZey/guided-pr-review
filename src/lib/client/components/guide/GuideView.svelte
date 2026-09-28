@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { GuideV1 } from "$lib/shared/contracts/guide";
-  import type { StoredAction } from "$lib/shared/contracts/catalog";
   import { guidePresentsWalkthrough } from "$lib/shared/domain/overview";
   import {
     guideStops,
@@ -22,18 +21,10 @@
 
   let {
     guide,
-    reviewId,
-    agentConnected = false,
     hidden = false,
-    actions = [],
-    onQueue,
   }: {
     guide: GuideV1;
-    reviewId: string;
-    agentConnected?: boolean;
     hidden?: boolean;
-    actions?: StoredAction[];
-    onQueue?: (reviewId: string) => void;
   } = $props();
 
   let tocOpen = $derived(session.tocOpen);
@@ -233,12 +224,7 @@
         {/each}
       </div>
     {:else}
-      <GenerateGuideEmpty
-        {reviewId}
-        {actions}
-        {agentConnected}
-        {onQueue}
-      />
+      <GenerateGuideEmpty />
     {/if}
   </div>
 </main>

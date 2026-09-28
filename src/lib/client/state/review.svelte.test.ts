@@ -1,14 +1,12 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, expect, test } from "vitest";
 import { serializeViewed } from "$lib/shared/domain/guide-view";
 import { TAB_COOKIE } from "$lib/shared/page-data";
 import { TAB_KEY, viewedKey } from "../browser/preferences";
-import type { ReviewPageData } from "$lib/shared/page-data";
 import { FAKE_GUIDE, FAKE_REVIEW_OK } from "$lib/shared/shell-fakes";
 import {
   adoptLegacyTab,
   bindReview,
   nextReadingTarget,
-  refreshCurrentReview,
   resetReviewSession,
   session,
   setTab,
@@ -111,57 +109,13 @@ test("adoptLegacyTab takes the stored tab after hydration and seeds the cookie",
   adoptLegacyTab(leftover);
   expect(session.tab).toBe("discussion");
   expect(leftover.getItem(TAB_KEY)).toBe("discussion");
-});
 
-test("refreshCurrentReview ignores a stale overlay after the review id changes", async () => {
-  const pageA: ReviewPageData = { ...FAKE_REVIEW_OK, reviewId: "a", title: "A" };
-  const pageB: ReviewPageData = {
-    ...FAKE_REVIEW_OK,
-    reviewId: "b",
-    title: "B",
-    guide: { ...FAKE_GUIDE, title: "B" },
-  };
-  bindReview("a", pageA.guide ?? {}, memoryStorage(), "guide");
-  session.page = pageA;
-  session.ops = [{ id: "gen-a", kind: "generate-guide", reviewId: "a", status: "pending" }];
-  let releaseA: () => void = () => undefined;
-  const fetchSpy = vi.fn((input: RequestInfo | URL) => {
-    const url = String(input);
-    if (url === "/api/reviews") {
-      return new Promise((resolve) => {
-        releaseA = () =>
-          resolve({
-            ok: true,
-            statusText: "OK",
-            json: async () => ({
-              reviews: [],
-              actions: [],
-              catalog: [],
-              agentConnected: false,
-              activeId: "a",
-              repositories: [],
-            }),
-          });
-      });
-    }
-    if (url === "/api/reviews/a") {
-      return Promise.resolve({
-        ok: true,
-        statusText: "OK",
-        json: async () => ({ guide: pageA.guide, outcomes: [] }),
-      });
-    }
-    throw new Error(`unexpected ${url}`);
-  });
-  vi.stubGlobal("fetch", fetchSpy);
-  const pending = refreshCurrentReview(true);
-  bindReview("b", pageB.guide ?? {}, memoryStorage(), "guide");
-  session.page = pageB;
-  releaseA();
-  await pending;
-  expect(session.page?.reviewId).toBe("b");
-  expect(session.page?.title).toBe("B");
-  vi.unstubAllGlobals();
+  const hidden = memoryStorage({ [TAB_KEY]: "review" });
+  bindReview("c", { unchaptered: false }, hidden, "diff");
+  adoptLegacyTab(hidden);
+  expect(session.tab).toBe("guide");
+  expect(hidden.getItem(TAB_KEY)).toBe("guide");
+  expect(document.cookie).toContain(`${TAB_COOKIE}=guide`);
 });
 
 test("nextReadingTarget walks Guide files, Diff files, and Code Review axes", () => {

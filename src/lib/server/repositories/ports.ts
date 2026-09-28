@@ -1,12 +1,14 @@
 import type { StoredAction } from "../../shared/contracts/catalog.ts";
 import type { GuideV1 } from "../../shared/contracts/guide.ts";
 import type { StoredOutcome } from "../../shared/contracts/outcomes.ts";
-import type { ListReviewsOutput } from "../../shared/contracts/persistence.ts";
+import type { ListReviewsOutput, ReviewDiff } from "../../shared/contracts/persistence.ts";
 import type { GitProviderKind } from "../providers/ports.ts";
 
 export type ReviewRepository = {
   listReviews: () => Promise<ListReviewsOutput>;
-  getReview: (id: string) => Promise<{ guide: GuideV1; outcomes: StoredOutcome[] }>;
+  getReview: (
+    id: string,
+  ) => Promise<{ guide: GuideV1; outcomes: StoredOutcome[]; diff?: ReviewDiff }>;
   addReview: (input: unknown) => Promise<{ id: string }>;
   addReviewFromTool: (body: unknown) => Promise<{ id: string }>;
   upsertReview: (input: unknown) => Promise<{ id: string }>;

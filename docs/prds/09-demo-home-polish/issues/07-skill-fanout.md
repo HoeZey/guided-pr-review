@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 blocked_by:
   - 05-persist-diffs
 blocks: []

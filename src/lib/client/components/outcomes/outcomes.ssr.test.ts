@@ -1,7 +1,6 @@
 import { expect, test } from "vitest";
 import { render } from "svelte/server";
-import { GENERATE_GUIDE_DISCONNECTED_HINT } from "$lib/shared/domain/overview";
-import { FAKE_GUIDE, FAKE_UNCHAPTERED_REVIEW } from "$lib/shared/shell-fakes";
+import { FAKE_GUIDE } from "$lib/shared/shell-fakes";
 import type { StoredOutcome } from "$lib/shared/contracts/outcomes";
 import GenerateGuideEmpty from "./GenerateGuideEmpty.svelte";
 import OutcomeBody from "./OutcomeBody.svelte";
@@ -59,61 +58,11 @@ test("Code Review SSR covers empty, exact, and outdated markup", () => {
   expect(outdated).toContain("Outdated");
 });
 
-test("Generate Guide SSR covers idle, waiting, failed, and disconnected copy", () => {
-  const idle = render(GenerateGuideEmpty, {
-    props: {
-      reviewId: FAKE_UNCHAPTERED_REVIEW.reviewId,
-      actions: [],
-      agentConnected: true,
-    },
-  }).body;
-  expect(idle).toContain("Generate guide");
-  expect(idle).toContain("This review is a Diff");
-  expect(idle).toContain("data-queue-generate");
-
-  const waiting = render(GenerateGuideEmpty, {
-    props: {
-      reviewId: FAKE_UNCHAPTERED_REVIEW.reviewId,
-      agentConnected: true,
-      actions: [
-        {
-          id: "gen-1",
-          kind: "generate-guide",
-          status: "queued",
-          queuedAt: "2026-01-02T00:00:00.000Z",
-          reviewId: FAKE_UNCHAPTERED_REVIEW.reviewId,
-        },
-      ],
-    },
-  }).body;
-  expect(waiting).toContain("Waiting");
-  expect(waiting).not.toContain("data-queue-generate");
-
-  const failed = render(GenerateGuideEmpty, {
-    props: {
-      reviewId: FAKE_UNCHAPTERED_REVIEW.reviewId,
-      agentConnected: true,
-      actions: [
-        {
-          id: "gen-1",
-          kind: "generate-guide",
-          status: "failed",
-          queuedAt: "2026-01-02T00:00:00.000Z",
-          reviewId: FAKE_UNCHAPTERED_REVIEW.reviewId,
-          error: { code: "generate-guide-failed", message: "chaptering timed out" },
-        },
-      ],
-    },
-  }).body;
-  expect(failed).toContain("chaptering timed out");
-  expect(failed).toContain("data-queue-generate");
-
-  const disconnected = render(GenerateGuideEmpty, {
-    props: {
-      reviewId: FAKE_UNCHAPTERED_REVIEW.reviewId,
-      actions: [],
-      agentConnected: false,
-    },
-  }).body;
-  expect(disconnected).toContain(GENERATE_GUIDE_DISCONNECTED_HINT);
+test("empty Guide SSR shows coding-agent copy with no Generate guide button", () => {
+  const body = render(GenerateGuideEmpty).body;
+  expect(body).toContain("<h2>No guide</h2>");
+  expect(body).toContain("Ask your coding agent to generate a reading-order guide.");
+  expect(body).not.toContain("Generate guide");
+  expect(body).not.toContain("data-queue-generate");
+  expect(body).not.toContain("<button");
 });

@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 blocked_by:
   - 03-book-icon
   - 04-home-columns

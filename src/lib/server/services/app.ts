@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AppRepositories, ConfiguredRepositoryPort } from "../repositories/ports.ts";
-import type { CredentialSource } from "../auth/ports.ts";
+import type { CommandRunner, CredentialSource } from "../auth/ports.ts";
 import type { GitDiff, ManagedGitCache } from "../git/ports.ts";
 import { createManagedGitCache } from "../git/managed-cache.ts";
 import { createGitProcessRunner } from "../git/process.ts";
@@ -23,9 +23,10 @@ import { createCommentService, type CommentService } from "./comments.ts";
 import { createConnectionService, type ConnectionService } from "./connections.ts";
 import {
   createConfiguredRepositoryService,
+  createCliHostRepositoryLister,
   type ConfiguredRepositoryService,
+  type HostRepositoryLister,
 } from "./configured-repositories.ts";
-import { createGuideHandoffService, type GuideHandoffService } from "./guides.ts";
 import { createOutcomeService, type OutcomeService } from "./outcomes.ts";
 import { createReviewService, type ReviewService } from "./reviews.ts";
 
@@ -35,7 +36,6 @@ export type AppServices = {
   catalogRefresh: CatalogRefreshService;
   actions: ActionService;
   outcomes: OutcomeService;
-  guides: GuideHandoffService;
   connections: ConnectionService;
   repositories: ConfiguredRepositoryService;
   comments: CommentService;
@@ -55,6 +55,8 @@ export function createAppServices(
     configured?: ConfiguredRepositoryPort;
     collectionPresent?: () => Promise<boolean>;
     originRemoteUrl?: () => Promise<string | undefined>;
+    hostList?: HostRepositoryLister;
+    commandRunner?: CommandRunner;
     readers?: {
       ado: ProviderRepositoryReader & Partial<ProviderPullRequestReader>;
       github: ProviderRepositoryReader & Partial<ProviderPullRequestReader>;
@@ -73,11 +75,15 @@ export function createAppServices(
     github: createGithubProvider({ credentials }),
   };
   const catalog = createCatalogService(repos);
+  const hostList =
+    options.hostList ??
+    createCliHostRepositoryLister(options.commandRunner ?? createProcessCommandRunner());
   const repositories = createConfiguredRepositoryService({
     configured: options.configured ?? emptyConfigured(),
     collectionPresent: options.collectionPresent ?? (async () => false),
     originRemoteUrl: options.originRemoteUrl ?? (async () => undefined),
     readers,
+    hostList,
   });
   const prReaders = {
     ado: pullRequestReader(readers.ado),
@@ -110,7 +116,6 @@ export function createAppServices(
     }),
     actions: createActionService(repos),
     outcomes: createOutcomeService(repos),
-    guides: createGuideHandoffService(repos),
     connections: createConnectionService(credentials),
     repositories,
     comments: createCommentService({

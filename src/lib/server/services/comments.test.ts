@@ -455,12 +455,12 @@ function appWithComments(comments: AppServices["comments"]): AppServices {
       complete: unused("complete"),
     },
     outcomes: { publish: unused("publish") },
-    guides: { completeGenerateGuide: unused("completeGenerateGuide") },
     connections: { list: unused("connections.list"), retry: unused("connections.retry") },
     repositories: {
       list: unused("repositories.list"),
       add: unused("repositories.add"),
       remove: unused("repositories.remove"),
+      search: unused("repositories.search"),
     },
     comments,
   };

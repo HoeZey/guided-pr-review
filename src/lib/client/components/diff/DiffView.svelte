@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { GuideV1 } from "$lib/shared/contracts/guide";
+  import type { FileChange, GuideV1 } from "$lib/shared/contracts/guide";
   import { filesForDiff, fileTree } from "$lib/shared/domain/guide-view";
   import { headerThreads, projectComposerAnchor, projectInlineThreads, threadsAfter } from "$lib/shared/domain/comment-slots";
   import { composerSession } from "$lib/client/state/composer.svelte";
@@ -16,9 +16,13 @@
   import { threadSession } from "$lib/client/state/threads.svelte";
   import FileTree from "./FileTree.svelte";
 
-  let { guide, visible = true }: { guide: GuideV1; visible?: boolean } = $props();
+  let {
+    guide,
+    files,
+    visible = true,
+  }: { guide: GuideV1; files?: FileChange[]; visible?: boolean } = $props();
 
-  const rows = $derived(filesForDiff(guide));
+  const rows = $derived(files ?? filesForDiff(guide));
   const tree = $derived(fileTree(rows.map((row) => row.path)));
   const ids = $derived(
     Object.fromEntries(rows.map((row, index) => [row.path, `diff-file-${index}`])),

@@ -19,7 +19,7 @@ test("initial review SSR contains readable Guide when Guide is the default view"
 
   const unchaptered = render(ReviewPage, { props: { data: FAKE_UNCHAPTERED_REVIEW } }).body;
   expect(unchaptered).toContain('data-tab="diff"');
-  expect(unchaptered).toContain("Generate a reading-order guide when you want one.");
+  expect(unchaptered).toContain("Ask your coding agent to generate a reading-order guide.");
   expect(unchaptered).not.toContain("The behavior change.");
 });
 

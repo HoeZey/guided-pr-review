@@ -23,7 +23,10 @@ import {
   resetJsonStoreCache,
 } from "../repositories/json/store.ts";
 import { createCatalogService } from "./catalog.ts";
-import { createCatalogRefreshService, createCatalogStartupLatch } from "./catalog-refresh.ts";
+import {
+  createCatalogRefreshService,
+  createCatalogStartupLatch,
+} from "./catalog-refresh.ts";
 import { createConfiguredRepositoryService } from "./configured-repositories.ts";
 
 const SHA_A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -217,10 +220,7 @@ test("startup and manual refresh both providers through fake readers without que
     const configured = listed.repositories.find((row) => row.id === ADO.id);
     assert.equal(configured?.cloneUrl, ADO.cloneUrl);
     const overview = projectHomeOverview(listed.reviews, listed.catalog);
-    assert.deepEqual(
-      overview.groups.map((group) => group.id),
-      ["review-requests", "authored-by-me"],
-    );
+    assert.deepEqual(overview.groups.map((group) => group.id), []);
     assert.equal(overview.lastSynced, new Date(T0).toISOString());
     now = T0 + 1_000;
     await service.refresh({ reason: "manual" });
@@ -555,5 +555,123 @@ test("failed startup refresh does not latch later handle or manual refresh", asy
     assert.equal(afterHandle.catalog[0]?.pullRequests[0]?.title, "Recovered");
     const manual = await service.refresh({ reason: "manual" });
     assert.equal(manual.skipped, false);
+  });
+});
+
+test("hooks.server.ts startup handle resolves without awaiting catalog refresh", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "gpr-09-04-hooks-"));
+  const prev = process.env.GUIDED_PR_REVIEW_DATA;
+  process.env.GUIDED_PR_REVIEW_DATA = dir;
+  resetJsonStoreCache();
+  try {
+    const { handle } = await import("../../../hooks.server.ts");
+    const { appServices } = await import("../runtime.ts");
+    const gate = deferred<{ skipped: boolean }>();
+    let refreshDone = false;
+    appServices.catalogRefresh.refresh = async () => {
+      await gate.promise;
+      refreshDone = true;
+      return { skipped: false };
+    };
+    const response = await handle({
+      event: { url: new URL("http://localhost/") } as never,
+      resolve: async () => new Response("ok"),
+    });
+    assert.equal(refreshDone, false);
+    assert.equal(await response.text(), "ok");
+    gate.resolve({ skipped: false });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(refreshDone, true);
+  } finally {
+    resetJsonStoreCache();
+    if (prev === undefined) delete process.env.GUIDED_PR_REVIEW_DATA;
+    else process.env.GUIDED_PR_REVIEW_DATA = prev;
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("catalog refresh stays light and never writes a saved diff", async () => {
+  await withStore(async () => {
+    const guide = GuideV1.parse({
+      version: 1,
+      title: "Pre-epic",
+      base: SHA_B,
+      head: SHA_A,
+      chapters: [
+        {
+          id: "core",
+          kind: "core",
+          title: "Core",
+          why: "Why",
+          files: [
+            {
+              path: "a.ts",
+              language: "typescript",
+              hunks: [{ lines: [{ type: "added", content: "x", newLine: 1 }] }],
+            },
+          ],
+        },
+      ],
+      source: {
+        kind: "pull-request",
+        provider: "azure-devops",
+        host: "dev.azure.com",
+        repository: {
+          id: ADO.id,
+          owner: ADO.owner,
+          name: ADO.name,
+          webUrl: ADO.webUrl,
+        },
+        number: 1101,
+        webUrl: `${ADO.webUrl}/pullrequest/1101`,
+        sourceRef: "refs/heads/feature/review-me",
+        targetRef: "refs/heads/develop",
+        sourceCommit: SHA_A,
+        targetCommit: SHA_B,
+        providerContext: {
+          kind: "azure-devops",
+          project: "BRAID",
+          firstComparingIteration: 0,
+          secondComparingIteration: 1,
+          changes: {},
+        },
+      },
+    });
+    await addReview(guide);
+    const service = refreshService({
+      configured: [record(ADO, true)],
+      readers: fakeReaders({
+        list: {
+          [ADO.id]: async () => [
+            meta(ADO, {
+              number: 1101,
+              title: "Pre-epic",
+              sourceCommit: SHA_C,
+              isReviewer: true,
+            }),
+            meta(ADO, {
+              number: 1106,
+              title: "New without review",
+              isReviewer: true,
+            }),
+          ],
+        },
+      }),
+      now: () => T0,
+    });
+    await service.refresh({ reason: "focus" });
+    await service.refresh({ reason: "manual" });
+    const listed = await listReviews();
+    assert.equal(listed.reviews.length, 1);
+    assert.equal(listed.reviews[0].diffCommit, undefined);
+    const got = await jsonRepositories.getReview(listed.reviews[0].id);
+    assert.equal(got.diff, undefined);
+    const overview = projectHomeOverview(listed.reviews, listed.catalog);
+    assert.equal(
+      overview.groups.some((group) =>
+        group.cards.some((card) => card.title === "New without review"),
+      ),
+      false,
+    );
   });
 });

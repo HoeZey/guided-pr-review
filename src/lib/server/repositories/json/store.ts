@@ -4,7 +4,11 @@ import {
   CodeReviewOutcome,
   type StoredOutcome,
 } from "../../../shared/contracts/outcomes.ts";
-import type { ListReviewsOutput, ReviewRecord } from "../../../shared/contracts/persistence.ts";
+import {
+  ReviewDiff,
+  type ListReviewsOutput,
+  type ReviewRecord,
+} from "../../../shared/contracts/persistence.ts";
 import { pullRequestSyncKey } from "../../../shared/contracts/provenance.ts";
 import { tools } from "../../../shared/contracts/tools.ts";
 import { applyCatalogReplacement } from "../../../shared/domain/catalog.ts";
@@ -52,7 +56,11 @@ function sameQueuedAction(
   );
 }
 
-function appendActive(store: { reviews: ReviewRecord[]; activeId: string | null }, guide: GuideV1): {
+function appendActive(
+  store: { reviews: ReviewRecord[]; activeId: string | null },
+  guide: GuideV1,
+  diff?: ReviewDiff,
+): {
   id: string;
 } {
   const id = crypto.randomUUID();
@@ -61,9 +69,21 @@ function appendActive(store: { reviews: ReviewRecord[]; activeId: string | null 
     addedAt: new Date().toISOString(),
     guide,
     outcomes: [],
+    ...(diff ? { diff } : {}),
   });
   store.activeId = id;
   return { id };
+}
+
+function parseUpsert(input: unknown): { guide: GuideV1; diff?: ReviewDiff } {
+  if (input && typeof input === "object" && "guide" in input) {
+    const body = input as { guide: unknown; diff?: unknown };
+    return {
+      guide: GuideV1.parse(body.guide),
+      ...(body.diff !== undefined ? { diff: ReviewDiff.parse(body.diff) } : {}),
+    };
+  }
+  return { guide: GuideV1.parse(input) };
 }
 
 function sleep(ms: number): Promise<void> {
@@ -177,7 +197,7 @@ export async function addReviewFromTool(body: unknown): Promise<{ id: string }> 
 }
 
 export async function upsertReview(input: unknown): Promise<{ id: string }> {
-  const guide = GuideV1.parse(input);
+  const { guide, diff } = parseUpsert(input);
   const source = guide.source;
   if (!source) {
     throw httpError("upsert_review requires pull-request source", 400);
@@ -191,10 +211,11 @@ export async function upsertReview(input: unknown): Promise<{ id: string }> {
       ) ?? findLocalReviewToAdopt(store.reviews, source);
     if (found) {
       found.guide = guide;
+      if (diff !== undefined) found.diff = diff;
       store.activeId = found.id;
       return { id: found.id };
     }
-    return appendActive(store, guide);
+    return appendActive(store, guide, diff);
   });
 }
 
@@ -218,13 +239,17 @@ export async function removeReview(id: string): Promise<{ ok: true }> {
 
 export async function getReview(
   id: string,
-): Promise<{ guide: GuideV1; outcomes: StoredOutcome[] }> {
+): Promise<{ guide: GuideV1; outcomes: StoredOutcome[]; diff?: ReviewDiff }> {
   const store = await readStore();
   const found = store.reviews.find((review) => review.id === id);
   if (!found) {
     throw httpError(`unknown review ${id}`, 404);
   }
-  return { guide: found.guide, outcomes: found.outcomes };
+  return {
+    guide: found.guide,
+    outcomes: found.outcomes,
+    ...(found.diff ? { diff: found.diff } : {}),
+  };
 }
 
 export async function publishReviewOutcome(

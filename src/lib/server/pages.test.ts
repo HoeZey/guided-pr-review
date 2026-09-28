@@ -118,7 +118,7 @@ test("SSR home and review page data come from services without a Store v1 dump",
 
     const cookieTab = await loadReviewPage(services, id, "review");
     assert.equal(cookieTab.kind, "review");
-    if (cookieTab.kind === "review") assert.equal(cookieTab.tab, "review");
+    if (cookieTab.kind === "review") assert.equal(cookieTab.tab, "guide");
 
     const leftoverComments = await loadReviewPage(services, id, "comments");
     assert.equal(leftoverComments.kind, "review");

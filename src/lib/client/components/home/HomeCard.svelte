@@ -1,19 +1,19 @@
 <script lang="ts">
+  import Book from "@lucide/svelte/icons/book";
+  import BookOpen from "@lucide/svelte/icons/book-open";
   import type { StoredAction } from "$lib/shared/contracts/catalog";
   import { pullRequestSyncKey } from "$lib/shared/contracts/provenance";
   import type { HomeCard } from "$lib/shared/domain/overview";
   import {
+    guideBookHover,
     homeCardAction,
-    inFlightGenerateGuideCopy,
-    latestGenerateGuideAction,
-    offersGenerateGuide,
     reviewPath,
   } from "$lib/shared/domain/overview";
   import { homeUi, queueHomeAction } from "$lib/client/state/home.svelte";
 
   let {
     card,
-    actions,
+    actions: _actions,
     agentConnected,
   }: {
     card: HomeCard;
@@ -27,34 +27,15 @@
   const inflight = $derived(
     diffOp && !diffOp.error ? (diffOp.kind === "update-diff" ? "Updating" : "Opening") : undefined,
   );
-  const generateLatest = $derived(
-    card.reviewId ? latestGenerateGuideAction(card.reviewId, actions) : undefined,
-  );
-  const generateInflight = $derived(
-    generateLatest ? inFlightGenerateGuideCopy(generateLatest.status) : undefined,
-  );
-  const failed = $derived(
-    diffOp?.error || (generateLatest?.status === "failed" ? generateLatest.error?.message : undefined),
-  );
+  const failed = $derived(diffOp?.error);
   const kind = $derived(homeCardAction(card, agentConnected));
   const busy = $derived(Boolean(inflight));
   const pending = $derived(kind === "disabled-host" || busy);
-  const offerGuide = $derived(offersGenerateGuide(card));
-  const generateBusy = $derived(Boolean(generateInflight));
+  const bookHover = $derived(guideBookHover(card.bookStatus));
 
   function queueOpen(): void {
     if (!card.openTarget) return;
     void queueHomeAction({ kind: "open", target: card.openTarget });
-  }
-
-  function queueUpdate(): void {
-    if (!card.openTarget) return;
-    void queueHomeAction({ kind: "update-diff", target: card.openTarget });
-  }
-
-  function queueGenerate(): void {
-    if (!card.reviewId) return;
-    void queueHomeAction({ kind: "generate-guide", reviewId: card.reviewId });
   }
 </script>
 
@@ -69,9 +50,7 @@
 {/snippet}
 
 <div class="home-card" class:is-pending={pending}>
-  {#if card.outdated && card.reviewId && !card.archived}
-    <div class="home-card-open">{@render body()}</div>
-  {:else if kind === "open-saved" && card.reviewId}
+  {#if kind === "open-saved" && card.reviewId}
     <a class="home-card-open" href={reviewPath(card.reviewId)} data-open-review={card.reviewId}>
       {@render body()}
     </a>
@@ -83,40 +62,34 @@
     <div class="home-card-open">{@render body()}</div>
   {/if}
   <div class="home-card-aside">
-    {#if generateInflight}
-      <span class="home-card-status">{generateInflight}</span>
-    {:else if inflight}
+    {#if inflight}
       <span class="home-card-status">{inflight}</span>
     {:else if failed}
       <span class="home-card-status is-failed">{failed}</span>
-    {:else if card.outdated}
-      <span class="home-card-status is-outdated">Outdated</span>
-    {:else if card.archived}
-      <span class="home-card-status">Archived</span>
-    {:else if card.hasGuide}
-      <span class="home-card-status is-ready">Guide</span>
-    {:else}
-      <span class="home-card-status">No guide</span>
+    {:else if card.archivedLabel}
+      <span
+        class="home-card-status"
+        class:is-merged={card.archivedLabel === "Merged"}
+        class:is-closed={card.archivedLabel === "Closed"}
+        data-archive-status={card.archivedLabel}
+      >
+        {card.archivedLabel}
+      </span>
     {/if}
-    {#if kind === "queue-update-diff" && card.openTarget && !busy}
-      <button type="button" class="ghost home-card-update" data-queue-update-diff onclick={queueUpdate}>
-        Update Diff
-      </button>
-    {/if}
-    {#if offerGuide}
-      {#if card.reviewId && agentConnected && !generateBusy}
-        <button type="button" class="ghost" data-queue-generate={card.reviewId} onclick={queueGenerate}>
-          Generate guide
-        </button>
+    <span
+      class="home-card-book"
+      class:is-grey={card.bookStatus === "grey"}
+      class:is-yellow={card.bookStatus === "yellow"}
+      class:is-green={card.bookStatus === "green"}
+      data-guide-book={card.bookStatus}
+      aria-label={bookHover}
+    >
+      {#if card.bookStatus === "grey"}
+        <Book size={20} aria-hidden="true" />
       {:else}
-        <button type="button" class="ghost" disabled>Generate guide</button>
+        <BookOpen size={20} aria-hidden="true" />
       {/if}
-    {/if}
-    {#if card.outdated && !card.archived && card.reviewId}
-      <a class="home-card-secondary" href={reviewPath(card.reviewId)} data-open-review={card.reviewId}>
-        Open saved
-      </a>
-    {/if}
+    </span>
     {#if card.webUrl}
       <a
         class="icon-btn ado-link"

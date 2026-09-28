@@ -24,68 +24,58 @@ Skill root is the directory that contains this SKILL.md (this git repo).
 
 - Named Azure DevOps PR URL or numeric id → **Named ADO PR** (upsert_review).
 - Explicit SHA, branch, or git range → **Local range** (add_review).
-- Neither → **Home**. Open http://localhost:8765/. The app syncs catalogs
-  and opens or updates diffs. Do not chapter a guide. Wait only when
-  Generate Guide is requested.
+- Neither → **Home**. Fan out guide updates for grey or yellow reviews
+  where the user is a reviewer, from saved diffs. The app chapters nothing.
 
 Do not switch the user's working tree on either review path. Do not git checkout,
 git switch, git reset, or git worktree add unless the user asked.
 
 ## Home
 
-A bare skill trigger opens Home. The app syncs current origin and configured
-repositories. No guide is generated until the reviewer selects a named PR,
-SHA, branch, or range, or requests Generate Guide on an unchaptered Diff.
+A bare skill trigger opens Home and updates every grey or yellow saved review
+where the user is a reviewer. Authored and other reviews stay as they are
+unless the user asks for them in this chat. No checkout. No fetch. A visible
+card already has a saved diff. This path does not cap how many guide chapters
+one chat starts. The app still chapters nothing by itself.
 
 1. **Ensure the instance is up** (same as Local range step 5). Do not start a
    second process if port 8765 is already taken.
 
-2. **Open Home.** http://localhost:8765/. Do not write reviews or catalogs
-   through MCP. Do not authenticate against provider MCP. Do not read origin.
-   Do not fetch commits. Do not chapter. Do not open a review URL.
+2. **Open Home.** http://localhost:8765/. Do not authenticate against provider
+   MCP. Do not read origin. Do not fetch commits. Do not checkout.
 
-3. **Wait only for Generate Guide.** Keep the instance running. Loop until
-   the user stops the skill:
+3. **List reviews and join the catalog.** tools/call list_reviews. For each
+   review that has a syncKey, find the catalog pull request with the same sync
+   key (provider:host:repository.id:number). Keep only rows where that catalog
+   item has isReviewer true.
 
-   - tools/call name wait_for_action with timeoutMs 25000 (HTTP: POST
-     http://localhost:8765/api/actions/wait). That heartbeats the agent.
-     Idle returns { "action": null }; loop immediately.
-   - If action.kind is generate-guide: handle **Generate guide** below, then
-     loop.
-   - Any other kind: tools/call complete_action with status failed and
-     error { "code": "unsupported-action", "message": "this session handles
-     Generate guide" }. Then loop.
+4. **Pick grey or yellow in that set.** Grey means the review is unchaptered.
+   Yellow means it is chaptered and guide sourceCommit (review.sourceCommit /
+   guide.source.sourceCommit) differs from the saved diff commit
+   (review.diffCommit). Green means they match, or the chaptered review has no
+   diff yet — skip those. A second run with nothing behind does not rewrite
+   guides.
 
-The app owns Open, Update Diff, Refresh, and Add repository. Do not queue or
-complete those from this skill.
+5. **Named extras only when asked.** If the user names an authored review or
+   any other review outside the reviewer set, add that id to the work set for
+   this chat. Otherwise leave those alone.
 
-## Generate guide
+6. **Chapter each target from the saved diff.** For every id in the work set,
+   spawn parallel subagents (no fan-out cap in this skill). Each subagent:
 
-Claimed Generate guide means the reviewer asked for reading order on an
-already-open unchaptered review. Chapter in place. Keep the same review id.
-Do not checkout.
+   - tools/call get_review for that id. Use diff.files when diff is present;
+     otherwise stop that id (a Home card always has a saved diff after refresh).
+   - Chapter with Local range steps 3–4 from those files. Do not checkout. Do
+     not fetch.
+   - Build a chaptered Guide v1. Keep title, base, head, range, repo, and
+     source from the saved review. Omit unchaptered. Set
+     guide.source.sourceCommit to diff.sourceCommit (and align guide.head /
+     source fields that must match that commit). The book turns green when
+     that matches the saved diff.
+   - tools/call upsert_review with that guide. Keep the same review id.
 
-1. **Load the saved review.** tools/call get_review with action.reviewId.
-   If the guide is not unchaptered, complete_action failed, error
-   { "code": "generate-guide-failed", "message": "review already has a guide" },
-   then return to the wait loop. Do not upsert.
-2. **Chapter without checkout.** Use the stored base and head and the files
-   already on the guide. Assign hunks with Local range steps 3–4. Do not
-   fetch again unless the stored files are empty. Empty files: complete_action
-   failed, error { "code": "empty-diff", "message": "no changes to chapter" },
-   then return to the wait loop. Do not upsert.
-3. **Build a chaptered Guide v1.** Keep title, base, head, range, repo, and
-   source from the saved review. Omit unchaptered. Real chapter ids, not
-   unchaptered. Do not drop paths that were on the Diff.
-4. **Push via upsert_review**, then complete_action status succeeded with
-   the same reviewId. HTTP: PUT http://localhost:8765/api/reviews then
-   POST http://localhost:8765/api/actions/{id}/complete. On any chaptering
-   failure: complete_action status failed with
-   { "code": "generate-guide-failed", "message": "<short reason>" }. Leave
-   the unchaptered Diff in place. Then return to the wait loop.
-
-The app fills the Guide tab. Diff still lists each path. Do not open a
-review URL from the skill.
+7. **Stop.** Do not wait for browser actions. Do not open every review URL
+   unless the user asks. Leave the server running.
 
 ## Named ADO PR
 
@@ -283,34 +273,29 @@ review URL from the skill.
 - No LLM inside the app.
 - Do not implement product code in the repo under review.
 - Do not post ADO comments from this skill (a later story).
-- Do not chapter or upsert from a bare Home trigger. The app owns catalog
-  sync, Open, Update Diff, Refresh, and Add repository.
-- After Home is open, wait only for Generate guide.
+- On Home, do not checkout and do not fetch. Chapter only from saved diffs.
+- Do not rewrite green reviews. Do not update authored or other reviews
+  unless the user asks for them in that chat.
+- The app chapters nothing by itself.
 
 ## MCP tools
 
 - list_reviews → { reviews, activeId, repositories, catalog, actions,
   agentConnected }. Review rows include base and head, and may include
-  syncKey, sourceCommit, unchaptered, and pullRequest (provider, host,
-  repository, number, webUrl).
+  syncKey, sourceCommit, diffCommit, unchaptered, and pullRequest (provider,
+  host, repository, number, webUrl). Catalog pull requests include isReviewer.
 - replace_catalog { origin, repository, syncedAt?, error?, pullRequests } →
   { ok: true } — catalog snapshot for one repository. Never deletes saved
   reviews. Adopts matching unsourced local-range reviews onto catalog PRs.
-- queue_action { kind: "generate-guide", reviewId } → { id } — reviewId
-  required. Dedupes an in-flight Generate guide for the same review.
-- wait_for_action { timeoutMs? } → { action } — claims the next queued
-  Generate guide action and heartbeats the agent. Null when idle.
-- complete_action { id, status, reviewId?, error? } → { ok: true } —
-  reviewId required when Generate guide succeeds. Failed requires a
-  structured error.
 - add_review { guide } → { id } — new snapshot (local ranges).
 - upsert_review { guide } → { id } — stable id for a named ADO PR.
 - publish_review_outcome { reviewId, outcome } → { id }
 - remove_review { id } → { ok: true }
-- get_review { id } → { guide, outcomes }
+- get_review { id } → { guide, outcomes, diff? } — diff carries sourceCommit,
+  targetCommit, and files when the review has a saved snapshot.
 - set_active { id } → { activeId }
 
-Bare http://localhost:8765/ is Home. The app syncs catalogs and opens diffs.
-The waiting agent then long-polls wait_for_action only for Generate guide.
-An explicit add or upsert opens http://localhost:8765/reviews/{id}. Generate
-guide chapters that review in place; Guide becomes the walkthrough.
+Bare http://localhost:8765/ is Home. A Home skill run fans out chaptering over
+grey or yellow reviewer reviews from saved diffs, then upserts with
+guide.source.sourceCommit set to diff.sourceCommit. An explicit Named ADO PR
+or Local range path opens http://localhost:8765/reviews/{id}.

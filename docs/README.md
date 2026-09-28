@@ -17,7 +17,7 @@ PRD moves under done/.
 - [06 App structure](prds/06-app-structure/) — implemented
 - [07 Provider API automation](prds/07-provider-api-automation/) — implemented
 - [08 Inline git-host comments](prds/08-inline-git-host-comments/) — implemented
-- [09 Demo home polish](prds/09-demo-home-polish/) — signed
+- [09 Demo home polish](prds/09-demo-home-polish/) — implemented
 
 ## Status
 

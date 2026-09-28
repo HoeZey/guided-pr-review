@@ -1,6 +1,6 @@
 import type { CatalogPullRequest, OpenActionTarget } from "../../shared/contracts/catalog.ts";
 import { FileChange, GuideV1 } from "../../shared/contracts/guide.ts";
-import type { ListReviewsOutput } from "../../shared/contracts/persistence.ts";
+import type { ListReviewsOutput, ReviewDiff } from "../../shared/contracts/persistence.ts";
 import type { StoredOutcome } from "../../shared/contracts/outcomes.ts";
 import { pullRequestSyncKey } from "../../shared/contracts/provenance.ts";
 import { catalogAsSource } from "../../shared/domain/reviews.ts";
@@ -35,7 +35,9 @@ export type ReviewDiffOptions = {
 
 export type ReviewService = {
   list: () => Promise<ListReviewsOutput>;
-  get: (id: string) => Promise<{ guide: GuideV1; outcomes: StoredOutcome[] }>;
+  get: (
+    id: string,
+  ) => Promise<{ guide: GuideV1; outcomes: StoredOutcome[]; diff?: ReviewDiff }>;
   add: (input: unknown) => Promise<{ id: string }>;
   addFromTool: (body: unknown) => Promise<{ id: string }>;
   upsert: (input: unknown) => Promise<{ id: string }>;
@@ -144,6 +146,12 @@ export function createReviewService(
     throw Object.assign(new Error("clone URL required to fetch commits"), { status: 502 });
   }
 
+  async function findExisting(target: OpenActionTarget) {
+    const listed = await repos.listReviews();
+    const key = pullRequestSyncKey(target);
+    return listed.reviews.find((row) => row.syncKey === key);
+  }
+
   async function syncDiff(target: OpenActionTarget): Promise<DiffSyncResult> {
     if (!options) {
       throw Object.assign(new Error("diff sync is not configured"), { status: 500 });
@@ -160,18 +168,20 @@ export function createReviewService(
       number: target.number,
     };
     const meta = await reader.getPullRequest(prInput);
-    const listed = await repos.listReviews();
-    const key = pullRequestSyncKey({
+    const existing = await findExisting({
       provider: meta.provider,
       host: meta.host,
-      repository: { id: meta.repository.id },
+      repository: {
+        id: meta.repository.id,
+        owner: meta.repository.owner,
+        name: meta.repository.name,
+        webUrl: meta.repository.webUrl,
+      },
       number: meta.number,
     });
-    const existing = listed.reviews.find((row) => row.syncKey === key);
     if (
-      existing &&
-      existing.sourceCommit &&
-      existing.sourceCommit.toLowerCase() === meta.sourceCommit.toLowerCase()
+      existing?.diffCommit &&
+      existing.diffCommit.toLowerCase() === meta.sourceCommit.toLowerCase()
     ) {
       return { reviewId: existing.id, skipped: true };
     }
@@ -197,9 +207,23 @@ export function createReviewService(
       meta.targetCommit,
       adoContext,
     );
-    const { id: reviewId } = await repos.upsertReview(
-      unchapteredGuide({ title: meta.title, files, source }),
-    );
+    const diff: ReviewDiff = {
+      sourceCommit: meta.sourceCommit,
+      targetCommit: meta.targetCommit,
+      files,
+    };
+    if (existing && !existing.unchaptered) {
+      const got = await repos.getReview(existing.id);
+      const { id: reviewId } = await repos.upsertReview({
+        guide: got.guide,
+        diff,
+      });
+      return { reviewId, skipped: false };
+    }
+    const { id: reviewId } = await repos.upsertReview({
+      guide: unchapteredGuide({ title: meta.title, files, source }),
+      diff,
+    });
     return { reviewId, skipped: false };
   }
 
@@ -221,6 +245,12 @@ export function createReviewService(
     return pending;
   }
 
+  async function openSavedOrSync(target: OpenActionTarget): Promise<DiffSyncResult> {
+    const existing = await findExisting(target);
+    if (existing) return { reviewId: existing.id, skipped: true };
+    return runDiff(target);
+  }
+
   return {
     list: () => repos.listReviews(),
     get: (id) => repos.getReview(id),
@@ -231,7 +261,7 @@ export function createReviewService(
     remove: (id) => repos.removeReview(id),
     setActive: (id) => repos.setActive(id),
     seedIfEmpty: (guide) => repos.seedIfEmpty(guide),
-    openDiff: (target) => runDiff(target),
+    openDiff: (target) => openSavedOrSync(target),
     updateDiff: (target) => runDiff(target),
   };
 }

@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 blocked_by:
   - 04-home-columns
 blocks: []

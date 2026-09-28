@@ -62,7 +62,7 @@ test("SSR-safe parsers fall back to product defaults", () => {
   expect(parseTab(null)).toBe("guide");
   expect(parseTab("comments")).toBe("discussion");
   expect(parseTab("discussion")).toBe("discussion");
-  expect(parseTab("review")).toBe("review");
+  expect(parseTab("review")).toBe("guide");
   expect(parseDiffLayout(null, PREF_DEFAULTS.diffLayout)).toBe("split");
   expect(parseDiffLayout("unified", PREF_DEFAULTS.guideLayout)).toBe("unified");
   expect(parseSplitPct(null)).toBe(0.5);
@@ -104,7 +104,7 @@ test("hydratePreferences reads stored values after SSR defaults", () => {
 test("tab cookie name matches the existing localStorage tab key", () => {
   expect(TAB_COOKIE).toBe(TAB_KEY);
   expect(TAB_COOKIE).toBe("guided-pr-review-tab");
-  expect(parseStoredTab("review")).toBe("review");
+  expect(parseStoredTab("review")).toBe("guide");
   expect(parseStoredTab("diff")).toBe("diff");
   expect(parseStoredTab("guide")).toBe("guide");
   expect(parseStoredTab("discussion")).toBe("discussion");

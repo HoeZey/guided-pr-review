@@ -8,6 +8,7 @@ import {
   FAKE_UNCHAPTERED_REVIEW,
 } from "$lib/shared/shell-fakes";
 import { HOME_PATH, reviewPath } from "$lib/shared/domain/overview";
+import { parseStoredTab } from "$lib/shared/page-data";
 import AppShell from "./AppShell.svelte";
 
 test("Home shell SSR uses preference defaults and fake links", () => {
@@ -35,9 +36,11 @@ test("review shell SSR matches landing tab defaults", () => {
   expect(unchaptered).toContain('aria-label="Files"');
   expect(unchaptered).toContain("src/app.ts");
 
-  const cookieTab = render(AppShell, { props: { data: { ...FAKE_REVIEW_OK, tab: "review" } } }).body;
-  expect(cookieTab).toContain('data-tab="review"');
-  expect(cookieTab).toContain("No code-review outcome");
+  const cookieTab = render(AppShell, {
+    props: { data: { ...FAKE_REVIEW_OK, tab: parseStoredTab("review") ?? "guide" } },
+  }).body;
+  expect(cookieTab).toContain('data-tab="guide"');
+  expect(cookieTab).not.toContain("No code-review outcome");
 });
 
 test("SSR loading and error markup uses the existing boot and err classes", () => {

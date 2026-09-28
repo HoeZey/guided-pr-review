@@ -15,7 +15,7 @@ const TOOL_DEFS = [
   {
     name: "list_reviews",
     description:
-      "List saved guided reviews, the active id, configured repositories, catalog snapshots, in-flight actions, and whether the waiting agent is connected.",
+      "List saved guided reviews, the active id, configured repositories, catalog snapshots, and store actions.",
     inputSchema: schema(tools.list_reviews.input),
   },
   {
@@ -23,24 +23,6 @@ const TOOL_DEFS = [
     description:
       "Replace the pull-request catalog snapshot for one repository. Includes the current origin repository in configuration. Never deletes saved reviews.",
     inputSchema: schema(tools.replace_catalog.input),
-  },
-  {
-    name: "queue_action",
-    description:
-      "Queue a Generate guide action for an unchaptered review. Dedupes an in-flight Generate guide for the same review.",
-    inputSchema: schema(tools.queue_action.input),
-  },
-  {
-    name: "wait_for_action",
-    description:
-      "Long-poll until a queued browser action is claimed, or until timeoutMs. Heartbeats the waiting agent. Returns null when idle.",
-    inputSchema: schema(tools.wait_for_action.input),
-  },
-  {
-    name: "complete_action",
-    description:
-      "Mark a claimed Generate guide action succeeded or failed. Succeeded Generate guide requires reviewId. Failed requires a structured error.",
-    inputSchema: schema(tools.complete_action.input),
   },
   {
     name: "add_review",
@@ -103,18 +85,6 @@ export function createMcpHandler(services: AppServices) {
       case "replace_catalog": {
         const input = tools.replace_catalog.input.parse(args);
         return services.catalog.replace(input);
-      }
-      case "queue_action": {
-        const input = tools.queue_action.input.parse(args);
-        return services.actions.queue(input);
-      }
-      case "wait_for_action": {
-        const input = tools.wait_for_action.input.parse(args ?? {});
-        return { action: await services.actions.wait(input) };
-      }
-      case "complete_action": {
-        const input = tools.complete_action.input.parse(args);
-        return services.actions.complete(input);
       }
       case "add_review": {
         const input = tools.add_review.input.parse(args);

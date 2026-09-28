@@ -9,6 +9,9 @@ export default defineConfig({
   root,
   cacheDir: path.join(root, "node_modules/.vite-svelte"),
   plugins: [sveltekit()],
+  ssr: {
+    noExternal: ["@lucide/svelte"],
+  },
   server: {
     host: "localhost",
     port: 8765,
