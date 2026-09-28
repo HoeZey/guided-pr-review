@@ -19,6 +19,7 @@ export type ProviderPullRequestMetadata = {
   repository: ProviderRepositoryIdentity;
   number: number;
   title: string;
+  description?: string;
   webUrl: string;
   sourceRef: string;
   targetRef: string;

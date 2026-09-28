@@ -51,7 +51,7 @@ export const FileChange = z
 export const Chapter = z
   .object({
     id: z.string().min(1),
-    kind: ChapterKind,
+    kind: ChapterKind.optional(),
     title: z.string().min(1),
     why: z.string().min(1),
     open: z.boolean().optional(),
@@ -73,7 +73,6 @@ export const GuideV1 = z
   .object({
     version: z.literal(1),
     title: z.string().min(1),
-    summary: z.string().optional(),
     base: z.string().min(1),
     head: z.string().min(1),
     range: z.string().optional(),

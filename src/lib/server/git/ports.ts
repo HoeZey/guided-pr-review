@@ -61,6 +61,21 @@ export type ManagedGitCache = {
   ) => Promise<void>;
 };
 
+export type GitCommitMessage = {
+  sha: string;
+  subject: string;
+  body: string;
+};
+
+/** Commit messages for target..source in a managed cache. */
+export type GitCommitLog = {
+  logCommits: (input: {
+    identity: GitCacheIdentity;
+    sourceCommit: string;
+    targetCommit: string;
+  }) => Promise<GitCommitMessage[]>;
+};
+
 /** Three-dot unified diff from a managed cache. Implementation lands in PRD 07. */
 export type GitDiff = {
   unifiedThreeDot: (input: {

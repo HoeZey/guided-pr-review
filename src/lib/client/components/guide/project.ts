@@ -23,7 +23,7 @@ export function fileId(chapterId: string, index: number): string {
 export function chaptersForNav(data: Pick<GuideV1, "chapters" | "omitted">): GuideNavChapter[] {
   const list: GuideNavChapter[] = data.chapters.map((chapter) => ({
     id: chapter.id,
-    kind: chapter.kind,
+    kind: chapter.kind ?? "",
     title: chapter.title,
     why: chapter.why,
     files: chapter.files,

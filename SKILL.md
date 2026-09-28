@@ -1,10 +1,9 @@
 ---
 name: guided-pr-review
 description: >-
-  Builds a Linear-style guided PR review from a local git diff: semantic
-  chapters in reasoning order (core, consequences, glue, tests, noise), each
-  with a why-this-exists blurb and inlined hunks, then pushes the Guide v1
-  JSON to a localhost instance via HTTP MCP. Use when the user says
+  Builds a Linear-style guided PR review from a git diff: change-based
+  chapters in reading order, each with a why-this-exists blurb and line
+  references, then stores the Guide via HTTP MCP. Use when the user says
   "/guided-pr-review", "guide this PR", "Linear-style review", "review guide",
   or wants a reading-order walkthrough of a branch or PR. Not a findings
   review — that is /code-review.
@@ -12,19 +11,19 @@ description: >-
 
 # Guided PR review
 
-Produce a **reading-order guide** of a git diff. Not a verdict. Do not
+Produce a reading-order guide of a git diff. Not a verdict. Do not
 run /code-review unless the user asks for findings too.
 
-The app is a renderer plus store. You chapter. You call MCP add_review or
-upsert_review.
+The app is a renderer plus store. You chapter. You call MCP read_diff and
+chapter_review. Home, Named, and Local all end the same way.
 
 Skill root is the directory that contains this SKILL.md (this git repo).
 
 ## Choose a path
 
-- Named Azure DevOps PR URL or numeric id → **Named ADO PR** (upsert_review).
-- Explicit SHA, branch, or git range → **Local range** (add_review).
-- Neither → **Home**. Fan out guide updates for grey or yellow reviews
+- Named pull request URL or numeric id against origin → Named.
+- Explicit SHA, branch, or git range → Local.
+- Neither → Home. Fan out guide updates for grey or yellow reviews
   where the user is a reviewer, from saved diffs. The app chapters nothing.
 
 Do not switch the user's working tree on either review path. Do not git checkout,
@@ -38,209 +37,72 @@ unless the user asks for them in this chat. No checkout. No fetch. A visible
 card already has a saved diff. This path does not cap how many guide chapters
 one chat starts. The app still chapters nothing by itself.
 
-1. **Ensure the instance is up** (same as Local range step 5). Do not start a
+Guides are written by Grok 4.7 high.
+
+1. Ensure the instance is up (same as Local step for npm run dev). Do not start a
    second process if port 8765 is already taken.
 
-2. **Open Home.** http://localhost:8765/. Do not authenticate against provider
-   MCP. Do not read origin. Do not fetch commits. Do not checkout.
+2. Open Home. http://localhost:8765/. Do not authenticate against provider
+   MCP. Do not read origin. Do not checkout.
 
-3. **List reviews and join the catalog.** tools/call list_reviews. For each
+3. List reviews and join the catalog. tools/call list_reviews. For each
    review that has a syncKey, find the catalog pull request with the same sync
    key (provider:host:repository.id:number). Keep only rows where that catalog
    item has isReviewer true.
 
-4. **Pick grey or yellow in that set.** Grey means the review is unchaptered.
+4. Pick grey or yellow in that set. Grey means the review is unchaptered.
    Yellow means it is chaptered and guide sourceCommit (review.sourceCommit /
    guide.source.sourceCommit) differs from the saved diff commit
    (review.diffCommit). Green means they match, or the chaptered review has no
    diff yet — skip those. A second run with nothing behind does not rewrite
    guides.
 
-5. **Named extras only when asked.** If the user names an authored review or
+5. Named extras only when asked. If the user names an authored review or
    any other review outside the reviewer set, add that id to the work set for
    this chat. Otherwise leave those alone.
 
-6. **Chapter each target from the saved diff.** For every id in the work set,
-   spawn parallel subagents (no fan-out cap in this skill). Each subagent:
+6. Chapter each target from the saved diff. For every id in the work set,
+   spawn parallel subagents (no fan-out cap in this skill). Writer model:
+   Grok 4.7 high. Each subagent gets this fixed brief:
 
-   - tools/call get_review for that id. Use diff.files when diff is present;
-     otherwise stop that id (a Home card always has a saved diff after refresh).
-   - Chapter with Local range steps 3–4 from those files. Do not checkout. Do
-     not fetch.
-   - Build a chaptered Guide v1. Keep title, base, head, range, repo, and
-     source from the saved review. Omit unchaptered. Set
-     guide.source.sourceCommit to diff.sourceCommit (and align guide.head /
-     source fields that must match that commit). The book turns green when
-     that matches the saved diff.
-   - tools/call upsert_review with that guide. Keep the same review id.
+   Read the Chapter section of the skill. Call read_diff for the id. Call
+   chapter_review with that sourceCommit. On a 400, fix only the named ranges
+   and retry up to twice. Reply with one line: id, chapter count, ok or error.
 
-7. **Stop.** Do not wait for browser actions. Do not open every review URL
+7. Stop. Do not wait for browser actions. Do not open every review URL
    unless the user asks. Leave the server running.
 
-## Named ADO PR
+## Named
 
-1. **Read origin.** git remote get-url origin.
+1. Ensure the instance is up (same as Local).
 
-   Azure DevOps hosts: dev.azure.com, ssh.dev.azure.com (treat as
-   dev.azure.com), or a *.visualstudio.com host. Anything else (github.com,
-   bitbucket.org, …): stop with a clear unsupported git host error. Do not
-   call add_review or upsert_review.
+2. Resolve the pull request. Prefer a full Azure DevOps or GitHub pull request
+   URL. A bare integer is a PR number against origin: read
+   git remote get-url origin and build the provider URL for that host and
+   repository. If origin is neither Azure DevOps nor GitHub, stop with a clear
+   unsupported git host error.
 
-   Parse organization, project, and repository name. HTTPS looks like
-   https://dev.azure.com/{org}/{project}/_git/{repo}. SSH looks like
-   git@ssh.dev.azure.com:v3/{org}/{project}/{repo}. Owner in Guide v1 is
-   {org}/{project}. Provenance host is dev.azure.com or the visualstudio.com
-   host, never ssh.dev.azure.com.
+3. tools/call open_pull_request with that url. It returns
+   { id, chaptered, behind }.
 
-2. **Parse the PR.** A URL such as
-   .../pullrequest/1027, or a bare integer id. If the URL names a different
-   repository than origin, stop. The PR must belong to the current origin
-   repo.
+4. Skip when chaptered and not behind. tools/call set_active for that id,
+   open http://localhost:8765/reviews/{id}, and stop.
 
-3. **Authenticate.** Use the configured Cursor Azure DevOps MCP (azcli).
-   First-run: native MCP auth or one az login. If the MCP returns an auth
-   error, tell the user to az login and retry. Never paste a PAT into the
-   app, the store, logs, or the Guide JSON.
+5. Otherwise chapter. tools/call read_diff for the id. Follow the Chapter
+   section. tools/call chapter_review with the sourceCommit from read_diff and
+   the chapters. On a 400, fix only the named ranges and retry up to twice.
+   Open http://localhost:8765/reviews/{id}. Leave the server running.
 
-4. **Resolve identity without checkout.**
+## Local
 
-   - repo_repository action get, project, repositoryNameOrId from origin.
-   - repo_pull_request action get with repositoryId, pullRequestId, project,
-     includeChangedFiles true.
-
-   Read title, sourceRefName, targetRefName, repository.id, web URL, and the
-   exact SHAs lastMergeSourceCommit.commitId (source) and
-   lastMergeTargetCommit.commitId (target). If those SHAs are missing, stop.
-
-5. **Fetch commits, leave HEAD alone.**
-
-   ```bash
-   git fetch --no-tags origin TARGET_SHA SOURCE_SHA
-   git rev-parse --verify TARGET_SHA
-   git rev-parse --verify SOURCE_SHA
-   git diff --stat TARGET_SHA...SOURCE_SHA
-   ```
-
-   Empty diff: stop. If fetch by SHA fails, fetch the PR refs still without
-   checkout. Confirm the current branch is unchanged.
-
-6. **Skip chaptering when the source commit is unchanged.** Ensure the
-   instance is up (same as Local range step 5). tools/call list_reviews.
-   Sync key is azure-devops:{host}:{repository.id}:{number}. If a listed
-   review has that syncKey and the same sourceCommit, tools/call set_active
-   for that id, open http://localhost:8765/reviews/{id}, and stop. Do not upsert.
-   A listed review with no syncKey is not a skip: continue so upsert can
-   attach this PR to a matching local-range row.
-
-7. **Iterations and change tracking.** Needed on the stored guide for later
-   comment posting. Prefer az rest with the Azure CLI session:
-
-   ```bash
-   az rest --method get --uri "https://dev.azure.com/ORG/PROJECT/_apis/git/repositories/REPO_ID/pullRequests/PR_ID/iterations?api-version=7.1"
-   az rest --method get --uri "https://dev.azure.com/ORG/PROJECT/_apis/git/repositories/REPO_ID/pullRequests/PR_ID/iterations/ITERATION/changes?api-version=7.1"
-   ```
-
-   firstComparingIteration is 0 (whole PR versus target).
-   secondComparingIteration is the latest iteration id. changes maps each
-   item.path (no leading slash) to { changeTrackingId }. If this call fails,
-   still upsert with changes as an empty object rather than inventing ids.
-
-8. **Chapter** the diff TARGET_SHA...SOURCE_SHA using Local range steps 2–4.
-   Guide.base is the target SHA. Guide.head is the source SHA. Guide.title
-   is the PR title.
-
-9. **Set source** on Guide v1 (required fields; ADO-only data lives only in
-   providerContext):
-
-   ```json
-   {
-     "kind": "pull-request",
-     "provider": "azure-devops",
-     "host": "dev.azure.com",
-     "repository": {
-       "id": "provider repository id",
-       "owner": "org/project",
-       "name": "repo",
-       "webUrl": "https://dev.azure.com/org/project/_git/repo"
-     },
-     "number": 1027,
-     "webUrl": "https://dev.azure.com/org/project/_git/repo/pullrequest/1027",
-     "sourceRef": "refs/heads/feature/example",
-     "targetRef": "refs/heads/develop",
-     "sourceCommit": "40-character source SHA",
-     "targetCommit": "40-character target SHA",
-     "providerContext": {
-       "kind": "azure-devops",
-       "project": "PROJECT",
-       "firstComparingIteration": 0,
-       "secondComparingIteration": 1,
-       "changes": {
-         "src/example.ts": { "changeTrackingId": 1 }
-       }
-     }
-   }
-   ```
-
-10. **Push via upsert_review**, not add_review.
-
-    tools/call name upsert_review arguments { "guide": <Guide v1> }
-
-    Same id is kept for the same provider + host + repository id + PR
-    number. A new source commit replaces the stored guide. Upsert also
-    adopts exactly one unsourced local-range review when the range head
-    matches the PR source branch, or when that branch was renamed but
-    exactly one local range shares the ticket key (TCD-n). Ambiguous
-    ticket matches create a new row. Open http://localhost:8765/reviews/{id}
-    using the id returned by upsert_review. Leave the server running.
-
-## Local range
-
-1. **Pin the range** (same as /code-review). User-supplied SHA / branch /
+1. Pin the range (same as /code-review). User-supplied SHA / branch /
    range if they named one. Else three-dot merge-base(default-branch)...HEAD.
    Detect the default branch (git symbolic-ref refs/remotes/origin/HEAD,
    then develop / main / master). Confirm git rev-parse and a
    non-empty git diff --stat BASE...HEAD. Working tree stays out unless
-   they asked. Do not attach source. Empty diff: stop.
-2. **Collect hunks.** git diff --name-status -M BASE...HEAD and
-   git diff -U3 -M BASE...HEAD. Binary / unreadable files go in
-   omitted[] (path + reason), not as fake hunks.
-3. **Chapter.** Assign each git hunk (@@ block) to **exactly one** chapter.
-   A file may appear in more than one chapter. Do not drop hunks. Do not split
-   one @@ hunk across chapters. Order kinds, skip empty:
+   they asked. Empty diff: stop.
 
-   1. core — entrypoint and the new behavior. If the reviewer reads one
-      chapter, this is it. First core chapter is open: true (scroll lands there).
-   2. consequences — types, callers, public contract, schema/API fallout.
-   3. glue — registration, imports, config, wiring, adapters.
-   4. tests — tests and fixtures.
-   5. noise — docs, generated, lockfiles, formatting-only, snapshots.
-      Stub bodies for lockfiles / generated / huge files (stub: true plus
-      addition/deletion counts). Do not inline thousands of lockfile lines.
-
-   Title: short and specific ("Pin pipeline revisions to SNAPSHOT"), not
-   "Core changes". why: 2–5 sentences on why this part exists and what to
-   look at — not a review finding.
-
-   Format why for the Guide aside (same idea for any other agent-written
-   copy this skill emits). Blank lines start paragraphs. Wrap identifiers,
-   paths, routes, flags, and symbols in Markdown code spans. Use Markdown
-   bold only for a true stress. Those render as mono and strong. No raw
-   HTML. Plain identifiers with no markup stay body text.
-
-   Example why:
-
-   ```
-   This is the behavior change. `POST .../output-model` retargets the
-   pipeline shell to a different finished OUTPUT model and pins that
-   model's latest `SNAPSHOT` on the draft.
-
-   Read `switch_output_model` guards first: under review, building,
-   same model, not OUTPUT.
-   ```
-4. **Build a Guide v1 object** matching the Zod GuideV1 contract (see
-   src/lib/shared/contracts/guide.ts and docs/prds/done/01-guided-pr-review/). Line content has no
-   leading + / - / space. Chapter ids unique kebab-case. Omit source.
-5. **Ensure the instance is up** on http://localhost:8765
+2. Ensure the instance is up on http://localhost:8765
 
    ```bash
    curl -sS http://localhost:8765/mcp
@@ -255,25 +117,79 @@ one chat starts. The app still chapters nothing by itself.
 
    Start npm run dev in the background. Wait until /mcp answers. Do not start
    a second process if port 8765 is already taken.
-6. **Push via MCP** POST JSON-RPC to http://localhost:8765/mcp
 
-   - tools/call name add_review arguments { "guide": <Guide v1> }
-   - tools/call name set_active if you need a different id (add_review already
-     sets active)
+3. tools/call add_local_review with repoPath (absolute path to the git work
+   tree under review), base, head, and an optional title. It returns { id }.
 
-   Open http://localhost:8765/reviews/{id} using the id returned by add_review.
-   Guide, Diff, and Code Review tabs. Leave the server running.
+4. tools/call read_diff for that id. Follow the Chapter section. tools/call
+   chapter_review with the sourceCommit from read_diff and the chapters. On a
+   400, fix only the named ranges and retry up to twice.
+
+5. tools/call set_active if you need a different id. Open
+   http://localhost:8765/reviews/{id}. Guide, Diff, and Code Review tabs.
+   Leave the server running.
+
+## Chapter
+
+Order kinds, and skip a kind that has no lines:
+
+1. core — the entrypoint and the new behavior. This is the chapter to read
+   if there is only time for one.
+2. consequences — types, callers, public contract, schema or API fallout.
+3. glue — registration, imports, config, wiring, adapters.
+4. tests — tests and fixtures.
+5. noise — docs, generated files, lockfiles, formatting-only changes.
+
+Tests and noise stay their own chapters at the end, including when the
+behavior change is one thing. Within a kind, split when the why needs "and"
+to join two unrelated reasons, or when one part could be reverted alone.
+
+A changed line belongs to one chapter. Split a hunk so core can be read
+without a later chapter: the lines core needs from a consequences hunk go in
+core, and the rest of that hunk stays in consequences. Unchanged padding may
+repeat. The same changed line in two chapters is a duplicated range.
+
+Chapter structure comes from the code only. Do not fetch Jira or other linked
+tickets. When code and description disagree, the code wins, without a flag.
+
+Title: what the chapter does, about 60 characters at most. Why: 2 to 4 sentences.
+First the behavior change in the present tense, then the reason from the
+description or commits (left out without intent), then where to start reading
+and which guard or invariant holds it together. No findings, no approval
+language.
+
+Format why for the Guide aside (same idea for any other agent-written copy
+this skill emits). Blank lines start paragraphs. Wrap identifiers, paths,
+routes, flags, and symbols in Markdown code spans. Use Markdown bold only for
+a true stress. Those render as mono and strong. No raw HTML. Plain identifiers
+with no markup stay body text.
+
+Example why:
+
+```
+This is the behavior change. POST .../output-model retargets the
+pipeline shell to a different finished OUTPUT model and pins that
+model's latest SNAPSHOT on the draft.
+
+Read switch_output_model guards first: under review, building,
+same model, not OUTPUT.
+```
+
+read_diff returns numbered changed lines and the intent block (description and
+commits) when present. chapter_review takes { id, sourceCommit, chapters }
+where each chapter is { title, why, refs } and a ref is { path } or
+{ path, from, to }. Coverage must be exact across 1..k per file. A 400 names
+missing, duplicated, unknownPaths, and partialStubs — fix only those ranges.
 
 ## Hard no
 
 - No findings, approve/reject, or Standards/Spec grades.
 - No Cursor canvas.
-- No GitHub or Bitbucket ingest. Named PRs are Azure DevOps only.
 - No PAT in the app, store, or Guide JSON.
 - No LLM inside the app.
 - Do not implement product code in the repo under review.
-- Do not post ADO comments from this skill (a later story).
-- On Home, do not checkout and do not fetch. Chapter only from saved diffs.
+- Do not post provider comments from this skill (a later story).
+- On Home, do not checkout. Chapter only from saved diffs.
 - Do not rewrite green reviews. Do not update authored or other reviews
   unless the user asks for them in that chat.
 - The app chapters nothing by itself.
@@ -284,18 +200,24 @@ one chat starts. The app still chapters nothing by itself.
   agentConnected }. Review rows include base and head, and may include
   syncKey, sourceCommit, diffCommit, unchaptered, and pullRequest (provider,
   host, repository, number, webUrl). Catalog pull requests include isReviewer.
+- open_pull_request { url } → { id, chaptered, behind } — open an Azure
+  DevOps or GitHub pull request URL into a saved review with its diff and
+  intent.
+- add_local_review { repoPath, base, head, title? } → { id } — save an
+  unchaptered review from a local git work tree range.
+- read_diff { id } → plain text with numbered changed lines and intent when
+  present.
+- chapter_review { id, sourceCommit, chapters } → { id } — chapter by line
+  references; coverage must be exact.
+- get_review { id } → { guide, outcomes, diff? }
+- set_active { id } → { activeId }
+- remove_review { id } → { ok: true }
 - replace_catalog { origin, repository, syncedAt?, error?, pullRequests } →
   { ok: true } — catalog snapshot for one repository. Never deletes saved
-  reviews. Adopts matching unsourced local-range reviews onto catalog PRs.
-- add_review { guide } → { id } — new snapshot (local ranges).
-- upsert_review { guide } → { id } — stable id for a named ADO PR.
+  reviews.
 - publish_review_outcome { reviewId, outcome } → { id }
-- remove_review { id } → { ok: true }
-- get_review { id } → { guide, outcomes, diff? } — diff carries sourceCommit,
-  targetCommit, and files when the review has a saved snapshot.
-- set_active { id } → { activeId }
 
 Bare http://localhost:8765/ is Home. A Home skill run fans out chaptering over
-grey or yellow reviewer reviews from saved diffs, then upserts with
-guide.source.sourceCommit set to diff.sourceCommit. An explicit Named ADO PR
-or Local range path opens http://localhost:8765/reviews/{id}.
+grey or yellow reviewer reviews from saved diffs via read_diff and
+chapter_review. An explicit Named or Local path opens
+http://localhost:8765/reviews/{id}.

@@ -34,6 +34,7 @@ function fakeRepos() {
     upsertReviewFromTool: unused("upsertReviewFromTool"),
     removeReview: unused("removeReview"),
     setActive: unused("setActive"),
+    chapterReview: unused("chapterReview"),
     seedIfEmpty: unused("seedIfEmpty"),
     replaceCatalog: unused("replaceCatalog"),
     queueAction: unused("queueAction"),

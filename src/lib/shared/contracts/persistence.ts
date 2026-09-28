@@ -8,11 +8,30 @@ import { FileChange, GuideV1 } from "./guide.ts";
 import { StoredOutcome } from "./outcomes.ts";
 import { Sha } from "./provenance.ts";
 
+export const ReviewDiffIntent = z
+  .object({
+    description: z.string().optional(),
+    commits: z.array(
+      z
+        .object({
+          sha: z.string().min(1),
+          subject: z.string(),
+          body: z.string(),
+        })
+        .strict(),
+    ),
+    truncated: z.literal(true).optional(),
+  })
+  .strict();
+
+export type ReviewDiffIntent = z.infer<typeof ReviewDiffIntent>;
+
 export const ReviewDiff = z
   .object({
     sourceCommit: Sha,
     targetCommit: Sha,
     files: z.array(FileChange),
+    intent: ReviewDiffIntent.optional(),
   })
   .strict();
 

@@ -1,5 +1,6 @@
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { tools } from "../../shared/contracts/tools.ts";
+import { numberDiff, printNumberedDiff } from "../../shared/domain/numbered-diff.ts";
 import type { AppServices } from "../services/app.ts";
 
 const PROTOCOL = "2024-11-05";
@@ -25,15 +26,16 @@ const TOOL_DEFS = [
     inputSchema: schema(tools.replace_catalog.input),
   },
   {
-    name: "add_review",
-    description: "Add a Guide v1 payload as a new snapshot and make it active.",
-    inputSchema: schema(tools.add_review.input),
+    name: "open_pull_request",
+    description:
+      "Open an Azure DevOps or GitHub pull request URL into a saved review with its diff and intent. Returns id, chaptered, and behind.",
+    inputSchema: schema(tools.open_pull_request.input),
   },
   {
-    name: "upsert_review",
+    name: "add_local_review",
     description:
-      "Upsert a pull-request Guide v1 by provider, host, repository, and PR number.",
-    inputSchema: schema(tools.upsert_review.input),
+      "Save an unchaptered review from a local git work tree range (repoPath, base, head). Does not checkout or fetch.",
+    inputSchema: schema(tools.add_local_review.input),
   },
   {
     name: "publish_review_outcome",
@@ -50,6 +52,18 @@ const TOOL_DEFS = [
     name: "get_review",
     description: "Get the Guide v1 payload and outcome history for a review id.",
     inputSchema: schema(tools.get_review.input),
+  },
+  {
+    name: "read_diff",
+    description:
+      "Read a saved review diff as plain text with numbered changed lines. Unknown id is 404; missing diff is 409.",
+    inputSchema: schema(tools.read_diff.input),
+  },
+  {
+    name: "chapter_review",
+    description:
+      "Chapter a saved review by line references. Coverage must be exact; stale sourceCommit is 409.",
+    inputSchema: schema(tools.chapter_review.input),
   },
   {
     name: "set_active",
@@ -86,13 +100,13 @@ export function createMcpHandler(services: AppServices) {
         const input = tools.replace_catalog.input.parse(args);
         return services.catalog.replace(input);
       }
-      case "add_review": {
-        const input = tools.add_review.input.parse(args);
-        return services.reviews.addFromTool(input);
+      case "open_pull_request": {
+        const input = tools.open_pull_request.input.parse(args);
+        return services.reviews.openPullRequest(input.url);
       }
-      case "upsert_review": {
-        const input = tools.upsert_review.input.parse(args);
-        return services.reviews.upsertFromTool(input);
+      case "add_local_review": {
+        const input = tools.add_local_review.input.parse(args);
+        return services.reviews.addLocalReview(input);
       }
       case "publish_review_outcome": {
         const input = tools.publish_review_outcome.input.parse(args);
@@ -105,6 +119,27 @@ export function createMcpHandler(services: AppServices) {
       case "get_review": {
         const input = tools.get_review.input.parse(args);
         return services.reviews.get(input.id);
+      }
+      case "read_diff": {
+        const input = tools.read_diff.input.parse(args);
+        const review = await services.reviews.get(input.id);
+        if (!review.diff) {
+          throw Object.assign(
+            new Error("review has no saved diff; refresh first"),
+            { status: 409, rpc: 409 },
+          );
+        }
+        return printNumberedDiff({
+          id: input.id,
+          sourceCommit: review.diff.sourceCommit,
+          title: review.guide.title,
+          ...(review.diff.intent ? { intent: review.diff.intent } : {}),
+          files: numberDiff(review.diff.files),
+        });
+      }
+      case "chapter_review": {
+        const input = tools.chapter_review.input.parse(args);
+        return services.reviews.chapterReview(input);
       }
       case "set_active": {
         const input = tools.set_active.input.parse(args);
@@ -140,6 +175,11 @@ export function createMcpHandler(services: AppServices) {
             arguments?: Record<string, unknown>;
           };
           const result = await callTool(params.name ?? "", params.arguments);
+          if (typeof result === "string") {
+            return ok(id, {
+              content: [{ type: "text", text: result }],
+            });
+          }
           return ok(id, {
             content: [{ type: "text", text: JSON.stringify(result) }],
             structuredContent: result,
@@ -150,7 +190,10 @@ export function createMcpHandler(services: AppServices) {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      const code = (err as { rpc?: number }).rpc ?? -32000;
+      const status = (err as { status?: number }).status;
+      const code =
+        (err as { rpc?: number }).rpc ??
+        (typeof status === "number" ? status : -32000);
       return fail(id, code, message);
     }
   }

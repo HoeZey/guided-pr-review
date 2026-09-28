@@ -320,6 +320,9 @@ function repos(guides: Record<string, GuideV1>): ReviewRepository {
     setActive: async () => {
       throw new Error("unexpected setActive");
     },
+    chapterReview: async () => {
+      throw new Error("unexpected chapterReview");
+    },
     seedIfEmpty: async () => {
       throw new Error("unexpected seedIfEmpty");
     },

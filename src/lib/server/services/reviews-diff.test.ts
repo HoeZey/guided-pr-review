@@ -5,9 +5,16 @@ import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { test } from "node:test";
 import type { OpenActionTarget } from "../../shared/contracts/catalog.ts";
-import { FileChange, type GuideV1 } from "../../shared/contracts/guide.ts";
+import { FileChange, GuideV1 } from "../../shared/contracts/guide.ts";
+import { ReviewDiff as ReviewDiffSchema, type ReviewDiff } from "../../shared/contracts/persistence.ts";
 import { pullRequestSyncKey } from "../../shared/contracts/provenance.ts";
-import { GitOperationError, type GitCacheIdentity, type GitDiff, type ManagedGitCache } from "../git/ports.ts";
+import {
+  GitOperationError,
+  type GitCacheIdentity,
+  type GitCommitLog,
+  type GitDiff,
+  type ManagedGitCache,
+} from "../git/ports.ts";
 import { createManagedGitCache } from "../git/managed-cache.ts";
 import { createGitProcessRunner } from "../git/process.ts";
 import type {
@@ -70,6 +77,7 @@ function repos(overrides: Partial<AppRepositories>): AppRepositories {
     upsertReviewFromTool: unused("upsertReviewFromTool"),
     removeReview: unused("removeReview"),
     setActive: unused("setActive"),
+    chapterReview: unused("chapterReview"),
     seedIfEmpty: unused("seedIfEmpty"),
     replaceCatalog: unused("replaceCatalog"),
     queueAction: unused("queueAction"),
@@ -101,9 +109,9 @@ function emptyList() {
   };
 }
 
-function asUpsert(input: unknown): { guide: GuideV1; diff?: { sourceCommit: string; targetCommit: string; files: FileChange[] } } {
+function asUpsert(input: unknown): { guide: GuideV1; diff?: ReviewDiff } {
   if (input && typeof input === "object" && "guide" in input) {
-    return input as { guide: GuideV1; diff?: { sourceCommit: string; targetCommit: string; files: FileChange[] } };
+    return input as { guide: GuideV1; diff?: ReviewDiff };
   }
   return { guide: input as GuideV1 };
 }
@@ -194,11 +202,18 @@ function recordingGit(options: {
   files?: FileChange[];
   fail?: GitOperationError["kind"];
   delayMs?: number;
+  commits?: Array<{ sha: string; subject: string; body: string }>;
   onFetch?: (identity: GitCacheIdentity, commits: readonly string[], cloneUrl?: string) => void;
-} = {}): ManagedGitCache & GitDiff & { fetches: number; diffs: number } {
+  onLog?: (input: {
+    identity: GitCacheIdentity;
+    sourceCommit: string;
+    targetCommit: string;
+  }) => void;
+} = {}): ManagedGitCache & GitDiff & GitCommitLog & { fetches: number; diffs: number; logs: number } {
   const git = {
     fetches: 0,
     diffs: 0,
+    logs: 0,
     async ensureBare() {
       return;
     },
@@ -228,6 +243,26 @@ function recordingGit(options: {
       }
       return options.files ?? FILES;
     },
+    async logCommits(input: {
+      identity: GitCacheIdentity;
+      sourceCommit: string;
+      targetCommit: string;
+    }) {
+      git.logs += 1;
+      options.onLog?.(input);
+      return options.commits ?? [
+        {
+          sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          subject: "oldest",
+          body: "oldest body",
+        },
+        {
+          sha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          subject: "newest",
+          body: "newest body",
+        },
+      ];
+    },
   };
   return git;
 }
@@ -248,7 +283,7 @@ function configured(repo: ProviderRepositoryIdentity): ConfiguredRepositoryRecor
 function service(options: {
   repos: AppRepositories;
   rows: ProviderPullRequestMetadata[];
-  git: ManagedGitCache & GitDiff;
+  git: ManagedGitCache & GitDiff & GitCommitLog;
   configured?: ConfiguredRepositoryRecord[];
 }) {
   const readers = fakeReaders(options.rows);
@@ -257,6 +292,7 @@ function service(options: {
     repositoryReaders: readers,
     listConfigured: async () => options.configured ?? options.rows.map((row) => configured(row.repository)),
     git: options.git,
+    processRunner: createGitProcessRunner(),
   });
 }
 
@@ -338,7 +374,7 @@ test("updateDiff skips git and upsert when the saved diff commit is current", as
         return { id: "saved-1" };
       },
     }),
-    rows: [metaOf(ADO_REPO, 1101)],
+    rows: [metaOf(ADO_REPO, 1101, { description: "new description alone" })],
     git,
   });
   const result = await reviews.updateDiff(target);
@@ -346,6 +382,7 @@ test("updateDiff skips git and upsert when the saved diff commit is current", as
   assert.equal(result.skipped, true);
   assert.equal(git.fetches, 0);
   assert.equal(git.diffs, 0);
+  assert.equal(git.logs, 0);
   assert.equal(upserts, 0);
 });
 
@@ -807,5 +844,307 @@ test("createAppServices openDiff keeps ADO comment context through pullRequestRe
   assert.equal(context.firstComparingIteration, 1);
   assert.equal(context.secondComparingIteration, 2);
   assert.deepEqual(context.changes["src/open.ts"], { changeTrackingId: 7 });
+});
+
+test("syncDiff stores description and oldest-first commits on the saved diff", async () => {
+  const target = targetOf(ADO_REPO, 1101);
+  let savedDiff: ReviewDiff | undefined;
+  const logs: Array<{ sourceCommit: string; targetCommit: string }> = [];
+  const reviews = service({
+    repos: repos({
+      listReviews: async () => emptyList(),
+      upsertReview: async (input) => {
+        savedDiff = asUpsert(input).diff;
+        return { id: "r1" };
+      },
+    }),
+    rows: [metaOf(ADO_REPO, 1101, { description: "Author intent" })],
+    git: recordingGit({
+      onLog: (input) => {
+        logs.push({ sourceCommit: input.sourceCommit, targetCommit: input.targetCommit });
+      },
+    }),
+  });
+  await reviews.openDiff(target);
+  assert.deepEqual(logs, [{ sourceCommit: SOURCE, targetCommit: TARGET }]);
+  assert.equal(savedDiff?.intent?.description, "Author intent");
+  assert.deepEqual(savedDiff?.intent?.commits, [
+    {
+      sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      subject: "oldest",
+      body: "oldest body",
+    },
+    {
+      sha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      subject: "newest",
+      body: "newest body",
+    },
+  ]);
+  assert.equal(savedDiff?.intent?.truncated, undefined);
+  assert.equal(ReviewDiffSchema.parse(savedDiff).intent?.description, "Author intent");
+});
+
+test("syncDiff caps description at 8000 and commits at 100 with truncated", async () => {
+  const longDescription = "x".repeat(9000);
+  const manyCommits = Array.from({ length: 101 }, (_, index) => ({
+    sha: index.toString(16).padStart(40, "0"),
+    subject: `commit ${index}`,
+    body: "",
+  }));
+  let savedDiff: ReviewDiff | undefined;
+  const reviews = service({
+    repos: repos({
+      listReviews: async () => emptyList(),
+      upsertReview: async (input) => {
+        savedDiff = asUpsert(input).diff;
+        return { id: "r1" };
+      },
+    }),
+    rows: [metaOf(GITHUB_REPO, 42, { description: longDescription })],
+    git: recordingGit({ commits: manyCommits }),
+  });
+  await reviews.openDiff(targetOf(GITHUB_REPO, 42));
+  assert.equal(savedDiff?.intent?.description?.length, 8000);
+  assert.equal(savedDiff?.intent?.commits.length, 100);
+  assert.equal(savedDiff?.intent?.truncated, true);
+  assert.equal(savedDiff?.intent?.commits[0]?.subject, "commit 0");
+  assert.equal(savedDiff?.intent?.commits[99]?.subject, "commit 99");
+});
+
+test("ReviewDiff without intent still validates", () => {
+  const parsed = ReviewDiffSchema.parse({
+    sourceCommit: SOURCE,
+    targetCommit: TARGET,
+    files: FILES,
+  });
+  assert.equal(parsed.intent, undefined);
+});
+
+test("get returns saved diff.intent after syncDiff", async () => {
+  const target = targetOf(ADO_REPO, 1101);
+  let stored: ReviewDiff | undefined;
+  const reviews = service({
+    repos: repos({
+      listReviews: async () => emptyList(),
+      upsertReview: async (input) => {
+        stored = asUpsert(input).diff;
+        return { id: "r1" };
+      },
+      getReview: async (id) => {
+        assert.equal(id, "r1");
+        return { guide: { version: 1, title: "PR 1101", base: TARGET, head: SOURCE, chapters: [] } as GuideV1, outcomes: [], diff: stored };
+      },
+    }),
+    rows: [metaOf(ADO_REPO, 1101, { description: "Why" })],
+    git: recordingGit({
+      commits: [{ sha: SOURCE, subject: "tip", body: "body" }],
+    }),
+  });
+  await reviews.openDiff(target);
+  const got = await reviews.get("r1");
+  assert.equal(got.diff?.intent?.description, "Why");
+  assert.deepEqual(got.diff?.intent?.commits, [{ sha: SOURCE, subject: "tip", body: "body" }]);
+});
+
+for (const row of [
+  {
+    label: "ADO",
+    url: "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1101",
+    repo: ADO_REPO,
+    number: 1101,
+  },
+  {
+    label: "ADO visualstudio",
+    url: "https://braidteam.visualstudio.com/BRAID/_git/braid-connection-designer/pullrequest/1101",
+    repo: {
+      ...ADO_REPO,
+      host: "braidteam.visualstudio.com",
+      webUrl: "https://braidteam.visualstudio.com/BRAID/_git/braid-connection-designer",
+      cloneUrl: "https://braidteam.visualstudio.com/BRAID/_git/braid-connection-designer",
+    },
+    number: 1101,
+  },
+  {
+    label: "GitHub",
+    url: "https://github.com/octocat/Hello-World/pull/42",
+    repo: GITHUB_REPO,
+    number: 42,
+  },
+]) {
+  test(`openPullRequest ${row.label} URL saves diff and intent through syncDiff`, async () => {
+    const metadata = metaOf(row.repo, row.number, { description: `${row.label} body` });
+    let savedDiff: ReviewDiff | undefined;
+    let savedGuide: GuideV1 | undefined;
+    const git = recordingGit({
+      commits: [
+        { sha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", subject: "oldest", body: "" },
+        { sha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", subject: "newest", body: "n" },
+      ],
+    });
+    const reviews = service({
+      repos: repos({
+        listReviews: async () => emptyList(),
+        upsertReview: async (input) => {
+          const parsed = asUpsert(input);
+          savedGuide = parsed.guide;
+          savedDiff = parsed.diff;
+          return { id: "opened-1" };
+        },
+        getReview: async (id) => {
+          assert.equal(id, "opened-1");
+          return { guide: savedGuide!, outcomes: [], diff: savedDiff };
+        },
+      }),
+      rows: [metadata],
+      git,
+    });
+    const result = await reviews.openPullRequest(row.url);
+    assert.deepEqual(result, { id: "opened-1", chaptered: false, behind: false });
+    assert.equal(savedDiff?.sourceCommit, SOURCE);
+    assert.equal(savedDiff?.intent?.description, `${row.label} body`);
+    assert.equal(savedDiff?.intent?.commits[0]?.subject, "oldest");
+    assert.equal(git.fetches, 1);
+    assert.equal(git.diffs, 1);
+  });
+}
+
+test("openPullRequest at the same commit reports chaptered and behind without rewriting", async () => {
+  const target = targetOf(ADO_REPO, 1101);
+  const chapteredGuide = GuideV1.parse({
+    version: 1,
+    title: "Chaptered",
+    base: TARGET,
+    head: SOURCE,
+    chapters: [
+      {
+        id: "core",
+        kind: "core",
+        title: "Core",
+        why: "Why",
+        files: FILES,
+      },
+    ],
+    source: {
+      kind: "pull-request",
+      provider: "azure-devops",
+      host: "dev.azure.com",
+      repository: {
+        id: ADO_REPO.id,
+        owner: ADO_REPO.owner,
+        name: ADO_REPO.name,
+        webUrl: ADO_REPO.webUrl,
+      },
+      number: 1101,
+      webUrl: `${ADO_REPO.webUrl}/pullrequest/1101`,
+      sourceRef: "refs/heads/feature/review-me",
+      targetRef: "refs/heads/develop",
+      sourceCommit: SOURCE,
+      targetCommit: TARGET,
+      providerContext: {
+        kind: "azure-devops",
+        project: "BRAID",
+        firstComparingIteration: 1,
+        secondComparingIteration: 2,
+        changes: {},
+      },
+    },
+  });
+  const savedDiff: ReviewDiff = {
+    sourceCommit: SOURCE,
+    targetCommit: TARGET,
+    files: FILES,
+    intent: { commits: [{ sha: SOURCE, subject: "tip", body: "" }] },
+  };
+  let upserts = 0;
+  const git = recordingGit();
+  const reviews = service({
+    repos: repos({
+      listReviews: async () => ({
+        ...emptyList(),
+        reviews: [
+          {
+            id: "saved-1",
+            title: "Chaptered",
+            addedAt: "t",
+            base: TARGET,
+            head: SOURCE,
+            syncKey: pullRequestSyncKey(target),
+            sourceCommit: SOURCE,
+            diffCommit: SOURCE,
+            unchaptered: false,
+          },
+        ],
+      }),
+      getReview: async () => ({ guide: chapteredGuide, outcomes: [], diff: savedDiff }),
+      upsertReview: async () => {
+        upserts += 1;
+        return { id: "saved-1" };
+      },
+    }),
+    rows: [metaOf(ADO_REPO, 1101)],
+    git,
+  });
+  const result = await reviews.openPullRequest(
+    "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1101",
+  );
+  assert.deepEqual(result, { id: "saved-1", chaptered: true, behind: false });
+  assert.equal(git.fetches, 0);
+  assert.equal(git.diffs, 0);
+  assert.equal(upserts, 0);
+
+  const behindGuide = GuideV1.parse({
+    ...chapteredGuide,
+    source: { ...chapteredGuide.source!, sourceCommit: SOURCE_B },
+  });
+  const behindReviews = service({
+    repos: repos({
+      listReviews: async () => ({
+        ...emptyList(),
+        reviews: [
+          {
+            id: "saved-1",
+            title: "Chaptered",
+            addedAt: "t",
+            base: TARGET,
+            head: SOURCE_B,
+            syncKey: pullRequestSyncKey(target),
+            sourceCommit: SOURCE_B,
+            diffCommit: SOURCE,
+            unchaptered: false,
+          },
+        ],
+      }),
+      getReview: async () => ({ guide: behindGuide, outcomes: [], diff: savedDiff }),
+      upsertReview: async () => {
+        throw new Error("must not rewrite");
+      },
+    }),
+    rows: [metaOf(ADO_REPO, 1101)],
+    git: recordingGit(),
+  });
+  const behind = await behindReviews.openPullRequest(
+    "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1101",
+  );
+  assert.deepEqual(behind, { id: "saved-1", chaptered: true, behind: true });
+});
+
+test("openPullRequest rejects unsupported hosts and malformed URLs", async () => {
+  const reviews = service({
+    repos: repos({ listReviews: async () => emptyList() }),
+    rows: [],
+    git: recordingGit(),
+  });
+  await assert.rejects(
+    () => reviews.openPullRequest("https://bitbucket.org/octocat/Hello-World/pull/1"),
+    (err: Error & { status?: number }) => err.status === 400 && /unsupported git host/.test(err.message),
+  );
+  await assert.rejects(
+    () => reviews.openPullRequest("https://github.com/octocat/Hello-World"),
+    (err: Error & { status?: number }) => err.status === 400 && /malformed/.test(err.message),
+  );
+  await assert.rejects(
+    () => reviews.openPullRequest("not a url"),
+    (err: Error & { status?: number }) => err.status === 400,
+  );
 });
 

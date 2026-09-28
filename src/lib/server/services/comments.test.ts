@@ -131,6 +131,7 @@ function repos(guides: Record<string, GuideV1>): ReviewRepository {
     upsertReviewFromTool: unused("upsertReviewFromTool"),
     removeReview: unused("removeReview"),
     setActive: unused("setActive"),
+    chapterReview: unused("chapterReview"),
     seedIfEmpty: unused("seedIfEmpty"),
   };
 }
@@ -443,9 +444,12 @@ function appWithComments(comments: AppServices["comments"]): AppServices {
       upsertFromTool: unused("upsertFromTool"),
       remove: unused("remove"),
       setActive: unused("setActive"),
+      chapterReview: unused("chapterReview"),
       seedIfEmpty: unused("seedIfEmpty"),
       openDiff: unused("openDiff"),
       updateDiff: unused("updateDiff"),
+      openPullRequest: unused("openPullRequest"),
+      addLocalReview: unused("addLocalReview"),
     },
     catalog: { replace: unused("replace") },
     catalogRefresh: { refresh: unused("catalogRefresh") },

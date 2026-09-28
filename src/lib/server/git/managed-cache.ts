@@ -7,6 +7,8 @@ import { GIT_MAX_OUTPUT_BYTES, GIT_TIMEOUT_MS } from "./process.ts";
 import type {
   GitCacheFs,
   GitCacheIdentity,
+  GitCommitLog,
+  GitCommitMessage,
   GitDiff,
   GitProcessResult,
   GitProcessRunner,
@@ -53,7 +55,7 @@ export function createManagedGitCache(options: {
   runner: GitProcessRunner;
   credentials: CredentialSource;
   fs?: GitCacheFs;
-}): ManagedGitCache & GitDiff {
+}): ManagedGitCache & GitDiff & GitCommitLog {
   const fs = options.fs ?? createNodeGitCacheFs();
   // ponytail: one in-process lock per cache path. Fine for a single Node. File lock if writers multiply.
   const locks = new Map<string, Promise<void>>();
@@ -242,7 +244,46 @@ export function createManagedGitCache(options: {
       return parseUnifiedDiff(result.stdout);
     });
 
-  return { ensureBare, fetchCommits, unifiedThreeDot };
+  const logCommits: GitCommitLog["logCommits"] = (input) =>
+    withLock(input.identity, async () => {
+      const source = requireSha(input.sourceCommit);
+      const target = requireSha(input.targetCommit);
+      const cache = managedPath(input.identity);
+      if (!(await isBare(input.identity, cache))) {
+        throw new GitOperationError("corrupt", input.identity, "managed git cache is not a bare repository");
+      }
+      for (const sha of [source, target]) {
+        if (!(await hasCommit(input.identity, cache, sha))) {
+          throw new GitOperationError("missing-commit", input.identity, "commit is not in the managed cache");
+        }
+      }
+      const result = await git(
+        input.identity,
+        ["log", "--reverse", "--format=%H%x00%s%x00%b%x00", `${target}..${source}`],
+        cache,
+      );
+      if (result.commandMissing || result.timedOut || result.code !== 0) {
+        throw new GitOperationError("missing-commit", input.identity, "failed to read commit log");
+      }
+      return parseCommitLog(result.stdout);
+    });
+
+  return { ensureBare, fetchCommits, unifiedThreeDot, logCommits };
+}
+
+function parseCommitLog(stdout: string): GitCommitMessage[] {
+  const parts = stdout.split("\0");
+  const commits: GitCommitMessage[] = [];
+  for (let i = 0; i + 2 < parts.length; i += 3) {
+    const sha = parts[i]?.trim() ?? "";
+    if (!sha) continue;
+    commits.push({
+      sha,
+      subject: parts[i + 1] ?? "",
+      body: (parts[i + 2] ?? "").replace(/\n$/, ""),
+    });
+  }
+  return commits;
 }
 
 function encodeSegment(value: string): string {

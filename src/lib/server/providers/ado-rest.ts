@@ -258,6 +258,7 @@ function normalizePullRequest(
     throw fail("malformed-response", parsed.host);
   }
   const webBase = repository.webUrl || repoWebUrl(parsed);
+  const description = asText(row.description);
   return {
     provider: "azure-devops",
     host: parsed.host,
@@ -271,6 +272,7 @@ function normalizePullRequest(
     },
     number,
     title,
+    ...(description ? { description } : {}),
     webUrl: `${webBase.replace(/\/$/, "")}/pullrequest/${number}`,
     sourceRef,
     targetRef,

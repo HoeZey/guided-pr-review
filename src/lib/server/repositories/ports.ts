@@ -15,6 +15,7 @@ export type ReviewRepository = {
   upsertReviewFromTool: (body: unknown) => Promise<{ id: string }>;
   removeReview: (id: string) => Promise<{ ok: true }>;
   setActive: (id: string) => Promise<{ activeId: string }>;
+  chapterReview: (input: unknown) => Promise<{ id: string }>;
   seedIfEmpty: (guide: GuideV1) => Promise<void>;
 };
 

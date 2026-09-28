@@ -101,6 +101,27 @@ export const tools = {
     input: z.object({ guide: GuideV1 }).strict(),
     output: z.object({ id: z.string() }).strict(),
   },
+  open_pull_request: {
+    input: z.object({ url: z.string().min(1) }).strict(),
+    output: z
+      .object({
+        id: z.string(),
+        chaptered: z.boolean(),
+        behind: z.boolean(),
+      })
+      .strict(),
+  },
+  add_local_review: {
+    input: z
+      .object({
+        repoPath: z.string().min(1),
+        base: z.string().min(1),
+        head: z.string().min(1),
+        title: z.string().min(1).optional(),
+      })
+      .strict(),
+    output: z.object({ id: z.string() }).strict(),
+  },
   publish_review_outcome: {
     input: z
       .object({
@@ -123,6 +144,58 @@ export const tools = {
         diff: ReviewDiff.optional(),
       })
       .strict(),
+  },
+  read_diff: {
+    input: z.object({ id: z.string().min(1) }).strict(),
+    output: z.string(),
+  },
+  chapter_review: {
+    input: z
+      .object({
+        id: z.string().min(1),
+        sourceCommit: z.string().min(1),
+        chapters: z
+          .array(
+            z
+              .object({
+                title: z.string().min(1),
+                why: z.string().min(1),
+                refs: z
+                  .array(
+                    z
+                      .object({
+                        path: z.string().min(1),
+                        from: z.number().int().positive().optional(),
+                        to: z.number().int().positive().optional(),
+                      })
+                      .strict()
+                      .superRefine((ref, ctx) => {
+                        if ((ref.from === undefined) !== (ref.to === undefined)) {
+                          ctx.addIssue({
+                            code: z.ZodIssueCode.custom,
+                            message: "from and to must both be set or both omitted",
+                          });
+                        }
+                        if (
+                          ref.from !== undefined &&
+                          ref.to !== undefined &&
+                          ref.from > ref.to
+                        ) {
+                          ctx.addIssue({
+                            code: z.ZodIssueCode.custom,
+                            message: "from must be <= to",
+                          });
+                        }
+                      }),
+                  )
+                  .min(1),
+              })
+              .strict(),
+          )
+          .min(1),
+      })
+      .strict(),
+    output: z.object({ id: z.string() }).strict(),
   },
   set_active: {
     input: z.object({ id: z.string().min(1) }).strict(),

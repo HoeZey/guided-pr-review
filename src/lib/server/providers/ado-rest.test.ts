@@ -367,6 +367,7 @@ test("getPullRequest fetches saved completed and abandoned details", async () =>
     pullRequestId: 2201,
     title: "Done work",
     status: "completed",
+    description: "Ships the pin maps change",
     closedDate: "2026-09-15T08:00:00.000Z",
     lastMergeSourceCommit: { commitId: SHA_C },
     lastMergeTargetCommit: { commitId: SHA_D },
@@ -407,15 +408,42 @@ test("getPullRequest fetches saved completed and abandoned details", async () =>
   assert.equal(done.targetCommit, SHA_D);
   assert.equal(done.updatedAt, "2026-09-15T08:00:00.000Z");
   assert.equal(done.webUrl, `${WEB_URL}/pullrequest/2201`);
+  assert.equal(done.description, "Ships the pin maps change");
   assert.equal(dropped.status, "abandoned");
   assert.equal(dropped.isAuthor, false);
   assert.equal(dropped.isReviewer, true);
   assert.equal(dropped.updatedAt, "2026-09-15T09:00:00.000Z");
+  assert.equal(dropped.description, undefined);
   assert.equal(calls.length, 2);
   assert.equal(
     calls.every((call) => call.url.includes("api-version=7.1") && call.authorization === `Bearer ${TOKEN}`),
     true,
   );
+});
+
+test("getPullRequest maps description and omits it when missing or blank", async () => {
+  const withText = prPayload({ description: "  Why this PR exists  " });
+  const blank = prPayload({ pullRequestId: 3301, description: "   " });
+  const missing = prPayload({ pullRequestId: 3302 });
+  const { fetch } = recordingFetch((url) => {
+    if (isPrGetRequest(url, 1101)) return jsonResponse(withText);
+    if (isPrGetRequest(url, 3301)) return jsonResponse(blank);
+    if (isPrGetRequest(url, 3302)) return jsonResponse(missing);
+    return jsonResponse({ message: "not found" }, 404);
+  });
+  const adapter = createAdoRestAdapter({ credentials: connectedCredentials(), fetch });
+  const repo = { id: REPO_ID, owner: OWNER, name: REPO_NAME };
+  const input = {
+    provider: "azure-devops" as const,
+    host: HOST,
+    repository: repo,
+  };
+  const described = await adapter.getPullRequest({ ...input, number: 1101 });
+  const blankMeta = await adapter.getPullRequest({ ...input, number: 3301 });
+  const missingMeta = await adapter.getPullRequest({ ...input, number: 3302 });
+  assert.equal(described.description, "Why this PR exists");
+  assert.equal(blankMeta.description, undefined);
+  assert.equal(missingMeta.description, undefined);
 });
 
 test("missing commit ids and malformed payloads fail without inventing values", async () => {

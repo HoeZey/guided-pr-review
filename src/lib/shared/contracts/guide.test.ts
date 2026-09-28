@@ -114,3 +114,32 @@ test("rejects invalid pull-request provenance", () => {
     GuideV1.parse({ ...sample, source: prSource({ sourceCommit: "abc1234" }) }),
   );
 });
+
+test("chapter kind is optional and summary is rejected; stored guides with kind still parse", () => {
+  const withKind = GuideV1.parse(sample);
+  assert.equal(withKind.chapters[0].kind, "core");
+  assert.equal("summary" in withKind, false);
+
+  const withoutKind = GuideV1.parse({
+    version: 1,
+    title: "Two",
+    base: sample.base,
+    head: sample.head,
+    chapters: [
+      {
+        id: "chapter-1",
+        title: "Core",
+        why: "The behavior change.",
+        files: sample.chapters[0].files,
+      },
+    ],
+  });
+  assert.equal(withoutKind.chapters[0].kind, undefined);
+
+  assert.throws(() =>
+    GuideV1.parse({
+      ...sample,
+      summary: "gone",
+    }),
+  );
+});

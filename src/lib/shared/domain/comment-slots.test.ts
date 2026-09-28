@@ -246,3 +246,32 @@ test("composer anchors use the same Guide and Diff slots as existing threads", (
   }
   assert.equal(projectComposerAnchor({ kind: "pr" }, files, opts), null);
 });
+
+test("Guide shows a padded line comment once on the first chapter file that includes it", () => {
+  const pad = {
+    type: "context" as const,
+    content: "pad",
+    oldLine: 9,
+    newLine: 9,
+  };
+  const chapterFiles: FileChange[] = [
+    {
+      path: "src/a.ts",
+      hunks: [{ header: "@@ -9,2 +9,3 @@", oldStart: 9, newStart: 9, lines: [pad, ...LINES] }],
+    },
+    {
+      path: "src/a.ts",
+      hunks: [{ header: "@@ -9,1 +9,1 @@", oldStart: 9, newStart: 9, lines: [pad] }],
+    },
+  ];
+  const threads = [thread("pad-9", { kind: "line", path: "src/a.ts", side: "current", line: 9 })];
+  const guide = projectInlineThreads(threads, chapterFiles, {
+    layout: "unified",
+    hideUnchanged: false,
+    surface: "guide",
+  });
+  const hits = [...guide.after.entries()].filter(([, rows]) => rows.some((row) => row.id === "pad-9"));
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0]?.[0].startsWith("0:"), true);
+  assert.equal(threadsAfter(guide, 1, 0, 0, "unified").length, 0);
+});

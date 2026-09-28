@@ -242,6 +242,72 @@ test("corrupt managed cache recovers without changing other caches", async () =>
   assert.ok(files.some((file) => file.path === "src/maps.py"));
 });
 
+test("logCommits returns oldest-first sha subject and body for target..source", async () => {
+  const root = await mkdtemp(join(tmpdir(), "gpr-10-02-log-"));
+  const fixture = await makeIntentFixtureRemote(join(root, "remote"));
+  const dataDir = join(root, "data");
+  const identity: GitCacheIdentity = {
+    provider: "github",
+    host: "github.com",
+    repositoryId: "intent",
+  };
+  const recorded = recordingRunner(createGitProcessRunner());
+  const git = createManagedGitCache({
+    dataDir,
+    runner: recorded,
+    credentials: unusedCredentials,
+  });
+  await git.fetchCommits(identity, [fixture.source, fixture.target], {
+    cloneUrl: fixture.remote,
+  });
+  const commits = await git.logCommits({
+    identity,
+    sourceCommit: fixture.source,
+    targetCommit: fixture.target,
+  });
+  assert.deepEqual(
+    commits.map((row) => ({ sha: row.sha, subject: row.subject, body: row.body })),
+    [
+      { sha: fixture.mid, subject: "mid change", body: "middle body" },
+      { sha: fixture.source, subject: "feature tip", body: "tip body\nmore detail" },
+    ],
+  );
+  assert.ok(
+    recorded.argvLog.some(
+      (argv) =>
+        argv.includes("log") &&
+        argv.includes("--reverse") &&
+        argv.some((arg) => arg.includes(`${fixture.target}..${fixture.source}`)),
+    ),
+  );
+});
+
+async function makeIntentFixtureRemote(dir: string): Promise<{
+  remote: string;
+  source: string;
+  target: string;
+  mid: string;
+}> {
+  const work = join(dir, "work");
+  const remote = join(dir, "remote.git");
+  await mkdir(join(work, "src"), { recursive: true });
+  await writeFile(join(work, "src/maps.py"), "one\n");
+  await runGit(["init"], work);
+  await runGit(["add", "src/maps.py"], work);
+  await runGit(["commit", "-m", "base"], work);
+  const target = (await runGit(["rev-parse", "HEAD"], work)).stdout.trim();
+  await writeFile(join(work, "src/maps.py"), "two\n");
+  await runGit(["add", "src/maps.py"], work);
+  await runGit(["commit", "-m", "mid change", "-m", "middle body"], work);
+  const mid = (await runGit(["rev-parse", "HEAD"], work)).stdout.trim();
+  await writeFile(join(work, "src/maps.py"), "three\n");
+  await runGit(["add", "src/maps.py"], work);
+  await runGit(["commit", "-m", "feature tip", "-m", "tip body\nmore detail"], work);
+  const source = (await runGit(["rev-parse", "HEAD"], work)).stdout.trim();
+  await runGit(["clone", "--bare", work, remote], dir);
+  return { remote, source, target, mid };
+}
+
 test("unchanged available commits skip fetch", async () => {
   const fake = statefulGit({ present: [SHA_A, SHA_B] });
   const recorded = recordingRunner(fake);

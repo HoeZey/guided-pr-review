@@ -360,6 +360,7 @@ test("getPullRequest fetches saved closed and merged details with exact base and
     html_url: "https://github.com/octocat/Hello-World/pull/88",
     state: "closed",
     merged_at: null,
+    body: null,
     user: user("other_user"),
     requested_reviewers: [],
   });
@@ -369,6 +370,7 @@ test("getPullRequest fetches saved closed and merged details with exact base and
     html_url: "https://github.com/octocat/Hello-World/pull/99",
     state: "closed",
     merged_at: "2011-02-01T00:00:00Z",
+    body: "Merges the feature branch",
     user: user(GH_LOGIN),
     requested_reviewers: [],
   });
@@ -392,6 +394,8 @@ test("getPullRequest fetches saved closed and merged details with exact base and
   assert.equal(closedMeta.targetCommit, BASE_SHA);
   assert.equal(mergedMeta.sourceCommit, HEAD_SHA);
   assert.equal(mergedMeta.targetCommit, BASE_SHA);
+  assert.equal(closedMeta.description, undefined);
+  assert.equal(mergedMeta.description, "Merges the feature branch");
   const closedCard = asCatalog(closedMeta);
   const mergedCard = asCatalog(mergedMeta);
   const overview = projectHomeOverview(
@@ -608,4 +612,28 @@ test("adapter uses injected fetch and never invokes gh api", async () => {
     false,
   );
   assert.ok(argvLog.some((argv) => argv.join(" ") === "gh auth token --hostname github.com"));
+});
+
+test("getPullRequest maps body to description and omits it when missing or blank", async () => {
+  const withText = pull({ number: 41, body: "  Why this PR exists  " });
+  const blank = pull({ number: 42, body: "   " });
+  const missing = pull({ number: 43, body: null });
+  const { fetch } = recordingFetch((url) => {
+    if (url.pathname.endsWith("/pulls/41")) return jsonResponse(withText);
+    if (url.pathname.endsWith("/pulls/42")) return jsonResponse(blank);
+    if (url.pathname.endsWith("/pulls/43")) return jsonResponse(missing);
+    throw new Error(`unexpected live network ${url.toString()}`);
+  });
+  const provider = createGithubProvider({ credentials: connectedCredentials(), fetch });
+  const input = {
+    provider: "github" as const,
+    host: "github.com",
+    repository: { id: IDENTITY.id, owner: IDENTITY.owner, name: IDENTITY.name },
+  };
+  const described = await provider.getPullRequest({ ...input, number: 41 });
+  const blankMeta = await provider.getPullRequest({ ...input, number: 42 });
+  const missingMeta = await provider.getPullRequest({ ...input, number: 43 });
+  assert.equal(described.description, "Why this PR exists");
+  assert.equal(blankMeta.description, undefined);
+  assert.equal(missingMeta.description, undefined);
 });

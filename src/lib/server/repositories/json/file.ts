@@ -37,6 +37,18 @@ export async function locked<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
+function dropRetiredGuideSummary(parsed: unknown): void {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
+  const reviews = (parsed as { reviews?: unknown }).reviews;
+  if (!Array.isArray(reviews)) return;
+  for (const review of reviews) {
+    if (!review || typeof review !== "object") continue;
+    const guide = (review as { guide?: unknown }).guide;
+    if (!guide || typeof guide !== "object" || Array.isArray(guide)) continue;
+    delete (guide as { summary?: unknown }).summary;
+  }
+}
+
 export async function readStore(): Promise<StoreV1> {
   if (cache) return cache;
   const file = dataFile();
@@ -48,6 +60,7 @@ export async function readStore(): Promise<StoreV1> {
       typeof parsedJson === "object" &&
       !Array.isArray(parsedJson) &&
       Object.prototype.hasOwnProperty.call(parsedJson, "repositories");
+    dropRetiredGuideSummary(parsedJson);
     cache = StoreV1.parse(parsedJson);
     return cache;
   } catch (err) {

@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AppRepositories, ConfiguredRepositoryPort } from "../repositories/ports.ts";
 import type { CommandRunner, CredentialSource } from "../auth/ports.ts";
-import type { GitDiff, ManagedGitCache } from "../git/ports.ts";
+import type { GitCommitLog, GitDiff, GitProcessRunner, ManagedGitCache } from "../git/ports.ts";
 import { createManagedGitCache } from "../git/managed-cache.ts";
 import { createGitProcessRunner } from "../git/process.ts";
 import type { ProviderPullRequestReader, ProviderRepositoryReader } from "../providers/ports.ts";
@@ -61,7 +61,8 @@ export function createAppServices(
       ado: ProviderRepositoryReader & Partial<ProviderPullRequestReader>;
       github: ProviderRepositoryReader & Partial<ProviderPullRequestReader>;
     };
-    git?: ManagedGitCache & GitDiff;
+    git?: ManagedGitCache & GitDiff & GitCommitLog;
+    processRunner?: GitProcessRunner;
     commentProviders?: {
       ado: CommentProvider;
       github: CommentProvider;
@@ -89,11 +90,12 @@ export function createAppServices(
     ado: pullRequestReader(readers.ado),
     github: pullRequestReader(readers.github),
   };
+  const processRunner = options.processRunner ?? createGitProcessRunner();
   const git =
     options.git ??
     createManagedGitCache({
       dataDir: defaultDataDir(),
-      runner: createGitProcessRunner(),
+      runner: processRunner,
       credentials,
     });
   const commentProviders = options.commentProviders ?? {
@@ -106,6 +108,7 @@ export function createAppServices(
       repositoryReaders: { ado: readers.ado, github: readers.github },
       listConfigured: async () => (await repositories.list()).repositories,
       git,
+      processRunner,
     }),
     catalog,
     catalogRefresh: createCatalogRefreshService({

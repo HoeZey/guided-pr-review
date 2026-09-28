@@ -255,6 +255,29 @@ test("old Store v1 JSON without source still loads", async () => {
   });
 });
 
+test("a stored guide summary is dropped on load", async () => {
+  await withStore(async () => {
+    await writeFile(
+      join(process.env.GUIDED_PR_REVIEW_DATA!, "reviews.json"),
+      `${JSON.stringify({
+        version: 1,
+        activeId: "r1",
+        reviews: [
+          {
+            id: "r1",
+            addedAt: "2020-01-01T00:00:00.000Z",
+            guide: { ...sample, summary: "Maps follow the output-model SNAPSHOT." },
+          },
+        ],
+      })}\n`,
+    );
+    resetJsonStoreCache();
+    const got = await getReview("r1");
+    assert.equal(got.guide.title, "One");
+    assert.equal("summary" in got.guide, false);
+  });
+});
+
 test("leftover Open Update Diff and Refresh actions drop on load; Generate guide stays", async () => {
   await withStore(async () => {
     await writeFile(

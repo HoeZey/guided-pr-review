@@ -12,6 +12,7 @@ import {
 import { pullRequestSyncKey } from "../../../shared/contracts/provenance.ts";
 import { tools } from "../../../shared/contracts/tools.ts";
 import { applyCatalogReplacement } from "../../../shared/domain/catalog.ts";
+import { resolveChapterRefs } from "../../../shared/domain/chapter-refs.ts";
 import {
   agentIsConnected,
   findLocalReviewToAdopt,
@@ -188,8 +189,8 @@ export async function replaceCatalog(input: unknown): Promise<{ ok: true }> {
 }
 
 export async function addReview(input: unknown): Promise<{ id: string }> {
-  const guide = GuideV1.parse(input);
-  return mutateStore((store) => appendActive(store, guide));
+  const { guide, diff } = parseUpsert(input);
+  return mutateStore((store) => appendActive(store, guide, diff));
 }
 
 export async function addReviewFromTool(body: unknown): Promise<{ id: string }> {
@@ -282,6 +283,56 @@ export async function setActive(id: string): Promise<{ activeId: string }> {
   });
 }
 
+export async function chapterReview(input: unknown): Promise<{ id: string }> {
+  const parsed = tools.chapter_review.input.parse(input);
+  return mutateStore((store) => {
+    const found = store.reviews.find((review) => review.id === parsed.id);
+    if (!found) {
+      throw httpError(`unknown review ${parsed.id}`, 404);
+    }
+    if (!found.diff) {
+      throw httpError("review has no saved diff; refresh first", 409);
+    }
+    if (found.diff.sourceCommit.toLowerCase() !== parsed.sourceCommit.toLowerCase()) {
+      throw httpError(
+        `sourceCommit does not match; current is ${found.diff.sourceCommit}`,
+        409,
+      );
+    }
+    const resolved = resolveChapterRefs(found.diff.files, parsed.chapters);
+    if (!resolved.ok) {
+      throw httpError(JSON.stringify(resolved.error), 400);
+    }
+    const prev = found.guide;
+    const chapters = resolved.chapters.map((chapter, index) => ({
+      id: `chapter-${index + 1}`,
+      title: chapter.title,
+      why: chapter.why,
+      ...(chapter.open ? { open: true as const } : {}),
+      additions: chapter.additions,
+      deletions: chapter.deletions,
+      files: chapter.files,
+    }));
+    const nextSource = prev.source
+      ? {
+          ...prev.source,
+          sourceCommit: found.diff.sourceCommit,
+        }
+      : undefined;
+    found.guide = GuideV1.parse({
+      version: 1,
+      title: prev.title,
+      base: prev.base,
+      head: nextSource ? prev.head : found.diff.sourceCommit,
+      ...(prev.range !== undefined ? { range: prev.range } : {}),
+      ...(prev.repo !== undefined ? { repo: prev.repo } : {}),
+      chapters,
+      ...(nextSource ? { source: nextSource } : {}),
+    });
+    return { id: found.id };
+  });
+}
+
 export async function seedIfEmpty(guide: GuideV1): Promise<void> {
   await locked(async () => {
     const current = await readStore();
@@ -335,6 +386,7 @@ export const jsonRepositories: AppRepositories = {
   upsertReviewFromTool,
   removeReview,
   setActive,
+  chapterReview,
   seedIfEmpty,
   replaceCatalog,
   queueAction,

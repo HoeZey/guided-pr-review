@@ -224,6 +224,7 @@ function readPullRequest(
   const row = body as {
     number?: unknown;
     title?: unknown;
+    body?: unknown;
     html_url?: unknown;
     state?: unknown;
     draft?: unknown;
@@ -239,6 +240,7 @@ function readPullRequest(
     ? row.number
     : undefined;
   const title = asText(row.title);
+  const description = asText(row.body);
   const webUrl = asText(row.html_url);
   const sourceRef = asText(row.head?.ref);
   const targetRef = asText(row.base?.ref);
@@ -268,6 +270,7 @@ function readPullRequest(
     repository,
     number,
     title,
+    ...(description ? { description } : {}),
     webUrl,
     sourceRef,
     targetRef,
