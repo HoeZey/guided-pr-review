@@ -1,15 +1,14 @@
 {
   "name": "guided-pr-review",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "bin": {
     "pr-guide": "scripts/pr-guide.js"
   },
   "scripts": {
-    "postinstall": "node scripts/link-skill.js",
     "dev": "vite dev --host localhost --port 8765",
-    "build": "vite build",
+    "build:app": "vite build",
     "start": "HOST=\"${HOST:-localhost}\" PORT=\"${PORT:-8765}\" node build",
     "test": "tsx --test $(find src/lib/shared src/lib/server -name '*.test.ts') && node --test scripts/link-skill.test.js scripts/pr-guide.test.js",
     "test:svelte": "vitest run && vitest run --config vitest.ssr.config.ts",
@@ -17,6 +16,7 @@
     "check:svelte": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.svelte.json"
   },
   "dependencies": {
+    "guided-pr-review-install": "file:./scripts/install-hook",
     "@lucide/svelte": "^1.48.0",
     "@modelcontextprotocol/sdk": "^1.18.2",
     "@sveltejs/adapter-node": "^5.5.4",
