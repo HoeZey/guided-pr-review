@@ -370,12 +370,14 @@ test("one repository auth failure keeps the other snapshot and prior failed data
     assert.equal(adoSnap?.pullRequests[0]?.title, "Prior ADO");
     assert.equal(adoSnap?.syncedAt, "2026-09-14T12:00:00.000Z");
     assert.equal(adoSnap?.attemptedAt, new Date(T0).toISOString());
-    assert.match(adoSnap?.error ?? "", /Azure DevOps/);
-    assert.equal(typeof adoSnap?.error, "string");
+    assert.equal(
+      adoSnap?.error,
+      "Could not refresh the PR list. Check az login, the organization, and the project.",
+    );
     assert.equal(ghSnap?.pullRequests[0]?.title, "GH ok");
     assert.equal(ghSnap?.error, undefined);
     const overview = projectHomeOverview(listed.reviews, listed.catalog);
-    assert.ok(overview.catalogErrors.some((row) => row.message.includes("Azure DevOps")));
+    assert.ok(overview.catalogErrors.some((row) => row.message.includes("az login")));
     now = T0 + CATALOG_REFRESH_STALE_MS;
     const ghFail = refreshService({
       configured: [record(ADO, true), record(GITHUB, false)],
@@ -393,11 +395,34 @@ test("one repository auth failure keeps the other snapshot and prior failed data
     const after = await listReviews();
     const ghAfter = after.catalog.find((row) => row.repository.id === GITHUB.id);
     assert.equal(ghAfter?.pullRequests[0]?.title, "GH ok");
-    assert.match(ghAfter?.error ?? "", /GitHub/);
+    assert.equal(
+      ghAfter?.error,
+      "Could not refresh the PR list. Check gh auth login and the repository access.",
+    );
     assert.equal(after.reviews[0].id, saved.id);
     const dumped = JSON.stringify(after);
     assert.equal(dumped.includes("token"), false);
     assert.equal(dumped.includes("gho_"), false);
+  });
+});
+
+test("a busy host asks to try the PR list refresh again later", async () => {
+  await withStore(async () => {
+    const service = refreshService({
+      configured: [record(ADO, true)],
+      readers: fakeReaders({
+        list: {
+          [ADO.id]: async () => {
+            throw new ProviderError({ code: "rate", provider: "azure-devops", host: ADO.host });
+          },
+        },
+      }),
+      now: () => T0,
+    });
+    await service.refresh({ reason: "manual" });
+    const listed = await listReviews();
+    const snap = listed.catalog.find((row) => row.repository.id === ADO.id);
+    assert.equal(snap?.error, "Could not refresh the PR list. Try again later.");
   });
 });
 

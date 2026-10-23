@@ -4,6 +4,7 @@ import {
   DIFF_KEY,
   GUIDE_DIFF_KEY,
   HIDE_KEY,
+  HOME_GROUPS_KEY,
   PREF_DEFAULTS,
   RAILS_KEY,
   SPLIT_KEY,
@@ -11,6 +12,7 @@ import {
   THEME_KEY,
   VIEWED_PREFIX,
   parseHideUnchanged,
+  parseHomeGroups,
   parseSidebarPx,
   parseSplitPct,
   parseTab,
@@ -60,8 +62,8 @@ test("SSR-safe parsers fall back to product defaults", () => {
   expect(parseTheme("sepia")).toBe("dark");
   expect(parseTheme("light")).toBe("light");
   expect(parseTab(null)).toBe("guide");
-  expect(parseTab("comments")).toBe("discussion");
-  expect(parseTab("discussion")).toBe("discussion");
+  expect(parseTab("comments")).toBe("guide");
+  expect(parseTab("discussion")).toBe("guide");
   expect(parseTab("review")).toBe("guide");
   expect(parseDiffLayout(null, PREF_DEFAULTS.diffLayout)).toBe("split");
   expect(parseDiffLayout("unified", PREF_DEFAULTS.guideLayout)).toBe("unified");
@@ -73,6 +75,13 @@ test("SSR-safe parsers fall back to product defaults", () => {
   expect(parseSidebarPx(null)).toBe(280);
   expect(parseSidebarPx("{")).toBe(280);
   expect(parseSidebarPx(JSON.stringify({ sidebar: 320 }))).toBe(320);
+  expect(HOME_GROUPS_KEY).toBe("guided-pr-review-home-groups");
+  expect(parseHomeGroups(null)).toEqual({});
+  expect(parseHomeGroups("{")).toEqual({});
+  expect(parseHomeGroups(JSON.stringify({ archived: true, "my-draft-prs": false, n: 1 }))).toEqual({
+    archived: true,
+    "my-draft-prs": false,
+  });
 });
 
 test("hydratePreferences reads stored values after SSR defaults", () => {
@@ -107,9 +116,9 @@ test("tab cookie name matches the existing localStorage tab key", () => {
   expect(parseStoredTab("review")).toBe("guide");
   expect(parseStoredTab("diff")).toBe("diff");
   expect(parseStoredTab("guide")).toBe("guide");
-  expect(parseStoredTab("discussion")).toBe("discussion");
+  expect(parseStoredTab("discussion")).toBeNull();
   expect(parseStoredTab(null)).toBeNull();
-  expect(parseStoredTab("comments")).toBe("discussion");
+  expect(parseStoredTab("comments")).toBeNull();
 });
 
 test("every named preference setter writes its existing localStorage key", () => {

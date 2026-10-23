@@ -277,10 +277,22 @@ body {
   position: relative;
   min-width: 0;
   margin: 0;
-  padding: 6px 8px;
+  padding: 6px 26px 6px 8px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: transparent;
+}
+
+.repo-row:has(.repo-error) {
+  align-items: flex-start;
+}
+
+.repo-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 
 .repo-name {
@@ -290,9 +302,15 @@ body {
   white-space: nowrap;
 }
 
+.repo-error {
+  color: var(--removed-text);
+}
+
 .repo-remove {
   display: none;
-  margin-left: auto;
+  position: absolute;
+  top: 6px;
+  right: 6px;
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -521,7 +539,7 @@ body {
   padding: 0;
 }
 
-.home-group.is-archived > summary {
+.home-group > summary {
   cursor: pointer;
   list-style: none;
   display: flex;
@@ -529,21 +547,21 @@ body {
   gap: 8px;
 }
 
-.home-group.is-archived > summary::-webkit-details-marker {
+.home-group > summary::-webkit-details-marker {
   display: none;
 }
 
-.home-group.is-archived > summary::before {
+.home-group > summary::before {
   content: "▸";
   color: var(--muted);
-  font-size: 11px;
+  font-size: 14px;
 }
 
-.home-group.is-archived[open] > summary::before {
+.home-group[open] > summary::before {
   content: "▾";
 }
 
-.home-group.is-archived > summary h2 {
+.home-group > summary h2 {
   margin: 0;
 }
 
@@ -1788,6 +1806,7 @@ main {
   border-radius: 0 0 10px 10px;
   background: var(--bg-elevated);
   overflow-x: auto;
+  overflow-anchor: none;
 }
 
 .chevron {

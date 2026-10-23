@@ -9,10 +9,16 @@ export type ReviewTab = "guide" | "diff" | "review" | "discussion";
 
 export const TAB_COOKIE = "guided-pr-review-tab";
 
+// TODO: remove this flag when the comment rework lands.
+export function commentsEnabled(): boolean {
+  return false;
+}
+
 export function parseStoredTab(raw: string | null | undefined): ReviewTab | null {
-  if (raw === "guide" || raw === "diff" || raw === "discussion") return raw;
+  if (raw === "guide" || raw === "diff") return raw;
   if (raw === "review") return "guide";
-  if (raw === "comments") return "discussion";
+  if (!commentsEnabled()) return null;
+  if (raw === "discussion" || raw === "comments") return "discussion";
   return null;
 }
 

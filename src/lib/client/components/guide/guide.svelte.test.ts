@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { mount, tick, unmount } from "svelte";
-import { serializeViewed } from "$lib/shared/domain/guide-view";
+import { GuideV1 } from "$lib/shared/contracts/guide";
+import { guideFileKey, serializeViewed } from "$lib/shared/domain/guide-view";
 import { viewedKey } from "$lib/client/browser/preferences";
 import { prefs, resetPreferences } from "$lib/client/state/preferences.svelte";
 import { bindReview, resetReviewSession, session } from "$lib/client/state/review.svelte";
@@ -163,6 +164,123 @@ test("unchaptered Guide shows coding-agent copy with no Generate guide button", 
   expect(root.querySelector(".outcome-empty button")).toBeNull();
   expect(root.querySelector("[data-queue-generate]")).toBeNull();
   expect(root.querySelector(".guide-section")).toBeNull();
+});
+
+test("reviewing a file keeps its header and stays on that file", async () => {
+  const root = renderGuide();
+  await tick();
+  const main = root.querySelector("main") as HTMLElement;
+  const head = root.querySelector("#file-core-0 .file-head") as HTMLElement;
+  Object.defineProperty(head, "offsetParent", { configurable: true, value: null });
+  const next = root.querySelector("#file-tests-0") as HTMLElement;
+  let reads = 0;
+  head.getBoundingClientRect = () => {
+    reads += 1;
+    const top = reads === 1 ? 80 : 240;
+    return {
+      top,
+      bottom: top + 32,
+      height: 32,
+      width: 100,
+      left: 0,
+      right: 100,
+      x: 0,
+      y: top,
+      toJSON() {},
+    } as DOMRect;
+  };
+  const jumped = vi.fn();
+  next.scrollIntoView = jumped;
+  main.scrollTop = 500;
+  (root.querySelector('#file-core-0 input[data-viewed-path="src/maps.py"]') as HTMLInputElement).click();
+
+  expect(root.querySelector("#file-core-0")?.getAttribute("data-collapsed")).toBe("true");
+  expect(main.scrollTop).toBe(660);
+  expect(session.selectedChapterId).toBe("core");
+  expect(session.selectedGuidePath).toBe("src/maps.py");
+  expect(jumped).not.toHaveBeenCalled();
+});
+
+test("collapsing a file from lower in the diff jumps to its header", async () => {
+  const root = renderGuide();
+  await tick();
+  const main = root.querySelector("main") as HTMLElement;
+  const file = root.querySelector("#file-core-0") as HTMLElement;
+  const head = file.querySelector(".file-head") as HTMLElement;
+  Object.defineProperty(head, "offsetParent", { configurable: true, value: main });
+  Object.defineProperty(head, "offsetTop", { configurable: true, value: 40 });
+  const jumped = vi.fn();
+  file.scrollIntoView = jumped;
+  main.scrollTop = 500;
+  (file.querySelector("button.chevron") as HTMLButtonElement).click();
+
+  expect(file.getAttribute("data-collapsed")).toBe("true");
+  expect(jumped).toHaveBeenCalledWith({ behavior: "auto", block: "start" });
+});
+
+test("reviewing one slice of a shared file leaves the other slice clear", async () => {
+  const shared = "src/shared.py";
+  const unique = "src/only.py";
+  const hunk = {
+    oldStart: 1,
+    newStart: 1,
+    lines: [{ type: "added" as const, content: "x", newLine: 1 }],
+  };
+  const guide = GuideV1.parse({
+    version: 1,
+    title: "Split",
+    base: "a",
+    head: "b",
+    chapters: [
+      {
+        id: "chapter-1",
+        kind: "core",
+        title: "First",
+        why: "One slice.",
+        files: [{ path: shared, language: "python", hunks: [hunk] }],
+      },
+      {
+        id: "chapter-2",
+        kind: "core",
+        title: "Second",
+        why: "Other slice.",
+        files: [
+          { path: shared, language: "python", hunks: [hunk] },
+          { path: unique, language: "python", hunks: [hunk] },
+        ],
+      },
+    ],
+  });
+  const root = renderGuide(guide, "rev-split");
+  await tick();
+  const first = root.querySelector(
+    '.guide-section[data-chapter="chapter-1"] input[data-viewed-path="src/shared.py"]',
+  ) as HTMLInputElement;
+  first.click();
+  await tick();
+
+  const firstStage = root.querySelector(
+    '.guide-section[data-chapter="chapter-1"] .file.stage[data-path="src/shared.py"]',
+  );
+  const secondStage = root.querySelector(
+    '.guide-section[data-chapter="chapter-2"] .file.stage[data-path="src/shared.py"]',
+  );
+  const uniqueStage = root.querySelector('.file.stage[data-path="src/only.py"]');
+  expect(first.checked).toBe(true);
+  expect(firstStage?.getAttribute("data-collapsed")).toBe("true");
+  expect(
+    (secondStage?.querySelector('input[data-viewed-path="src/shared.py"]') as HTMLInputElement)
+      .checked,
+  ).toBe(false);
+  expect(secondStage?.getAttribute("data-collapsed")).toBe("false");
+  expect(
+    (uniqueStage?.querySelector('input[data-viewed-path="src/only.py"]') as HTMLInputElement)
+      .checked,
+  ).toBe(false);
+  expect(uniqueStage?.getAttribute("data-collapsed")).toBe("false");
+  expect(JSON.parse(localStorage.getItem(viewedKey("rev-split")) || "[]")).toEqual([
+    guideFileKey(shared, "chapter-1"),
+  ]);
 });
 
 test("Guide hunks follow the saved split preference", async () => {

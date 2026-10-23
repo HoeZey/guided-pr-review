@@ -29,7 +29,8 @@ export type HomeCardAction = "open-saved" | "queue-open" | "disabled-host";
 
 export type HomeGroupId =
   | "review-requests"
-  | "authored-by-me"
+  | "my-published-prs"
+  | "my-draft-prs"
   | "other-saved-prs"
   | "local-ranges"
   | "archived";
@@ -43,7 +44,12 @@ export type HomeGroup = {
 
 export type HomeOverview = {
   lastSynced: string | undefined;
-  catalogErrors: { owner: string; name: string; message: string }[];
+  catalogErrors: {
+    provider: CatalogSnapshot["provider"];
+    owner: string;
+    name: string;
+    message: string;
+  }[];
   groups: HomeGroup[];
 };
 
@@ -131,7 +137,8 @@ export function projectHomeCards(reviews: readonly ReviewSummary[]): HomeCard[] 
 
 const GROUP_TITLE: Record<HomeGroupId, string> = {
   "review-requests": "Review requests",
-  "authored-by-me": "Authored by me",
+  "my-published-prs": "My published PRs",
+  "my-draft-prs": "My draft PRs",
   "other-saved-prs": "Other saved PRs",
   "local-ranges": "Local ranges",
   archived: "Archived",
@@ -303,8 +310,9 @@ export function projectHomeOverview(
   catalog: readonly CatalogSnapshot[],
 ): HomeOverview {
   const reviewRequests: HomeCard[] = [];
-  const authored: HomeCard[] = [];
-  const archived: HomeCard[] = [];
+  const published: HomeCard[] = [];
+  const drafts: HomeCard[] = [];
+  const archivedItems: CatalogPullRequest[] = [];
   const placed = new Set<string>();
   for (const snapshot of catalog) {
     for (const item of snapshot.pullRequests) {
@@ -312,7 +320,7 @@ export function projectHomeOverview(
       if (isClosed(item)) {
         const review = reviews.find((row) => row.syncKey === key);
         if (review) {
-          archived.push(catalogCard(item, reviews, { archived: true }));
+          archivedItems.push(item);
           placed.add(key);
         }
         continue;
@@ -323,7 +331,7 @@ export function projectHomeOverview(
         reviewRequests.push(catalogCard(item, reviews));
         placed.add(key);
       } else if (isAuthoredByMe(item)) {
-        authored.push(catalogCard(item, reviews));
+        (item.isDraft ? drafts : published).push(catalogCard(item, reviews));
         placed.add(key);
       }
     }
@@ -351,8 +359,11 @@ export function projectHomeOverview(
       ...(collapsed ? { collapsed: true } : {}),
     });
   };
+  archivedItems.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  const archived = archivedItems.map((item) => catalogCard(item, reviews, { archived: true }));
   push("review-requests", reviewRequests);
-  push("authored-by-me", authored);
+  push("my-published-prs", published);
+  push("my-draft-prs", drafts);
   push("other-saved-prs", otherSaved);
   push("local-ranges", localRanges);
   push("archived", archived, true);
@@ -365,6 +376,7 @@ export function projectHomeOverview(
     snapshot.error
       ? [
           {
+            provider: snapshot.provider,
             owner: snapshot.repository.owner,
             name: snapshot.repository.name,
             message: snapshot.error,

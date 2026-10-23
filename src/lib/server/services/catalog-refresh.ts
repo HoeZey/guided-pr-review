@@ -199,8 +199,11 @@ function isNotFound(err: unknown): boolean {
 }
 
 function refreshErrorMessage(err: unknown, provider: ConfiguredRepositoryRecord["provider"]): string {
-  if (err instanceof ProviderError || err instanceof GithubProviderError) return err.message;
-  const message = err instanceof Error && err.message.trim() ? err.message : "Authentication failed";
-  if (/github|azure devops/i.test(message)) return message;
-  return `${provider === "github" ? "GitHub" : "Azure DevOps"} ${message}`;
+  const code = err instanceof ProviderError || err instanceof GithubProviderError ? err.code : undefined;
+  if (code === "rate" || code === "rate-limited" || code === "unavailable") {
+    return "Could not refresh the PR list. Try again later.";
+  }
+  return provider === "github"
+    ? "Could not refresh the PR list. Check gh auth login and the repository access."
+    : "Could not refresh the PR list. Check az login, the organization, and the project.";
 }

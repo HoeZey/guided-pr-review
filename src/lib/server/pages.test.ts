@@ -122,7 +122,11 @@ test("SSR home and review page data come from services without a Store v1 dump",
 
     const leftoverComments = await loadReviewPage(services, id, "comments");
     assert.equal(leftoverComments.kind, "review");
-    if (leftoverComments.kind === "review") assert.equal(leftoverComments.tab, "discussion");
+    if (leftoverComments.kind === "review") assert.equal(leftoverComments.tab, "guide");
+
+    const storedDiscussion = await loadReviewPage(services, id, "discussion");
+    assert.equal(storedDiscussion.kind, "review");
+    if (storedDiscussion.kind === "review") assert.equal(storedDiscussion.tab, "guide");
 
     const unknown = await loadReviewPage(services, "missing");
     assert.equal(unknown.kind, "home");

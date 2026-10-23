@@ -9,6 +9,7 @@ import {
 import { reviewPath } from "$lib/shared/domain/overview";
 import { CATALOG_REFRESH_STALE_MS } from "$lib/shared/domain/catalog";
 import { resetHomeUi, homeUi, addRepository } from "$lib/client/state/home.svelte";
+import { HOME_GROUPS_KEY } from "$lib/client/browser/preferences";
 import { resetReviewSession } from "$lib/client/state/review.svelte";
 import AppShell from "../AppShell.svelte";
 
@@ -91,6 +92,44 @@ function homeFetch(handler?: (url: string, init?: RequestInit) => Promise<unknow
 function homeFetchUrls(fetchSpy: ReturnType<typeof vi.fn>): string[] {
   return fetchSpy.mock.calls.map(([url]) => String(url));
 }
+
+function homeSection(root: ParentNode, title: string): HTMLDetailsElement {
+  const section = [...root.querySelectorAll("details.home-group")].find(
+    (el) => el.querySelector("h2")?.textContent === title,
+  );
+  if (!(section instanceof HTMLDetailsElement)) throw new Error(`missing ${title}`);
+  return section;
+}
+
+test("Home restores a collapsed section and keeps the next choice", async () => {
+  localStorage.setItem(
+    HOME_GROUPS_KEY,
+    JSON.stringify({ archived: true, "my-published-prs": false }),
+  );
+  vi.stubGlobal("fetch", homeFetch());
+  const root = renderHome();
+  await tick();
+  expect(homeSection(root, "Archived").open).toBe(true);
+  expect(homeSection(root, "My published PRs").open).toBe(false);
+
+  const published = homeSection(root, "My published PRs");
+  published.open = true;
+  published.dispatchEvent(new Event("toggle"));
+  await tick();
+  expect(homeSection(root, "My published PRs").open).toBe(true);
+  expect(JSON.parse(localStorage.getItem(HOME_GROUPS_KEY) ?? "{}")).toMatchObject({
+    archived: true,
+    "my-published-prs": true,
+  });
+
+  unmount(mounted!);
+  mounted = null;
+  root.remove();
+  const again = renderHome();
+  await tick();
+  expect(homeSection(again, "My published PRs").open).toBe(true);
+  expect(homeSection(again, "Archived").open).toBe(true);
+});
 
 test("hydration renders projected Home from page data without refetching list or catalog", async () => {
   const fetchSpy = homeFetch();

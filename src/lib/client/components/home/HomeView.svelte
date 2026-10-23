@@ -18,6 +18,13 @@
     syncHomeWatch,
   } from "$lib/client/state/home.svelte";
   import { connectionUi, loadConnections } from "$lib/client/state/connection.svelte";
+  import {
+    HOME_GROUPS_KEY,
+    browserLocalStorage,
+    parseHomeGroups,
+    writePref,
+  } from "$lib/client/browser/preferences";
+  import type { HomeGroup } from "$lib/shared/domain/overview";
   import HomeCard from "./HomeCard.svelte";
 
   let { data }: { data: HomePageData } = $props();
@@ -28,6 +35,42 @@
   const searchable = $derived(filteredSearchableRepositories());
   let openMenu = $state<"github" | "azure-devops" | null>(null);
   let confirmRemove = $state<string | null>(null);
+  let sectionOpenState = $state<Record<string, boolean>>({});
+
+  function sectionOpen(group: HomeGroup): boolean {
+    if (group.id in sectionOpenState) return sectionOpenState[group.id];
+    return !group.collapsed;
+  }
+
+  function rememberSection(id: string, open: boolean): void {
+    if (sectionOpenState[id] === open) return;
+    sectionOpenState = { ...sectionOpenState, [id]: open };
+    writePref(browserLocalStorage(), HOME_GROUPS_KEY, JSON.stringify(sectionOpenState));
+  }
+
+  function onSectionToggle(id: string, event: Event): void {
+    const details = event.currentTarget;
+    if (!(details instanceof HTMLDetailsElement)) return;
+    rememberSection(id, details.open);
+  }
+
+  function repoCatalogError(repo: { provider: string; owner: string; name: string }) {
+    return overview.catalogErrors.find(
+      (entry) =>
+        entry.provider === repo.provider && entry.owner === repo.owner && entry.name === repo.name,
+    );
+  }
+
+  function looseCatalogErrors(provider: "github" | "azure-devops") {
+    return overview.catalogErrors.filter(
+      (entry) =>
+        entry.provider === provider &&
+        !configured.some(
+          (repo) =>
+            repo.provider === provider && repo.owner === entry.owner && repo.name === entry.name,
+        ),
+    );
+  }
 
   function repoLabel(row: { provider: string; owner: string; name: string }): string {
     if (row.provider === "azure-devops") return row.name;
@@ -78,6 +121,7 @@
   });
 
   onMount(() => {
+    sectionOpenState = parseHomeGroups(browserLocalStorage()?.getItem(HOME_GROUPS_KEY) ?? null);
     void loadConnections();
     void loadRepositories();
     void loadSearchableRepositories();
@@ -109,29 +153,20 @@
         {#if homeUi.refreshError}
           <p class="home-error" data-refresh-error>{homeUi.refreshError}</p>
         {/if}
-        {#each overview.catalogErrors as entry}
-          <p class="home-error">{entry.owner} / {entry.name}: {entry.message}</p>
-        {/each}
-        {#each overview.groups as group}
-          {#if group.collapsed}
-            <details class="home-group is-archived">
-              <summary><h2>{group.title}</h2></summary>
-              <div class="home-grid">
-                {#each group.cards as card (card.id)}
-                  <HomeCard {card} actions={listed.actions} agentConnected={listed.agentConnected} />
-                {/each}
-              </div>
-            </details>
-          {:else}
-            <section class="home-group">
-              <h2>{group.title}</h2>
-              <div class="home-grid">
-                {#each group.cards as card (card.id)}
-                  <HomeCard {card} actions={listed.actions} agentConnected={listed.agentConnected} />
-                {/each}
-              </div>
-            </section>
-          {/if}
+        {#each overview.groups as group (group.id)}
+          <details
+            class="home-group"
+            class:is-archived={group.collapsed}
+            open={sectionOpen(group)}
+            ontoggle={(event) => onSectionToggle(group.id, event)}
+          >
+            <summary><h2>{group.title}</h2></summary>
+            <div class="home-grid">
+              {#each group.cards as card (card.id)}
+                <HomeCard {card} actions={listed.actions} agentConnected={listed.agentConnected} />
+              {/each}
+            </div>
+          </details>
         {/each}
       {:else}
         <p class="boot">No reviews yet. Add one from MCP.</p>
@@ -167,6 +202,11 @@
               </span>
             {/if}
           </h2>
+          {#each looseCatalogErrors(provider) as entry (`${entry.owner}/${entry.name}`)}
+            <p class="home-error" data-catalog-error={`${entry.provider}:${entry.owner}/${entry.name}`}>
+              {entry.name}: {entry.message}
+            </p>
+          {/each}
           {#if account && account.status !== "connected"}
             <p class="home-error" data-connection={provider}>
               {account.recovery}
@@ -203,9 +243,15 @@
           {/if}
           <div class="repo-list">
           {#each configured.filter((repo) => repo.provider === provider) as repo (repo.provider + repo.host + repo.id)}
+            {@const catalogError = repoCatalogError(repo)}
             <p class="home-meta repo-row" data-configured-repository={repo.id}>
-              <span class="repo-name" title={repoLabel(repo)}>
-                {repoLabel(repo)}{repo.origin ? " · origin" : ""}
+              <span class="repo-text">
+                <span class="repo-name" title={repoLabel(repo)}>
+                  {repoLabel(repo)}{repo.origin ? " · origin" : ""}
+                </span>
+                {#if catalogError}
+                  <span class="repo-error" data-catalog-error={repo.id}>{catalogError.message}</span>
+                {/if}
               </span>
               <button
                 type="button"

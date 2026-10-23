@@ -11,6 +11,7 @@ export const SPLIT_KEY = "guided-pr-review-split";
 export const HIDE_KEY = "guided-pr-review-hide-unchanged";
 export const RAILS_KEY = "guided-pr-review-rails";
 export const VIEWED_PREFIX = "guided-pr-review-viewed:";
+export const HOME_GROUPS_KEY = "guided-pr-review-home-groups";
 
 export type Theme = "light" | "dark";
 
@@ -69,6 +70,21 @@ export function parseSidebarPx(raw: string | null): number {
     /* ignore */
   }
   return PREF_DEFAULTS.sidebarPx;
+}
+
+export function parseHomeGroups(raw: string | null): Record<string, boolean> {
+  if (!raw) return {};
+  try {
+    const value = JSON.parse(raw) as unknown;
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    const groups: Record<string, boolean> = {};
+    for (const [id, open] of Object.entries(value)) {
+      if (typeof open === "boolean") groups[id] = open;
+    }
+    return groups;
+  } catch {
+    return {};
+  }
 }
 
 export function readTheme(storage: StorageLike | null): Theme {

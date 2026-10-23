@@ -1,11 +1,12 @@
 <script lang="ts">
+  import { flushSync } from "svelte";
   import type { GuideV1 } from "$lib/shared/contracts/guide";
   import { guidePresentsWalkthrough } from "$lib/shared/domain/overview";
   import {
-    guideStops,
+    guideFileKey,
     markViewed,
     selectGuidePath,
-    stepGuide,
+    splitPaths,
     unmarkViewed,
   } from "$lib/shared/domain/guide-view";
   import { projectComposerAnchor, projectInlineThreads } from "$lib/shared/domain/comment-slots";
@@ -58,14 +59,26 @@
         })
       : null,
   );
+  const split = $derived(splitPaths(chapters));
   const selectedChapter = $derived(
     chapters.find((chapter) => chapter.id === session.selectedChapterId) || chapters[0],
   );
   const selectedPath = $derived(
     selectedChapter
-      ? selectGuidePath(selectedChapter.files || [], session.selectedGuidePath, session.viewed)
+      ? selectGuidePath(
+          selectedChapter.files || [],
+          session.selectedGuidePath,
+          session.viewed,
+          selectedChapter.id,
+          split,
+        )
       : null,
   );
+
+  function fileKey(chapterId: string, path: string): string {
+    return guideFileKey(path, split.has(path) ? chapterId : undefined);
+  }
+
   $effect(() => {
     if (!walkthrough || !selectedChapter) return;
     if (session.selectedChapterId !== selectedChapter.id) {
@@ -93,15 +106,6 @@
     }
   }
 
-  function openStop(stop: { chapterId: string; path: string }): void {
-    session.selectedChapterId = stop.chapterId;
-    session.selectedGuidePath = stop.path;
-    session.selectedDiffPath = stop.path;
-    const chapter = chapters.find((item) => item.id === stop.chapterId);
-    const i = (chapter?.files || []).findIndex((file) => file.path === stop.path);
-    jumpTo(i >= 0 && chapter ? fileId(chapter.id, i) : sectionId(stop.chapterId));
-  }
-
   function jumpFile(chapterId: string, path: string, id: string): void {
     session.selectedChapterId = chapterId;
     session.selectedGuidePath = path;
@@ -114,34 +118,82 @@
   function jumpChapter(chapterId: string): void {
     session.selectedChapterId = chapterId;
     const chapter = chapters.find((item) => item.id === chapterId);
-    session.selectedGuidePath = selectGuidePath(chapter?.files || [], null, session.viewed);
+    session.selectedGuidePath = selectGuidePath(
+      chapter?.files || [],
+      null,
+      session.viewed,
+      chapterId,
+      split,
+    );
     session.tocOpen = false;
     suppressHoverToc();
     jumpTo(sectionId(chapterId));
   }
 
-  function toggleCollapsed(path: string): void {
-    const next = new Set(session.collapsed);
-    if (next.has(path)) next.delete(path);
-    else next.add(path);
-    session.collapsed = next;
+  function fileHead(chapterId: string, path: string): HTMLElement | null {
+    const chapter = chapters.find((item) => item.id === chapterId);
+    const index = (chapter?.files || []).findIndex((file) => file.path === path);
+    if (index < 0) return null;
+    const head = document.getElementById(fileId(chapterId, index))?.querySelector(".file-head");
+    return head instanceof HTMLElement ? head : null;
   }
 
-  function onFileViewed(path: string, on: boolean): void {
+  function headerLayoutTop(scroller: HTMLElement, anchor: HTMLElement): number | null {
+    let top = 0;
+    let node: HTMLElement | null = anchor;
+    while (node && node !== scroller) {
+      top += node.offsetTop;
+      const parent = node.offsetParent;
+      if (!(parent instanceof HTMLElement)) return null;
+      node = parent;
+    }
+    return node === scroller ? top : null;
+  }
+
+  function collapseInPlace(anchor: HTMLElement | null, change: () => void): void {
+    const scroller = mainEl;
+    const layoutTop = scroller && anchor ? headerLayoutTop(scroller, anchor) : null;
+    const fromLower = layoutTop != null && !!scroller && scroller.scrollTop > layoutTop + 8;
+    const before = anchor?.getBoundingClientRect().top ?? null;
+    change();
+    if (!scroller || !anchor || before == null) return;
+    flushSync();
+    if (fromLower) {
+      (anchor.closest(".file") ?? anchor).scrollIntoView({ behavior: "auto", block: "start" });
+      return;
+    }
+    const delta = anchor.getBoundingClientRect().top - before;
+    if (delta) scroller.scrollTop += delta;
+  }
+
+  function toggleCollapsed(chapterId: string, path: string): void {
+    const key = fileKey(chapterId, path);
+    const next = new Set(session.collapsed);
+    const collapsing = !next.has(key);
+    if (collapsing) next.add(key);
+    else next.delete(key);
+    if (!collapsing) {
+      session.collapsed = next;
+      return;
+    }
+    collapseInPlace(fileHead(chapterId, path), () => {
+      session.collapsed = next;
+    });
+  }
+
+  function onFileViewed(chapterId: string, path: string, on: boolean): void {
+    const key = fileKey(chapterId, path);
     if (on) {
-      session.viewed = markViewed(session.viewed, session.collapsed, path).viewed;
-      session.collapsed = new Set([...session.collapsed, path]);
+      collapseInPlace(fileHead(chapterId, path), () => {
+        session.viewed = markViewed(session.viewed, session.collapsed, key).viewed;
+        session.collapsed = new Set([...session.collapsed, key]);
+      });
       persistViewed();
-      const stops = guideStops(chapters.filter((chapter) => !chapter._omitted));
-      const next = stepGuide(stops, session.selectedChapterId || "", path, 1);
-      if (next && (next.path !== path || next.chapterId !== session.selectedChapterId)) {
-        openStop(next);
-        return;
-      }
+      session.selectedChapterId = chapterId;
       session.selectedGuidePath = path;
       return;
     }
-    const next = unmarkViewed(session.viewed, session.collapsed, path);
+    const next = unmarkViewed(session.viewed, session.collapsed, key);
     session.viewed = next.viewed;
     session.collapsed = next.collapsed;
     persistViewed();
@@ -151,21 +203,23 @@
     const chapter = chapters.find((item) => item.id === chapterId);
     if (!chapter) return;
     if (on) {
-      for (const file of chapter.files || []) {
-        session.viewed = markViewed(session.viewed, session.collapsed, file.path).viewed;
-        session.collapsed = new Set([...session.collapsed, file.path]);
-      }
+      const paths = (chapter.files || []).map((file) => file.path);
+      const anchorPath =
+        session.selectedGuidePath && paths.includes(session.selectedGuidePath)
+          ? session.selectedGuidePath
+          : paths[0];
+      collapseInPlace(anchorPath ? fileHead(chapterId, anchorPath) : null, () => {
+        for (const file of chapter.files || []) {
+          const key = fileKey(chapterId, file.path);
+          session.viewed = markViewed(session.viewed, session.collapsed, key).viewed;
+          session.collapsed = new Set([...session.collapsed, key]);
+        }
+      });
       persistViewed();
-      const last = chapter.files[(chapter.files || []).length - 1];
-      const stops = guideStops(chapters.filter((item) => !item._omitted));
-      const next = last ? stepGuide(stops, chapterId, last.path, 1) : null;
-      if (next && next.chapterId !== chapterId) {
-        openStop(next);
-      }
       return;
     }
     for (const file of chapter.files || []) {
-      const next = unmarkViewed(session.viewed, session.collapsed, file.path);
+      const next = unmarkViewed(session.viewed, session.collapsed, fileKey(chapterId, file.path));
       session.viewed = next.viewed;
       session.collapsed = next.collapsed;
     }
@@ -217,6 +271,7 @@
               session.tocOpen = !session.tocOpen;
               if (session.tocOpen) requestAnimationFrame(() => revealCurrentToc());
             }}
+            {fileKey}
             onviewed={onFileViewed}
             ontoggle={toggleCollapsed}
             onchapterReviewed={onChapterReviewed}
@@ -233,6 +288,7 @@
     {chapters}
     selectedChapterId={selectedChapter?.id ?? null}
     {selectedPath}
+    {fileKey}
     {hidden}
     onjumpFile={jumpFile}
     onjumpChapter={jumpChapter}

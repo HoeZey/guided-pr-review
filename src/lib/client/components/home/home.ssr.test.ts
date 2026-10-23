@@ -16,7 +16,9 @@ afterEach(() => {
 test("SSR Home HTML contains projected groups, badges, ranges, and states before JS", () => {
   const { body } = render(AppShell, { props: { data: HOME_FIXTURE } });
   expect(body).toContain("Review requests");
-  expect(body).toContain("Authored by me");
+  expect(body).toContain("My published PRs");
+  expect(body).not.toContain("Authored by me");
+  expect(body).toContain('<details class="home-group" open');
   expect(body).toContain("Local ranges");
   expect(body).toContain("Archived");
   expect(body).toContain("Current work");
@@ -29,7 +31,34 @@ test("SSR Home HTML contains projected groups, badges, ranges, and states before
   expect(body).toContain("develop ← feature/review-me");
   expect(body).toContain("main ← feature/one");
   expect(body).toContain("Last synced 2026-09-14 12:00 UTC");
-  expect(body).toContain("braidteam/BRAID / other-repo: Azure DevOps returned 401");
+  const cards = body.slice(body.indexOf('data-home-cards'), body.indexOf("data-home-controls"));
+  const ado = body.slice(body.indexOf('data-host="azure-devops"'));
+  expect(cards).not.toContain("Azure DevOps returned 401");
+  expect(ado).toContain("other-repo: Azure DevOps returned 401");
+  const withRow = render(AppShell, {
+    props: {
+      data: {
+        ...HOME_FIXTURE,
+        repositories: [
+          {
+            provider: "azure-devops",
+            host: "dev.azure.com",
+            id: "repo-2",
+            owner: "braidteam/BRAID",
+            name: "other-repo",
+            webUrl: "https://dev.azure.com/braidteam/BRAID/_git/other-repo",
+            origin: false,
+          },
+        ],
+      },
+    },
+  }).body;
+  const adoWithRow = withRow.slice(withRow.indexOf('data-host="azure-devops"'));
+  const heading = adoWithRow.slice(0, adoWithRow.indexOf('data-configured-repository="repo-2"'));
+  const row = adoWithRow.slice(adoWithRow.indexOf('data-configured-repository="repo-2"'));
+  expect(heading).not.toContain("Azure DevOps returned 401");
+  expect(row).not.toContain('aria-label="Refresh failed"');
+  expect(row).toContain('data-catalog-error="repo-2">Azure DevOps returned 401');
   expect(body).toContain('data-guide-book="green"');
   expect(body).toContain('data-guide-book="yellow"');
   expect(body).toContain('data-guide-book="grey"');

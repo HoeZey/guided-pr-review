@@ -299,13 +299,23 @@ test("projectHomeOverview places each live catalog item once by reviewer then au
     isAuthor: true,
     isDraft: false,
   });
+  const published = catalogItem({
+    number: 1104,
+    title: "My published",
+    webUrl:
+      "https://dev.azure.com/braidteam/BRAID/_git/braid-connection-designer/pullrequest/1104",
+    isReviewer: false,
+    isAuthor: true,
+    isDraft: false,
+  });
   const overview = projectHomeOverview(
     [
       hostedSummary("saved-1101", 1101, "Needs review", { diffCommit: SHA_A }),
       hostedSummary("saved-1102", 1102, "My draft", { unchaptered: true, diffCommit: SHA_A }),
       hostedSummary("saved-1103", 1103, "Mine and assigned", { diffCommit: SHA_A }),
+      hostedSummary("saved-1104", 1104, "My published", { diffCommit: SHA_A }),
     ],
-    [originSnapshot([requested, draft, both])],
+    [originSnapshot([requested, draft, both, published])],
   );
   assert.deepEqual(
     overview.groups.map((group) => ({
@@ -320,8 +330,13 @@ test("projectHomeOverview places each live catalog item once by reviewer then au
         titles: ["Needs review", "Mine and assigned"],
       },
       {
-        id: "authored-by-me",
-        title: "Authored by me",
+        id: "my-published-prs",
+        title: "My published PRs",
+        titles: ["My published"],
+      },
+      {
+        id: "my-draft-prs",
+        title: "My draft PRs",
         titles: ["My draft"],
       },
     ],
@@ -467,6 +482,7 @@ test("a failed catalog snapshot reports an isolated error and keeps saved review
   );
   assert.deepEqual(overview.catalogErrors, [
     {
+      provider: "azure-devops",
       owner: "braidteam/BRAID",
       name: "braid-connection-designer",
       message: "Azure DevOps returned 401",
@@ -698,6 +714,7 @@ test("archived cards say Merged or Closed and their book never turns yellow", ()
           status: "completed",
           sourceCommit: SHA_C,
           isReviewer: true,
+          updatedAt: "2026-09-01T00:00:00.000Z",
         }),
         catalogItem({
           number: 1202,
@@ -708,6 +725,7 @@ test("archived cards say Merged or Closed and their book never turns yellow", ()
           sourceCommit: SHA_C,
           isReviewer: false,
           isAuthor: true,
+          updatedAt: "2026-09-20T00:00:00.000Z",
         }),
         catalogItem({
           number: 1203,
@@ -718,6 +736,7 @@ test("archived cards say Merged or Closed and their book never turns yellow", ()
           sourceCommit: SHA_C,
           isReviewer: false,
           isAuthor: true,
+          updatedAt: "2026-09-10T00:00:00.000Z",
         }),
       ]),
     ],
@@ -742,13 +761,6 @@ test("archived cards say Merged or Closed and their book never turns yellow", ()
         collapsed: true,
         cards: [
           {
-            title: "Merged work",
-            archivedLabel: "Merged",
-            bookStatus: "green",
-            outdated: false,
-            action: "open-saved",
-          },
-          {
             title: "Closed work",
             archivedLabel: "Closed",
             bookStatus: "green",
@@ -758,6 +770,13 @@ test("archived cards say Merged or Closed and their book never turns yellow", ()
           {
             title: "Abandoned work",
             archivedLabel: "Closed",
+            bookStatus: "green",
+            outdated: false,
+            action: "open-saved",
+          },
+          {
+            title: "Merged work",
+            archivedLabel: "Merged",
             bookStatus: "green",
             outdated: false,
             action: "open-saved",
@@ -897,7 +916,7 @@ test("projection covers grey, yellow, green, and archived book states", () => {
         ],
       },
       {
-        id: "authored-by-me",
+        id: "my-published-prs",
         collapsed: false,
         cards: [
           {

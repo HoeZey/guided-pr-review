@@ -4,9 +4,12 @@ import { GuideV1 } from "../contracts/guide.ts";
 import {
   collapsedOnDiff,
   filesForDiff,
+  guideFileKey,
   markViewed,
   parseViewed,
+  selectGuidePath,
   serializeViewed,
+  splitPaths,
   unmarkViewed,
   wordSegments,
   pairWordDiff,
@@ -18,7 +21,6 @@ import {
   guideStops,
   stepGuide,
   parseDiffLayout,
-  selectGuidePath,
   guideSpyFileIndex,
   shownDiffCounts,
   formatCopy,
@@ -134,6 +136,28 @@ test("markViewed puts a Guide-viewed path into the Diff collapsed set", () => {
   const cleared = unmarkViewed(next.viewed, next.collapsed, "a.py");
   assert.equal(cleared.viewed.has("a.py"), false);
   assert.equal(collapsedOnDiff(cleared.viewed, cleared.collapsed).has("a.py"), false);
+
+  const once = splitPaths([
+    { files: [{ path: "a.py" }, { path: "a.py" }] },
+    { files: [{ path: "b.py" }] },
+  ]);
+  assert.equal(once.has("a.py"), false);
+  const split = splitPaths([
+    { files: [{ path: "a.py" }] },
+    { files: [{ path: "a.py" }, { path: "b.py" }] },
+  ]);
+  assert.equal(split.has("a.py"), true);
+  assert.equal(split.has("b.py"), false);
+
+  const key = guideFileKey("a.py", "chapter-1");
+  assert.equal(guideFileKey("a.py"), "a.py");
+  assert.equal(key, "chapter-1\0a.py");
+  const stored = markViewed(new Set<string>(), new Set(["other.py"]), key);
+  assert.deepEqual([...parseViewed(serializeViewed(stored.viewed))], [key]);
+  assert.equal(collapsedOnDiff(stored.viewed, stored.collapsed).has("a.py"), false);
+  const files = [{ path: "a.py" }, { path: "b.py" }];
+  assert.equal(selectGuidePath(files, null, stored.viewed, "chapter-2", split), "a.py");
+  assert.equal(selectGuidePath(files, null, stored.viewed, "chapter-1", split), "b.py");
 });
 
 test("viewed set round-trips through JSON", () => {

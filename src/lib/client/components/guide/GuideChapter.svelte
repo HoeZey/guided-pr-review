@@ -29,6 +29,7 @@
     composerSlot = null,
     onjumpFile,
     ontoggleToc,
+    fileKey,
     onviewed,
     ontoggle,
     onchapterReviewed,
@@ -47,15 +48,17 @@
     composerSlot?: ComposerSlot | null;
     onjumpFile: (chapterId: string, path: string, id: string) => void;
     ontoggleToc: () => void;
-    onviewed: (path: string, viewed: boolean) => void;
-    ontoggle: (path: string) => void;
+    fileKey: (chapterId: string, path: string) => string;
+    onviewed: (chapterId: string, path: string, viewed: boolean) => void;
+    ontoggle: (chapterId: string, path: string) => void;
     onchapterReviewed: (chapterId: string, viewed: boolean) => void;
   } = $props();
 
   const sid = $derived(sectionId(chapter.id));
   const progress = $derived(progressParts(index, total));
   const chapterDone = $derived(
-    chapter.files.length > 0 && chapter.files.every((file) => session.viewed.has(file.path)),
+    chapter.files.length > 0 &&
+      chapter.files.every((file) => session.viewed.has(fileKey(chapter.id, file.path))),
   );
 </script>
 
@@ -117,7 +120,9 @@
           {@const id = fileId(chapter.id, i)}
           <button
             type="button"
-            class={session.viewed.has(file.path) ? "file-pill viewed-link" : "file-pill"}
+            class={session.viewed.has(fileKey(chapter.id, file.path))
+              ? "file-pill viewed-link"
+              : "file-pill"}
             data-jump={id}
             data-chapter={chapter.id}
             data-path={file.path}
@@ -141,8 +146,8 @@
           id={fileId(chapter.id, i)}
           {layout}
           {hideUnchanged}
-          collapsed={session.collapsed.has(file.path)}
-          viewed={session.viewed.has(file.path)}
+          collapsed={session.collapsed.has(fileKey(chapter.id, file.path))}
+          viewed={session.viewed.has(fileKey(chapter.id, file.path))}
           stage
           {theme}
           headerThreads={slots ? headerThreads(slots, fileOffset + i) : []}
@@ -158,8 +163,8 @@
                 composerSlot.itemIndex === itemIndex &&
                 composerSlot.side === side,
             )}
-          {ontoggle}
-          {onviewed}
+          ontoggle={(path) => ontoggle(chapter.id, path)}
+          onviewed={(path, on) => onviewed(chapter.id, path, on)}
         />
       {/each}
     </div>

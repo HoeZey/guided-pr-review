@@ -19,6 +19,7 @@ PRD moves under done/.
 - [08 Inline git-host comments](prds/08-inline-git-host-comments/) — implemented
 - [09 Demo home polish](prds/09-demo-home-polish/) — implemented
 - [10 Guide quality](prds/10-guide-quality/) — signed
+- [11 Demo prep](prds/11-demo-prep/) — signed
 
 ## Status
 

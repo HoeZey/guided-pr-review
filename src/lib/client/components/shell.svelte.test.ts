@@ -74,21 +74,11 @@ test("fake review data renders tabs internally without fetch or route changes", 
   expect(root.querySelector(".guide-aside h2")?.textContent).toBe("Core");
 
   const diffTab = root.querySelector('[role="tab"][data-tab="diff"]') as HTMLButtonElement;
-  const discussionTab = root.querySelector('[role="tab"][data-tab="discussion"]') as HTMLButtonElement;
-  expect(root.querySelector('[role="tablist"]')?.querySelectorAll('[role="tab"]').length).toBe(3);
+  expect(root.querySelector('[role="tablist"]')?.querySelectorAll('[role="tab"]').length).toBe(2);
   expect(root.querySelector('[role="tab"][data-tab="guide"]')?.textContent).toContain("Guide");
   expect(diffTab?.textContent).toContain("Diff");
   expect(root.querySelector('[role="tab"][data-tab="review"]')).toBeNull();
-  expect(discussionTab).toBeTruthy();
-  expect(discussionTab.getAttribute("aria-selected")).toBe("false");
-  expect(discussionTab.textContent).toContain("Discussion");
-  discussionTab.click();
-  await tick();
-  expect(app?.getAttribute("data-tab")).toBe("discussion");
-  expect(discussionTab.getAttribute("aria-selected")).toBe("true");
-  expect(root.querySelector('[role="tab"][data-tab="guide"]')?.getAttribute("aria-selected")).toBe("false");
-  expect(root.querySelector('[data-tab-panel="discussion"]')).toBeTruthy();
-  expect(root.querySelector(".comment-stack.is-pr")).toBeNull();
+  expect(root.querySelector('[role="tab"][data-tab="discussion"]')).toBeNull();
   diffTab.click();
   await tick();
   expect(app?.getAttribute("data-tab")).toBe("diff");
@@ -101,6 +91,39 @@ test("fake review data renders tabs internally without fetch or route changes", 
   expect(fetchSpy).not.toHaveBeenCalled();
   expect(window.location.pathname).toBe(path);
   expect(session.reviewId).toBe("fake-review");
+});
+
+test("a hosted review does not request comments", async () => {
+  const fetchSpy = vi.fn();
+  vi.stubGlobal("fetch", fetchSpy);
+  const root = renderShell({
+    ...FAKE_REVIEW_OK,
+    guide: {
+      ...FAKE_REVIEW_OK.guide!,
+      source: {
+        kind: "pull-request",
+        provider: "github",
+        host: "github.com",
+        repository: {
+          id: "1",
+          owner: "octo",
+          name: "hello",
+          webUrl: "https://github.com/octo/hello",
+        },
+        number: 1,
+        webUrl: "https://github.com/octo/hello/pull/1",
+        sourceRef: "refs/heads/feature",
+        targetRef: "refs/heads/develop",
+        sourceCommit: "b".repeat(40),
+        targetCommit: "a".repeat(40),
+        providerContext: { kind: "github" },
+      },
+    },
+  });
+  await tick();
+  expect(root.querySelector('[role="tab"][data-tab="discussion"]')).toBeNull();
+  const urls = fetchSpy.mock.calls.map(([url]) => String(url));
+  expect(urls.some((url) => url.includes("/comments"))).toBe(false);
 });
 
 test("unchaptered fake review lands on Diff without a route change", () => {

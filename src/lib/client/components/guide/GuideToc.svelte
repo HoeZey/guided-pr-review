@@ -7,6 +7,7 @@
     chapters,
     selectedChapterId,
     selectedPath,
+    fileKey,
     hidden = false,
     onjumpFile,
     onjumpChapter,
@@ -16,6 +17,7 @@
     chapters: GuideNavChapter[];
     selectedChapterId: string | null;
     selectedPath: string | null;
+    fileKey: (chapterId: string, path: string) => string;
     hidden?: boolean;
     onjumpFile: (chapterId: string, path: string, id: string) => void;
     onjumpChapter: (chapterId: string) => void;
@@ -40,7 +42,7 @@
             {@const current = ch.id === selectedChapterId && file.path === selectedPath}
             <button
               type="button"
-              class={session.viewed.has(file.path) ? "toc-tick is-reviewed" : "toc-tick"}
+              class={session.viewed.has(fileKey(ch.id, file.path)) ? "toc-tick is-reviewed" : "toc-tick"}
               data-jump={id}
               data-chapter={ch.id}
               data-path={file.path}
@@ -72,7 +74,7 @@
             {@const current = ch.id === selectedChapterId && file.path === selectedPath}
             <button
               type="button"
-              class={session.viewed.has(file.path) ? "toc-file viewed-link" : "toc-file"}
+              class={session.viewed.has(fileKey(ch.id, file.path)) ? "toc-file viewed-link" : "toc-file"}
               data-jump={id}
               data-chapter={ch.id}
               data-path={file.path}

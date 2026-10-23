@@ -1,4 +1,9 @@
 import { afterEach, expect, test, vi } from "vitest";
+
+vi.mock("$lib/shared/page-data", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("$lib/shared/page-data")>();
+  return { ...actual, commentsEnabled: () => true };
+});
 import { mount, tick, unmount } from "svelte";
 import type { CommentThread } from "$lib/shared/contracts/comments";
 import type { ReviewPageData } from "$lib/shared/page-data";

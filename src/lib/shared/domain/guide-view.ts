@@ -154,9 +154,13 @@ export function selectGuidePath(
   files: { path: string }[],
   selected: string | null,
   viewed: ReadonlySet<string>,
+  chapterId?: string,
+  split?: ReadonlySet<string>,
 ): string | null {
+  const keyFor = (path: string) =>
+    chapterId !== undefined && split?.has(path) ? guideFileKey(path, chapterId) : path;
   if (selected && files.some((file) => file.path === selected)) return selected;
-  return files.find((file) => !viewed.has(file.path))?.path || files[0]?.path || null;
+  return files.find((file) => !viewed.has(keyFor(file.path)))?.path || files[0]?.path || null;
 }
 
 export function guideSpyFileIndex(
@@ -183,6 +187,21 @@ export function shownDiffCounts(s: { additions: number; deletions: number }): {
   if (s.additions > 0) out.additions = s.additions;
   if (s.deletions > 0) out.deletions = s.deletions;
   return out;
+}
+
+export function splitPaths(chapters: { files: { path: string }[] }[]): Set<string> {
+  const counts = new Map<string, number>();
+  for (const chapter of chapters) {
+    for (const path of new Set(chapter.files.map((file) => file.path))) {
+      counts.set(path, (counts.get(path) ?? 0) + 1);
+    }
+  }
+  return new Set([...counts].filter(([, count]) => count > 1).map(([path]) => path));
+}
+
+export function guideFileKey(path: string, chapterId?: string): string {
+  if (chapterId === undefined) return path;
+  return `${chapterId}\0${path}`;
 }
 
 export function markViewed(

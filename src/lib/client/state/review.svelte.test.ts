@@ -107,8 +107,14 @@ test("adoptLegacyTab takes the stored tab after hydration and seeds the cookie",
   const leftover = memoryStorage({ [TAB_KEY]: "comments" });
   bindReview("b", { unchaptered: false }, leftover, "guide");
   adoptLegacyTab(leftover);
-  expect(session.tab).toBe("discussion");
-  expect(leftover.getItem(TAB_KEY)).toBe("discussion");
+  expect(session.tab).toBe("guide");
+  expect(leftover.getItem(TAB_KEY)).toBe("comments");
+
+  const storedDiscussion = memoryStorage({ [TAB_KEY]: "discussion" });
+  bindReview("d", { unchaptered: false }, storedDiscussion, "guide");
+  adoptLegacyTab(storedDiscussion);
+  expect(session.tab).toBe("guide");
+  expect(storedDiscussion.getItem(TAB_KEY)).toBe("discussion");
 
   const hidden = memoryStorage({ [TAB_KEY]: "review" });
   bindReview("c", { unchaptered: false }, hidden, "diff");
