@@ -1,0 +1,29 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag the package version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          tag="v${version}"
+          status=0
+          git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null || status=$?
+          if [ "$status" -eq 0 ]; then
+            exit 0
+          fi
+          if [ "$status" -ne 2 ]; then
+            exit "$status"
+          fi
+          gh release create "$tag" --title "$tag" --notes "See CHANGELOG.md."

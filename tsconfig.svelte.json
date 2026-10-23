@@ -1,0 +1,25 @@
+{
+  "extends": "./.svelte-kit/tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true
+  },
+  "include": [
+    ".svelte-kit/ambient.d.ts",
+    ".svelte-kit/non-ambient.d.ts",
+    ".svelte-kit/types/**/$types.d.ts",
+    "src/app.d.ts",
+    "src/lib/**/*.ts",
+    "src/lib/**/*.svelte",
+    "src/routes/**/*.ts",
+    "src/routes/**/*.svelte"
+  ],
+  "exclude": [
+    "src/pages",
+    "src/lib/**/*.test.ts",
+    "src/routes/**/*.svelte.test.ts",
+    "src/routes/**/*.ssr.test.ts"
+  ]
+}

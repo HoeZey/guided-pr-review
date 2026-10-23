@@ -1,0 +1,23 @@
+---
+description: Product bounds for the Guided PR review app
+alwaysApply: true
+---
+
+# Product bounds
+
+Workspace root for this product is the folder that contains SKILL.md,
+package.json, and src/. Work only in that git root. If this tree is still
+nested under braid-connection-designer, do not git checkout, switch, or
+reset the parent CD clone.
+
+- Renderer plus store. The agent chapters. The app does not call an LLM.
+- Dev UI: http://localhost:8765/ — npm run dev in this folder. HTTP MCP: POST http://localhost:8765/mcp
+- Named ADO path uses Cursor ADO MCP (az login). Never paste a PAT into the app, store, logs, or Guide JSON.
+- This repo origin is GitHub. TCD PRs live on Azure DevOps (braidteam / BRAID / braid-connection-designer). Ingest those via ado MCP against the CD clone origin, not this GitHub remote.
+- data/ is gitignored. Local reviews.json is not the product contract.
+- Capture lives under docs/ (PRDs, issues, research). There is no context/ folder and no CONTEXT.md.
+- Do not push unless the user asks. Do not invent overview Home unless they ask.
+- After big code changes, graft build (deterministic, no API key).
+
+Implemented in git does not mean PRD issue checkboxes are flipped. Check
+docs/prds/ against HEAD before starting the next story.

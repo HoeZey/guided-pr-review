@@ -1,0 +1,15 @@
+---
+description: >-
+  Default to caveman communication. Read and follow the user skill; do not
+  copy its text here.
+alwaysApply: false
+---
+
+# Caveman
+
+This repo: read and follow /caveman at .cursor/skills/caveman/SKILL.md
+(fallback ~/.cursor/skills/caveman/SKILL.md).
+Default **full**. Do not restate that skill here.
+
+Stop: "stop caveman" or "normal mode". Switch: `/caveman lite|full|ultra`.
+Code, commits, PRs, tickets, docs: write normal.

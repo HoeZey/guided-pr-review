@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "graft": {
+      "command": "graft",
+      "args": ["mcp"],
+      "type": "stdio"
+    },
+    "ado": {
+      "type": "stdio",
+      "command": "/Users/joselee/.nvm/versions/node/v20.20.2/bin/npx",
+      "args": [
+        "-y",
+        "@azure-devops/mcp",
+        "braidteam",
+        "--authentication",
+        "azcli"
+      ],
+      "env": {
+        "PATH": "/Users/joselee/.nvm/versions/node/v20.20.2/bin:/opt/homebrew/bin:/usr/bin:/bin",
+        "ado_mcp_project": "BRAID",
+        "ado_mcp_team": "BRAID Team"
+      }
+    }
+  }
+}

@@ -1,0 +1,19 @@
+---
+description: Create git worktrees under this repo .cursor/worktrees, not home .cursor.
+alwaysApply: true
+---
+
+# Worktrees
+
+Cursor's /worktree command defaults to ~/.cursor/worktrees/<id>/. Do not use
+that path. Put every checkout under this repository so Agent sandbox writes
+do not need extra filesystem permission.
+
+## Layout
+
+- This repo: .cursor/worktrees/<epic-story-slug> (example: .cursor/worktrees/05-01-show-latest-outcome)
+- One worktree per git root per chat unless the user asks for another
+- Still look up .cursor/worktrees.json in the git root and in the new worktree after git worktree add, and run setup if present
+- Do not switch the user's main working tree unless they ask
+
+.cursor/worktrees/ is local (git exclude). Do not commit checkouts.

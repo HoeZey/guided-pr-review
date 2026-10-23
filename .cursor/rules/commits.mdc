@@ -1,0 +1,70 @@
+---
+description: Git commit subjects, story branch names, and squash-merge subjects.
+alwaysApply: true
+---
+
+# Commits
+
+## Messages
+
+Subject is the change. Start with an imperative verb. Say what changed. No
+Conventional Commits type prefix (feat:, fix:). No ticket key in the subject
+unless the user asks.
+
+- Imperative: Pin, Add, Remove, Fix — not Pinned / Adds / Fixed
+- Short: one line, no trailing period, no fluff
+- Body only when the subject does not carry the why (migration, pin
+  semantics, breaking change)
+
+```
+# bad
+feat: show latest code-review outcome
+
+# good
+Show the latest code-review outcome beside Guide and Diff
+```
+
+## Branches
+
+Prefix is one of feature/, bugfix/, hotfix/, chore/. Not feat/, fix/, or a
+bare ticket key. Whole name lowercase.
+
+After the prefix: two-digit epic, two-digit story, then a short slug. Epic
+is the number on that PRD in docs/README.md Features. Story is the NN- in
+docs/prds/<feature>/issues/NN-slug.md.
+
+```
+# bad
+feat/Show-Latest-Outcome
+feature/show-latest-code-review-outcome
+
+# good
+feature/05-01-show-latest-outcome
+```
+
+Worktree directory uses the same epic-story-slug:
+.cursor/worktrees/05-01-show-latest-outcome
+
+## Epic integration
+
+Story branches never merge directly to develop. Each PRD owns one epic
+integration branch named feature/<epic>-<prd-slug>, for example
+feature/07-provider-api-automation.
+
+Squash accepted story work onto the epic integration branch. Subject is
+Merged, the epic-story pair, a colon, then the issue title:
+
+```
+# bad
+Merge branch 'feature/05-01-show-latest-outcome'
+feat: show latest outcome
+
+# good
+Merged 05-01: Show the latest code-review outcome beside Guide and Diff
+```
+
+A dedicated integrator combines every accepted story, runs the PRD integration
+checks, and records a fixed-point review. Only then merge or fast-forward the
+epic integration branch to develop.
+
+Promote an accepted develop cut to stable main only when the user asks.

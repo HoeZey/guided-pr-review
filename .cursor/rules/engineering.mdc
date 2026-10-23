@@ -1,0 +1,26 @@
+---
+description: Planning and implementation routing for this product repo
+alwaysApply: true
+---
+
+# Guided PR review engineering
+
+Planning, design, or implementation in this repo: read and follow
+/10x-engineer at .cursor/skills/10x-engineer/SKILL.md. One skill per
+turn. Do not invent a workflow. Do not restate that skill's phase table here.
+
+This is the product git root (private GitHub HoeZey/guided-pr-review), not
+Braid Connection Designer. Capture lives under docs/, not context/. Do not
+open TCD Jira or create-jira-ticket unless the user explicitly asks. Jira is
+write-locked unless they ask to create, edit, comment, or transition.
+
+Use graft first for file/symbol discovery (ask, callers, skeleton, map)
+before grep or reading a whole file. Then ado for Azure DevOps PR ingest.
+GitHub MCP is for this repo's own PRs, never for TCD product PRs (those
+are ADO).
+
+Lookup: docs/README.md, then docs/prds/<feature>/README.md, then that
+feature's issues/. Next work from issue status (todo / doing / done) and
+.handoff/guided-pr-review.md.
+
+No copy of skill text into rules.

@@ -1,7 +1,6 @@
 {
   "version": 1,
   "title": "Pin pipeline revisions to the output-model SNAPSHOT",
-  "summary": "Maps listed on a location model must follow the output-model SNAPSHOT revision, not whatever the workflow last wrote. The pin lives on the read path so list and get stay consistent.",
   "base": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "head": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "range": "develop...feature/tcd-3343-pin-maps",

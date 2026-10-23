@@ -6,13 +6,20 @@ vertical slices.
 
 ## Features
 
-Epic numbers are this list order (two digits in git branch names).
+Epic numbers are the two-digit folder prefix. The prefix stays stable when a
+PRD moves under done/.
 
-- 01 [Guided PR review](prds/done/guided-pr-review/) — implemented
-- 02 [Review screen polish](prds/done/review-screen-polish/) — implemented
-- 03 [Git-host guided reviews](prds/git-host-guided-reviews/) — in progress
-- 04 [Pull request overview](prds/pull-request-overview/) — in progress
-- 05 [Code-review outcomes](prds/done/code-review-outcomes/) — implemented
+- [01 Guided PR review](prds/done/01-guided-pr-review/) — implemented
+- [02 Review screen polish](prds/done/02-review-screen-polish/) — implemented
+- [03 Git-host guided reviews](prds/done/03-git-host-guided-reviews/) — implemented
+- [04 Pull request overview](prds/done/04-pull-request-overview/) — implemented
+- [05 Code-review outcomes](prds/done/05-code-review-outcomes/) — implemented
+- [06 App structure](prds/06-app-structure/) — implemented
+- [07 Provider API automation](prds/07-provider-api-automation/) — implemented
+- [08 Inline git-host comments](prds/08-inline-git-host-comments/) — implemented
+- [09 Demo home polish](prds/09-demo-home-polish/) — implemented
+- [10 Guide quality](prds/10-guide-quality/) — signed
+- [11 Demo prep](prds/11-demo-prep/) — signed
 
 ## Status
 
@@ -23,8 +30,8 @@ Epic numbers are this list order (two digits in git branch names).
 - implemented — every success criterion passes
 
 A PRD is not implemented because most code exists. Mark it implemented only
-after its success criteria pass. Issue status lives in each issue file:
-todo, doing, or done.
+after its success criteria pass. Issue status lives in each issue file: todo,
+doing, done, or cancelled. Cancelled work names the PRD that supersedes it.
 
 ## Decisions
 
@@ -34,10 +41,17 @@ Runtime review data stays local and is not committed.
 
 ## Git
 
-Story branches: feature/04-03-open-selected-pr-as-diff. Prefix feature/,
-bugfix/, hotfix/, or chore/. Then two-digit epic from Features above, two-digit
-story from issues/NN-slug.md, then a lowercase slug.
+Story branches use feature/04-03-open-selected-pr-as-diff. Prefix feature/,
+bugfix/, hotfix/, or chore/. Then two-digit epic, two-digit story from
+issues/NN-slug.md, then a lowercase slug.
 
-Squash onto main as Merged 04-03: Open the selected PR as Diff. Title is the
-issue title. Fast-forward when the branch is already a straight line on main.
-Do not merge epic 03 (Git-host) until that PRD's remaining story is done.
+Each epic owns an integration branch such as feature/07-provider-api-automation.
+Story branches never merge directly to develop. Squash an accepted story onto
+the epic branch as Merged 07-03: Read pull requests through GitHub REST. A
+dedicated integrator combines every accepted story, runs the PRD integration
+checks, and records one fixed-point review before the epic reaches develop.
+Promote an accepted develop cut to stable main only after the user authorizes
+it. Pushing main tags v plus the version field in package.json when that tag
+does not exist yet. Pushing the same version again does nothing. Before the
+next promote, bump package.json and package-lock.json on develop, and add a
+short heading and one line to CHANGELOG.md.

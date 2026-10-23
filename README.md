@@ -5,24 +5,33 @@ several PRs in one process, HTTP MCP for the agent.
 
 Private repo. Not a findings review.
 
-## Run
+## Install
+
+You need git access to the private repo, Node.js, and npm. This installs the
+main branch.
 
 ```bash
-npm install
-npm test
-npm run dev
+npm install -g --include=dev git+ssh://git@github.com/HoeZey/guided-pr-review.git
 ```
 
-UI: http://localhost:8765/
+npm installs the app and links that install as the Cursor skill. Run the same
+command again to update.
 
-MCP: POST JSON-RPC to http://localhost:8765/mcp
+Start the app, which also serves the MCP:
 
-Point Cursor at that MCP URL (Streamable HTTP / URL server — see current
-Cursor mcp.json docs). The skill starts `npm run dev` if nothing is listening.
+```bash
+pr-guide start
+```
+
+Leave that process running. If port 8765 is already open, the command exits.
+The UI is http://localhost:8765/. The MCP is POST JSON-RPC to
+http://localhost:8765/mcp on that same process. Point Cursor at that URL once
+(Streamable HTTP / URL server — see current Cursor mcp.json docs). Cursor does
+not start the process. The skill runs pr-guide start when the port is closed.
 
 ## Contracts
 
-Zod in `src/contracts.ts` is the source of truth (Guide v1 + Store v1 + tool
-I/O). Persistence: `data/reviews.json` (gitignored).
+Zod in src/lib/shared/contracts is the source of truth (Guide v1 + Store v1 +
+tool I/O). Persistence: data/reviews.json (gitignored).
 
 Docs: [docs/](docs/)

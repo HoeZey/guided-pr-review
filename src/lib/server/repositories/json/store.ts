@@ -1,0 +1,396 @@
+import type { StoredAction } from "../../../shared/contracts/catalog.ts";
+import { GuideV1 } from "../../../shared/contracts/guide.ts";
+import {
+  CodeReviewOutcome,
+  type StoredOutcome,
+} from "../../../shared/contracts/outcomes.ts";
+import {
+  ReviewDiff,
+  type ListReviewsOutput,
+  type ReviewRecord,
+} from "../../../shared/contracts/persistence.ts";
+import { pullRequestSyncKey } from "../../../shared/contracts/provenance.ts";
+import { tools } from "../../../shared/contracts/tools.ts";
+import { applyCatalogReplacement } from "../../../shared/domain/catalog.ts";
+import { resolveChapterRefs } from "../../../shared/domain/chapter-refs.ts";
+import {
+  agentIsConnected,
+  findLocalReviewToAdopt,
+  reviewSummary,
+} from "../../../shared/domain/reviews.ts";
+import type { AppRepositories, ConfiguredRepositoryPort, ConfiguredRepositoryRecord } from "../ports.ts";
+import {
+  configuredRepositoriesCollectionPresent,
+  locked,
+  markConfiguredRepositoriesCollection,
+  mutateStore,
+  readStore,
+  resetJsonStoreCache,
+  writeStore,
+} from "./file.ts";
+
+function httpError(message: string, status: number): Error {
+  return Object.assign(new Error(message), { status });
+}
+
+function unwrapGuide(body: unknown): GuideV1 {
+  return GuideV1.parse(
+    body && typeof body === "object" && "guide" in body
+      ? (body as { guide: unknown }).guide
+      : body,
+  );
+}
+
+function isInFlight(action: StoredAction): boolean {
+  return action.status === "queued" || action.status === "claimed";
+}
+
+function sameQueuedAction(
+  existing: StoredAction,
+  parsed: { kind: StoredAction["kind"]; reviewId?: string },
+): boolean {
+  return (
+    isInFlight(existing) &&
+    existing.kind === "generate-guide" &&
+    parsed.kind === "generate-guide" &&
+    existing.reviewId === parsed.reviewId
+  );
+}
+
+function appendActive(
+  store: { reviews: ReviewRecord[]; activeId: string | null },
+  guide: GuideV1,
+  diff?: ReviewDiff,
+): {
+  id: string;
+} {
+  const id = crypto.randomUUID();
+  store.reviews.push({
+    id,
+    addedAt: new Date().toISOString(),
+    guide,
+    outcomes: [],
+    ...(diff ? { diff } : {}),
+  });
+  store.activeId = id;
+  return { id };
+}
+
+function parseUpsert(input: unknown): { guide: GuideV1; diff?: ReviewDiff } {
+  if (input && typeof input === "object" && "guide" in input) {
+    const body = input as { guide: unknown; diff?: unknown };
+    return {
+      guide: GuideV1.parse(body.guide),
+      ...(body.diff !== undefined ? { diff: ReviewDiff.parse(body.diff) } : {}),
+    };
+  }
+  return { guide: GuideV1.parse(input) };
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function listReviews(): Promise<ListReviewsOutput> {
+  const store = await readStore();
+  return {
+    activeId: store.activeId,
+    reviews: store.reviews.map(reviewSummary),
+    repositories: store.repositories,
+    catalog: store.catalog,
+    actions: store.actions,
+    agentConnected: agentIsConnected(store.agentLastSeen),
+  };
+}
+
+export async function queueAction(input: unknown): Promise<{ id: string }> {
+  const parsed = tools.queue_action.input.parse(input);
+  return mutateStore((store) => {
+    const found = store.reviews.find((review) => review.id === parsed.reviewId);
+    if (!found) {
+      throw httpError(`unknown review ${parsed.reviewId}`, 404);
+    }
+    if (!found.guide.unchaptered) {
+      throw httpError("Generate guide is only for an unchaptered review", 400);
+    }
+    const existing = store.actions.find((action) => sameQueuedAction(action, parsed));
+    if (existing) return { id: existing.id };
+    const id = crypto.randomUUID();
+    store.actions.push({
+      id,
+      kind: "generate-guide",
+      status: "queued",
+      queuedAt: new Date().toISOString(),
+      reviewId: parsed.reviewId,
+    });
+    return { id };
+  });
+}
+
+export async function waitForAction(input: unknown = {}): Promise<StoredAction | null> {
+  const parsed = tools.wait_for_action.input.parse(input ?? {});
+  const timeoutMs = parsed.timeoutMs ?? 25_000;
+  const deadline = Date.now() + timeoutMs;
+  // ponytail: 50ms poll, fine for one waiting agent; evented wait if that changes
+  for (;;) {
+    const claimed = await mutateStore((store) => {
+      store.agentLastSeen = new Date().toISOString();
+      const inFlight = store.actions.find((action) => action.status === "claimed");
+      if (inFlight) return inFlight;
+      const queued = store.actions.find((action) => action.status === "queued");
+      if (queued) {
+        queued.status = "claimed";
+        queued.claimedAt = store.agentLastSeen;
+        return queued;
+      }
+      return null;
+    });
+    if (claimed) return claimed;
+    if (Date.now() >= deadline) return null;
+    await sleep(50);
+  }
+}
+
+export async function completeAction(input: unknown): Promise<{ ok: true }> {
+  const parsed = tools.complete_action.input.parse(input);
+  return mutateStore((store) => {
+    const action = store.actions.find((row) => row.id === parsed.id);
+    if (!action) {
+      throw httpError(`unknown action ${parsed.id}`, 404);
+    }
+    if (!isInFlight(action)) {
+      throw httpError(`action ${parsed.id} is not in flight`, 409);
+    }
+    if (parsed.status === "succeeded" && !parsed.reviewId) {
+      throw httpError("reviewId required when Generate guide succeeds", 400);
+    }
+    action.status = parsed.status;
+    action.completedAt = new Date().toISOString();
+    if (parsed.status === "succeeded" && parsed.reviewId) action.reviewId = parsed.reviewId;
+    if (parsed.status === "failed") action.error = parsed.error;
+    return { ok: true as const };
+  });
+}
+
+export async function replaceCatalog(input: unknown): Promise<{ ok: true }> {
+  const parsed = tools.replace_catalog.input.parse(input);
+  return mutateStore((store) => {
+    const next = applyCatalogReplacement(
+      store.repositories,
+      store.catalog,
+      store.reviews,
+      parsed,
+    );
+    store.repositories = next.repositories;
+    store.catalog = next.catalog;
+    store.reviews = next.reviews;
+    return { ok: true as const };
+  });
+}
+
+export async function addReview(input: unknown): Promise<{ id: string }> {
+  const { guide, diff } = parseUpsert(input);
+  return mutateStore((store) => appendActive(store, guide, diff));
+}
+
+export async function addReviewFromTool(body: unknown): Promise<{ id: string }> {
+  return addReview(unwrapGuide(body));
+}
+
+export async function upsertReview(input: unknown): Promise<{ id: string }> {
+  const { guide, diff } = parseUpsert(input);
+  const source = guide.source;
+  if (!source) {
+    throw httpError("upsert_review requires pull-request source", 400);
+  }
+  const key = pullRequestSyncKey(source);
+  return mutateStore((store) => {
+    const found =
+      store.reviews.find(
+        (review) =>
+          review.guide.source && pullRequestSyncKey(review.guide.source) === key,
+      ) ?? findLocalReviewToAdopt(store.reviews, source);
+    if (found) {
+      found.guide = guide;
+      if (diff !== undefined) found.diff = diff;
+      store.activeId = found.id;
+      return { id: found.id };
+    }
+    return appendActive(store, guide, diff);
+  });
+}
+
+export async function upsertReviewFromTool(body: unknown): Promise<{ id: string }> {
+  return upsertReview(unwrapGuide(body));
+}
+
+export async function removeReview(id: string): Promise<{ ok: true }> {
+  return mutateStore((store) => {
+    const next = store.reviews.filter((review) => review.id !== id);
+    if (next.length === store.reviews.length) {
+      throw httpError(`unknown review ${id}`, 404);
+    }
+    store.reviews = next;
+    if (store.activeId === id) {
+      store.activeId = next[0]?.id ?? null;
+    }
+    return { ok: true as const };
+  });
+}
+
+export async function getReview(
+  id: string,
+): Promise<{ guide: GuideV1; outcomes: StoredOutcome[]; diff?: ReviewDiff }> {
+  const store = await readStore();
+  const found = store.reviews.find((review) => review.id === id);
+  if (!found) {
+    throw httpError(`unknown review ${id}`, 404);
+  }
+  return {
+    guide: found.guide,
+    outcomes: found.outcomes,
+    ...(found.diff ? { diff: found.diff } : {}),
+  };
+}
+
+export async function publishReviewOutcome(
+  reviewId: string,
+  outcome: unknown,
+): Promise<{ id: string }> {
+  const parsed = CodeReviewOutcome.parse(outcome);
+  return mutateStore((store) => {
+    const found = store.reviews.find((review) => review.id === reviewId);
+    if (!found) {
+      throw httpError(`unknown review ${reviewId}`, 404);
+    }
+    const id = crypto.randomUUID();
+    found.outcomes.push({
+      id,
+      addedAt: new Date().toISOString(),
+      outcome: parsed,
+    });
+    return { id };
+  });
+}
+
+export async function setActive(id: string): Promise<{ activeId: string }> {
+  return mutateStore((store) => {
+    if (!store.reviews.some((review) => review.id === id)) {
+      throw httpError(`unknown review ${id}`, 404);
+    }
+    store.activeId = id;
+    return { activeId: id };
+  });
+}
+
+export async function chapterReview(input: unknown): Promise<{ id: string }> {
+  const parsed = tools.chapter_review.input.parse(input);
+  return mutateStore((store) => {
+    const found = store.reviews.find((review) => review.id === parsed.id);
+    if (!found) {
+      throw httpError(`unknown review ${parsed.id}`, 404);
+    }
+    if (!found.diff) {
+      throw httpError("review has no saved diff; refresh first", 409);
+    }
+    if (found.diff.sourceCommit.toLowerCase() !== parsed.sourceCommit.toLowerCase()) {
+      throw httpError(
+        `sourceCommit does not match; current is ${found.diff.sourceCommit}`,
+        409,
+      );
+    }
+    const resolved = resolveChapterRefs(found.diff.files, parsed.chapters);
+    if (!resolved.ok) {
+      throw httpError(JSON.stringify(resolved.error), 400);
+    }
+    const prev = found.guide;
+    const chapters = resolved.chapters.map((chapter, index) => ({
+      id: `chapter-${index + 1}`,
+      title: chapter.title,
+      why: chapter.why,
+      ...(chapter.open ? { open: true as const } : {}),
+      additions: chapter.additions,
+      deletions: chapter.deletions,
+      files: chapter.files,
+    }));
+    const nextSource = prev.source
+      ? {
+          ...prev.source,
+          sourceCommit: found.diff.sourceCommit,
+        }
+      : undefined;
+    found.guide = GuideV1.parse({
+      version: 1,
+      title: prev.title,
+      base: prev.base,
+      head: nextSource ? prev.head : found.diff.sourceCommit,
+      ...(prev.range !== undefined ? { range: prev.range } : {}),
+      ...(prev.repo !== undefined ? { repo: prev.repo } : {}),
+      chapters,
+      ...(nextSource ? { source: nextSource } : {}),
+    });
+    return { id: found.id };
+  });
+}
+
+export async function seedIfEmpty(guide: GuideV1): Promise<void> {
+  await locked(async () => {
+    const current = await readStore();
+    if (current.reviews.length > 0) return;
+    const store = structuredClone(current);
+    appendActive(store, guide);
+    await writeStore(store);
+  });
+}
+
+export async function listConfiguredRepositories(): Promise<ConfiguredRepositoryRecord[]> {
+  const store = await readStore();
+  return store.repositories.map((row) => ({ ...row }));
+}
+
+export async function addConfiguredRepository(
+  input: ConfiguredRepositoryRecord,
+): Promise<{ ok: true }> {
+  return mutateStore((store) => {
+    markConfiguredRepositoriesCollection();
+    store.repositories = store.repositories.filter(
+      (row) => !(row.provider === input.provider && row.host === input.host && row.id === input.id),
+    );
+    store.repositories.push(input);
+    return { ok: true as const };
+  });
+}
+
+export async function removeConfiguredRepository(id: string): Promise<{ ok: true }> {
+  return mutateStore((store) => {
+    markConfiguredRepositoriesCollection();
+    store.repositories = store.repositories.filter((row) => row.id !== id);
+    return { ok: true as const };
+  });
+}
+
+export const jsonConfiguredRepositories: ConfiguredRepositoryPort = {
+  list: listConfiguredRepositories,
+  add: addConfiguredRepository,
+  remove: removeConfiguredRepository,
+};
+
+export { configuredRepositoriesCollectionPresent, resetJsonStoreCache };
+
+export const jsonRepositories: AppRepositories = {
+  listReviews,
+  getReview,
+  addReview,
+  addReviewFromTool,
+  upsertReview,
+  upsertReviewFromTool,
+  removeReview,
+  setActive,
+  chapterReview,
+  seedIfEmpty,
+  replaceCatalog,
+  queueAction,
+  waitForAction,
+  completeAction,
+  publishReviewOutcome,
+};
