@@ -50,4 +50,7 @@ the epic branch as Merged 07-03: Read pull requests through GitHub REST. A
 dedicated integrator combines every accepted story, runs the PRD integration
 checks, and records one fixed-point review before the epic reaches develop.
 Promote an accepted develop cut to stable main only after the user authorizes
-it.
+it. Pushing main tags v plus the version field in package.json when that tag
+does not exist yet. Pushing the same version again does nothing. Before the
+next promote, bump package.json and package-lock.json on develop, and add a
+short heading and one line to CHANGELOG.md.

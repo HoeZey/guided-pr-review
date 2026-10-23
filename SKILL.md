@@ -39,8 +39,8 @@ one chat starts. The app still chapters nothing by itself.
 
 Guides are written by Grok 4.7 high.
 
-1. Ensure the instance is up (same as Local step for npm run dev). Do not start a
-   second process if port 8765 is already taken.
+1. Ensure the instance is up (same as Local). Do not start a second process if
+   port 8765 is already taken.
 
 2. Open Home. http://localhost:8765/. Do not authenticate against provider
    MCP. Do not read origin. Do not checkout.
@@ -108,15 +108,10 @@ Guides are written by Grok 4.7 high.
    curl -sS http://localhost:8765/mcp
    ```
 
-   If that fails, from the skill root:
-
-   ```bash
-   npm install
-   npm run dev
-   ```
-
-   Start npm run dev in the background. Wait until /mcp answers. Do not start
-   a second process if port 8765 is already taken.
+   If that fails, run pr-guide start in the background. If pr-guide is not on
+   PATH, from the skill root run npm run dev in the background instead. Wait
+   until /mcp answers. Do not start a second process if port 8765 is already
+   taken.
 
 3. tools/call add_local_review with repoPath (absolute path to the git work
    tree under review), base, head, and an optional title. It returns { id }.
