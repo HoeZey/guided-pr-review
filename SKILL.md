@@ -39,8 +39,9 @@ one chat starts. The app still chapters nothing by itself.
 
 Guides are written by Grok 4.7 high.
 
-1. Ensure the instance is up (same as Local). Do not start a second process if
-   port 8765 is already taken.
+1. Ensure the instance is up (same as Local). Call each tool with the curl in
+   Local step 2. Do not start a second process if port 8765 is already taken.
+   Run pr-guide stop when the user asks to stop the app.
 
 2. Open Home. http://localhost:8765/. Do not authenticate against provider
    MCP. Do not read origin. Do not checkout.
@@ -111,7 +112,14 @@ Guides are written by Grok 4.7 high.
    If that fails, run pr-guide start in the background. If pr-guide is not on
    PATH, from the skill root run npm run dev in the background instead. Wait
    until /mcp answers. Do not start a second process if port 8765 is already
-   taken.
+   taken. Run pr-guide stop when the user asks to stop the app.
+
+   Every tools/call in this skill is a POST to that same URL. Change the tool
+   name and arguments:
+
+   ```bash
+   curl -sS -X POST http://localhost:8765/mcp -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_reviews","arguments":{}}}'
+   ```
 
 3. tools/call add_local_review with repoPath (absolute path to the git work
    tree under review), base, head, and an optional title. It returns { id }.
@@ -190,6 +198,8 @@ missing, duplicated, unknownPaths, and partialStubs — fix only those ranges.
 - The app chapters nothing by itself.
 
 ## MCP tools
+
+Call each tool with the curl in Local step 2. No Cursor MCP setup is required.
 
 - list_reviews → { reviews, activeId, repositories, catalog, actions,
   agentConnected }. Review rows include base and head, and may include

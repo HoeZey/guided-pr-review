@@ -23,11 +23,15 @@ Start the app, which also serves the MCP:
 pr-guide start
 ```
 
-Leave that process running. If port 8765 is already open, the command exits.
-The UI is http://localhost:8765/. The MCP is POST JSON-RPC to
-http://localhost:8765/mcp on that same process. Point Cursor at that URL once
-(Streamable HTTP / URL server — see current Cursor mcp.json docs). Cursor does
-not start the process. The skill runs pr-guide start when the port is closed.
+Stop it when you are done:
+
+```bash
+pr-guide stop
+```
+
+If port 8765 is already open, start exits. The UI is http://localhost:8765/.
+The skill calls the MCP with curl and runs pr-guide start when the port is
+closed.
 
 ## Contracts
 
