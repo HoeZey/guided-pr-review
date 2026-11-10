@@ -10,6 +10,7 @@
     commentable = false,
     selected = false,
     oncomment,
+    onfilecomment,
     children,
   }: {
     line: Lined;
@@ -18,11 +19,13 @@
     commentable?: boolean;
     selected?: boolean;
     oncomment?: (line: number, extend: boolean) => void;
+    onfilecomment?: () => void;
     children?: Snippet;
   } = $props();
 
   const mark = $derived(line.type === "added" ? "+" : line.type === "removed" ? "−" : "");
   const current = $derived((line.type === "added" || line.type === "context") && line.newLine != null);
+  const deletedOnly = $derived(line.type === "removed" && line.newLine == null);
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -32,13 +35,16 @@
   class:comment-selected={selected}
   data-comment-type={commentable && current ? line.type : undefined}
   data-comment-new={current ? line.newLine : undefined}
+  data-comment-deleted={commentable && deletedOnly ? "true" : undefined}
   onclick={
     commentable && current
       ? (event) => {
           if (line.newLine == null) return;
           oncomment?.(line.newLine, event.shiftKey);
         }
-      : undefined
+      : commentable && deletedOnly
+        ? () => onfilecomment?.()
+        : undefined
   }
 >
   <span class="gutter">{line.oldLine != null ? line.oldLine : ""}</span>

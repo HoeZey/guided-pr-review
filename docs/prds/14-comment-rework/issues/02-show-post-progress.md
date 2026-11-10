@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 blocked_by:
   - 01-turn-comments-on
 blocks:
@@ -44,14 +44,14 @@ state, delivery reducer, styles, tests
 
 **Acceptance criteria:**
 
-- [ ] A line click opens a composer and sends no request.
-- [ ] Shift-click selects a contiguous current-side range in one file.
-- [ ] Send shows the spinner until the fake resolves.
-- [ ] On success the thread replaces the composer on Guide and Diff and is
+- [x] A line click opens a composer and sends no request.
+- [x] Shift-click selects a contiguous current-side range in one file.
+- [x] Send shows the spinner until the fake resolves.
+- [x] On success the thread replaces the composer on Guide and Diff and is
   listed in Discussion.
-- [ ] The highlight runs once and is absent under reduced motion.
-- [ ] A rejected send keeps the draft, shows the error, and Retry sends again.
-- [ ] An ambiguous failure lists before Retry and does not post twice.
+- [x] The highlight runs once and is absent under reduced motion.
+- [x] A rejected send keeps the draft, shows the error, and Retry sends again.
+- [x] An ambiguous failure lists before Retry and does not post twice.
 
 **Blocked by:** 01
 

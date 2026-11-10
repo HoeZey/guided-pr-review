@@ -1,10 +1,9 @@
 <script lang="ts">
-  import { projectDiscussionThreads } from "$lib/shared/domain/comment-slots";
   import { composerSession, openCreateComposer } from "$lib/client/state/composer.svelte";
-  import { threadSession } from "$lib/client/state/threads.svelte";
+  import { threadSession, visibleDiscussionThreads } from "$lib/client/state/threads.svelte";
   import CommentStack from "../code/CommentStack.svelte";
 
-  const threads = $derived(projectDiscussionThreads(threadSession.threads));
+  const threads = $derived(visibleDiscussionThreads());
   const showComposer = $derived(
     Boolean(
       threadSession.hosted &&

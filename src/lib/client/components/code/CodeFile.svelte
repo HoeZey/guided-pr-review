@@ -116,8 +116,9 @@
                   side="left"
                   {lang}
                   {theme}
-                  commentable={false}
+                  {commentable}
                   selected={false}
+                  onfilecomment={commentOnFile}
                 >
                   {#if own.length || ownComposer}
                     <CommentStack threads={own} showComposer={ownComposer} />
@@ -142,6 +143,7 @@
                   {commentable}
                   selected={!isUnchangedGap(item) && rowSelected(item.right?.newLine)}
                   oncomment={commentOnLine}
+                  onfilecomment={commentOnFile}
                 >
                   {#if own.length || ownComposer}
                     <CommentStack threads={own} showComposer={ownComposer} />
@@ -169,6 +171,7 @@
                   {commentable}
                   selected={rowSelected(item.newLine)}
                   oncomment={commentOnLine}
+                  onfilecomment={commentOnFile}
                 >
                   <CommentStack
                     threads={afterThreads(hi, i, "unified")}

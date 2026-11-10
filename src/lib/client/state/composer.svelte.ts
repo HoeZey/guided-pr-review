@@ -14,7 +14,7 @@ import {
   type OperationLookup,
 } from "$lib/shared/domain/comment-delivery";
 import { commentsApi } from "../browser/comments";
-import { appendReply, upsertThread } from "./threads.svelte";
+import { appendReply, noteDiscussionArrival, upsertThread } from "./threads.svelte";
 
 export type ComposerTarget =
   | { kind: "create"; anchor: CreateCommentAnchor }
@@ -50,8 +50,33 @@ function empty(): ComposerSession {
 
 export const composerSession = $state<ComposerSession>(empty());
 
+const HIGHLIGHT_MS = 1500;
+
+export const threadHighlight = $state<{ id: string | null }>({ id: null });
+
 let sendGeneration = 0;
 let sendAbort: AbortController | null = null;
+let highlightTimer: ReturnType<typeof setTimeout> | null = null;
+
+function prefersReducedMotion(): boolean {
+  return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function clearThreadHighlight(): void {
+  if (highlightTimer != null) clearTimeout(highlightTimer);
+  highlightTimer = null;
+  threadHighlight.id = null;
+}
+
+function showThreadHighlight(id: string): void {
+  clearThreadHighlight();
+  if (prefersReducedMotion()) return;
+  threadHighlight.id = id;
+  highlightTimer = setTimeout(() => {
+    highlightTimer = null;
+    if (threadHighlight.id === id) threadHighlight.id = null;
+  }, HIGHLIGHT_MS);
+}
 
 function abandonSend(): void {
   sendGeneration += 1;
@@ -68,6 +93,7 @@ function startRequest(): { gen: number; signal: AbortSignal } {
 
 export function resetComposerSession(): void {
   abandonSend();
+  clearThreadHighlight();
   const next = empty();
   composerSession.reviewId = next.reviewId;
   composerSession.target = next.target;
@@ -144,6 +170,11 @@ function closeComposer(): void {
   composerSession.delivery = { state: "draft", content: "" };
 }
 
+function finishLanded(threadId: string): void {
+  showThreadHighlight(threadId);
+  closeComposer();
+}
+
 function errorCodeOf(err: unknown): string | null {
   if (err && typeof err === "object" && "name" in err && (err as { name: string }).name === "AbortError") {
     return "aborted";
@@ -199,7 +230,8 @@ export async function submitComposer(opts: SubmitComposerFns = {}): Promise<void
         );
         if (hit) {
           upsertThread(hit);
-          closeComposer();
+          noteDiscussionArrival(hit.id);
+          finishLanded(hit.id);
           return;
         }
       } else {
@@ -213,7 +245,7 @@ export async function submitComposer(opts: SubmitComposerFns = {}): Promise<void
           const parent = listed.threads.find((row) => row.id === target.threadId);
           if (parent) upsertThread(parent);
           else appendReply(target.threadId, hit);
-          closeComposer();
+          finishLanded(target.threadId);
           return;
         }
       }
@@ -227,12 +259,8 @@ export async function submitComposer(opts: SubmitComposerFns = {}): Promise<void
       );
       if (gen !== sendGeneration) return;
       upsertThread(thread);
-      composerSession.delivery = nextDelivery(composerSession.delivery, {
-        type: "success",
-        threadId: thread.id,
-        commentId: thread.messages[0]?.id ?? thread.id,
-      });
-      closeComposer();
+      noteDiscussionArrival(thread.id);
+      finishLanded(thread.id);
       return;
     }
 
@@ -244,12 +272,7 @@ export async function submitComposer(opts: SubmitComposerFns = {}): Promise<void
     );
     if (gen !== sendGeneration) return;
     appendReply(target.threadId, message);
-    composerSession.delivery = nextDelivery(composerSession.delivery, {
-      type: "success",
-      threadId: target.threadId,
-      commentId: message.id,
-    });
-    closeComposer();
+    finishLanded(target.threadId);
   } catch (err) {
     if (gen !== sendGeneration) return;
     if (isAbort(err)) return;

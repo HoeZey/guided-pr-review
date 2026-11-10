@@ -1,8 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { HOME_PATH, reviewLandingTab } from "$lib/shared/domain/overview";
-  import { projectDiscussionThreads } from "$lib/shared/domain/comment-slots";
-  import type { HomePageData, ReviewPageData, ReviewTab } from "$lib/shared/page-data";
+import { HOME_PATH, reviewLandingTab } from "$lib/shared/domain/overview";
+import type { HomePageData, ReviewPageData, ReviewTab } from "$lib/shared/page-data";
   import { fetchJson } from "$lib/client/browser/fetch";
   import {
     bindReviewChrome,
@@ -23,6 +22,7 @@
     loadReviewThreads,
     retryReviewThreads,
     threadSession,
+    visibleDiscussionThreads,
   } from "$lib/client/state/threads.svelte";
   import DiffStats from "./code/DiffStats.svelte";
   import DiffView from "./diff/DiffView.svelte";
@@ -122,7 +122,7 @@
     { id: "guide", label: "Guide" },
     { id: "discussion", label: "Discussion" },
   ];
-  const discussionCount = $derived(projectDiscussionThreads(threadSession.threads).length);
+  const discussionCount = $derived(visibleDiscussionThreads().length);
 </script>
 
 <div

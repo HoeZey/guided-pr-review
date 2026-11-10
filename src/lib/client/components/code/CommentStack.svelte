@@ -5,7 +5,7 @@
     discussionPlacementLabel,
     discussionProviderLabel,
   } from "$lib/shared/domain/comment-slots";
-  import { composerSession, openReplyComposer } from "$lib/client/state/composer.svelte";
+  import { composerSession, openReplyComposer, threadHighlight } from "$lib/client/state/composer.svelte";
   import {
     deleteOwnedComment,
     threadSession,
@@ -134,7 +134,12 @@
       {@const root = thread.messages[0]}
       {@const placement = discussion ? discussionPlacementLabel(thread) : null}
       {#if root}
-        <article class="comment-thread" data-thread={thread.id} data-status={thread.status}>
+        <article
+          class="comment-thread"
+          class:thread-landed={threadHighlight.id === thread.id}
+          data-thread={thread.id}
+          data-status={thread.status}
+        >
           <div class="thread-meta">
             <span>{root.author.login}</span>
             {#if stamp(root.createdAt)}<span> · {stamp(root.createdAt)}</span>{/if}

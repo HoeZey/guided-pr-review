@@ -16,6 +16,7 @@
     commentable = false,
     selected = false,
     oncomment,
+    onfilecomment,
     children,
   }: {
     item: SplitPair | Gap;
@@ -25,6 +26,7 @@
     commentable?: boolean;
     selected?: boolean;
     oncomment?: (line: number, extend: boolean) => void;
+    onfilecomment?: () => void;
     children?: Snippet;
   } = $props();
 </script>
@@ -40,6 +42,7 @@
     {commentable}
     {selected}
     {oncomment}
+    {onfilecomment}
   />
 {/if}
 {@render children?.()}

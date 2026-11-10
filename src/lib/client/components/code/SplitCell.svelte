@@ -10,6 +10,7 @@
     commentable = false,
     selected = false,
     oncomment,
+    onfilecomment,
   }: {
     side: "left" | "right";
     line: Lined | null;
@@ -18,6 +19,7 @@
     commentable?: boolean;
     selected?: boolean;
     oncomment?: (line: number, extend: boolean) => void;
+    onfilecomment?: () => void;
   } = $props();
 
   const n = $derived(
@@ -37,6 +39,7 @@
   const current = $derived(
     Boolean(line && side === "right" && (line.type === "added" || line.type === "context") && line.newLine != null),
   );
+  const deletedOnly = $derived(Boolean(line && line.type === "removed" && line.newLine == null));
 </script>
 
 {#if !line}
@@ -49,13 +52,16 @@
     class:comment-selected={selected}
     data-comment-type={commentable && current ? line.type : undefined}
     data-comment-new={current ? line.newLine : undefined}
+    data-comment-deleted={commentable && deletedOnly ? "true" : undefined}
     onclick={
       commentable && current
         ? (event) => {
             if (line.newLine == null) return;
             oncomment?.(line.newLine, event.shiftKey);
           }
-        : undefined
+        : commentable && deletedOnly
+          ? () => onfilecomment?.()
+          : undefined
     }
   >
     <span class="gutter">{n}</span>

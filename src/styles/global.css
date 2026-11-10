@@ -1999,6 +1999,18 @@ main {
   position: static;
 }
 
+.comment-thread.thread-landed {
+  animation: thread-land 1.5s ease-out 1;
+}
+
+@keyframes thread-land {
+  from {
+    background: var(--accent-dim);
+    box-shadow: inset 3px 0 0 var(--accent);
+    opacity: 0;
+  }
+}
+
 .comment-thread {
   margin: 8px 12px 12px;
   padding: 10px;
@@ -2040,7 +2052,8 @@ main {
   border-top: 1px solid var(--border);
 }
 
-.line[data-comment-type] {
+.line[data-comment-type],
+.line[data-comment-deleted] {
   cursor: pointer;
 }
 
@@ -2262,5 +2275,9 @@ main {
 
   .toc-panel {
     transition: none;
+  }
+
+  .comment-thread.thread-landed {
+    animation: none;
   }
 }

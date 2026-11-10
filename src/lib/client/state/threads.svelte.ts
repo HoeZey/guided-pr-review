@@ -1,4 +1,5 @@
 import type { CommentMessage, CommentThread } from "$lib/shared/contracts/comments";
+import { projectDiscussionThreads } from "$lib/shared/domain/comment-slots";
 import { commentsApi } from "../browser/comments";
 
 export const THREAD_LIST_STALE_MS = 60_000;
@@ -21,6 +22,7 @@ type ThreadSession = {
   reviewId: string | null;
   hosted: boolean;
   threads: CommentThread[];
+  arrivals: string[];
   loading: boolean;
   error: string | null;
   fetchedAt: number | null;
@@ -31,6 +33,7 @@ function emptySession(): ThreadSession {
     reviewId: null,
     hosted: false,
     threads: [],
+    arrivals: [],
     loading: false,
     error: null,
     fetchedAt: null,
@@ -44,9 +47,30 @@ export function resetThreadSession(): void {
   threadSession.reviewId = next.reviewId;
   threadSession.hosted = next.hosted;
   threadSession.threads = next.threads;
+  threadSession.arrivals = next.arrivals;
   threadSession.loading = next.loading;
   threadSession.error = next.error;
   threadSession.fetchedAt = next.fetchedAt;
+}
+
+export function noteDiscussionArrival(id: string): void {
+  if (threadSession.arrivals.includes(id)) return;
+  threadSession.arrivals = [...threadSession.arrivals, id];
+}
+
+export function visibleDiscussionThreads(): CommentThread[] {
+  const base = projectDiscussionThreads(threadSession.threads);
+  if (threadSession.arrivals.length === 0) return base;
+  const seen = new Set(base.map((row) => row.id));
+  const extra: CommentThread[] = [];
+  for (const id of threadSession.arrivals) {
+    if (seen.has(id)) continue;
+    const thread = threadSession.threads.find((row) => row.id === id);
+    if (!thread) continue;
+    seen.add(id);
+    extra.push(thread);
+  }
+  return extra.length === 0 ? base : [...base, ...extra];
 }
 
 export async function loadReviewThreads(opts: {
