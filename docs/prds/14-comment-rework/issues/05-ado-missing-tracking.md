@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 blocked_by: []
 blocks:
   - 09-integrate-and-verify
@@ -36,11 +36,11 @@ fixtures
 
 **Acceptance criteria:**
 
-- [ ] A line create with empty stored changes fetches iterations and change
+- [x] A line create with empty stored changes fetches iterations and change
   tracking, then posts with them.
-- [ ] A create with stored change tracking makes no extra host read.
-- [ ] Stored iteration 0 is never sent to the host.
-- [ ] A path missing from the host's changes fails with invalid-anchor and
+- [x] A create with stored change tracking makes no extra host read.
+- [x] Stored iteration 0 is never sent to the host.
+- [x] A path missing from the host's changes fails with invalid-anchor and
   posts nothing.
 
 **Blocked by:** none

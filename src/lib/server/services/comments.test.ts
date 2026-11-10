@@ -663,6 +663,139 @@ test("createAppServices defaults to live ADO and GitHub comment REST", async () 
   assert.equal(seen.some((row) => row.url.includes("evil.example")), false);
 });
 
+test("line create with empty stored changes fetches iterations and change tracking, then posts them", async () => {
+  const source = {
+    ...prSource("azure-devops"),
+    webUrl: "https://evil.example/pull/99",
+    providerContext: {
+      kind: "azure-devops" as const,
+      project: "BRAID",
+      firstComparingIteration: 0,
+      secondComparingIteration: 0,
+      changes: {} as Record<string, { changeTrackingId: number }>,
+    },
+  };
+  const saved = guide(source);
+  const seen: { url: string; method: string; authorization: string | null; body: string }[] = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = input instanceof Request ? input : new Request(input, init);
+    seen.push({
+      url: request.url,
+      method: request.method,
+      authorization: request.headers.get("authorization"),
+      body: await request.clone().text(),
+    });
+    const url = request.url;
+    if (request.method === "GET" && url.includes("/iterations/") && url.includes("/changes")) {
+      return new Response(
+        JSON.stringify({
+          changeEntries: [{ changeTrackingId: 42, change: { item: { path: "/src/a.ts" } } }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
+    if (request.method === "GET" && url.includes("/iterations")) {
+      return new Response(JSON.stringify({ value: [{ id: 4 }, { id: 9 }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (request.method === "POST" && url.includes("/threads")) {
+      return new Response(
+        JSON.stringify({
+          id: 21,
+          status: "active",
+          publishedDate: "2026-09-16T10:00:00.000Z",
+          lastUpdatedDate: "2026-09-16T10:00:00.000Z",
+          comments: [
+            {
+              id: 1,
+              content: "please rename",
+              author: { uniqueName: "me", displayName: "me" },
+              publishedDate: "2026-09-16T10:00:00.000Z",
+              lastUpdatedDate: "2026-09-16T10:00:00.000Z",
+              lastContentUpdatedDate: "2026-09-16T10:00:00.000Z",
+              commentType: "text",
+            },
+          ],
+          threadContext: {
+            filePath: "/src/a.ts",
+            rightFileStart: { line: 11, offset: 1 },
+            rightFileEnd: { line: 11, offset: 1 },
+          },
+        }),
+        { status: 201, headers: { "content-type": "application/json" } },
+      );
+    }
+    return new Response(JSON.stringify({ message: "unexpected" }), {
+      status: 500,
+      headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
+  try {
+    const services = createAppServices(
+      {
+        ...repos({ r1: saved }),
+        replaceCatalog: unused("replaceCatalog"),
+        queueAction: unused("queueAction"),
+        waitForAction: unused("waitForAction"),
+        completeAction: unused("completeAction"),
+        publishReviewOutcome: unused("publishReviewOutcome"),
+      },
+      { credentials: credentials("me", "azure-devops") },
+    );
+    const created = await services.comments.createThread("r1", {
+      anchor: { kind: "line", path: "src/a.ts", side: "current", line: 11 },
+      body: "please rename",
+      clientOperationId: COP,
+    });
+    assert.equal(created.id, "21");
+    assert.equal(created.anchor.kind, "line");
+  } finally {
+    globalThis.fetch = original;
+  }
+  assert.deepEqual(saved.source?.providerContext, {
+    kind: "azure-devops",
+    project: "BRAID",
+    firstComparingIteration: 0,
+    secondComparingIteration: 0,
+    changes: {},
+  });
+  const iterationGet = seen.findIndex(
+    (call) => call.method === "GET" && call.url.includes("/iterations") && !call.url.includes("/changes"),
+  );
+  const changesGet = seen.findIndex((call) => call.method === "GET" && call.url.includes("/changes"));
+  const post = seen.findIndex((call) => call.method === "POST");
+  assert.equal(iterationGet >= 0 && changesGet > iterationGet && post > changesGet, true);
+  assert.equal(seen.filter((call) => call.method === "POST").length, 1);
+  assert.equal(seen[changesGet]?.url.includes("/pullrequests/1027/iterations/9/changes"), true);
+  assert.equal(
+    seen.every(
+      (call) =>
+        call.url.startsWith(
+          "https://dev.azure.com/braidteam/BRAID/_apis/git/repositories/repo-1/pullrequests/1027/",
+        ) &&
+        call.authorization === "Bearer FIXTURE_TOKEN" &&
+        !call.url.includes("evil.example"),
+    ),
+    true,
+  );
+  const posted = JSON.parse(seen[post]!.body) as {
+    threadContext: { filePath: string; rightFileStart: { line: number } };
+    pullRequestThreadContext: {
+      changeTrackingId: number;
+      iterationContext: { firstComparingIteration: number; secondComparingIteration: number };
+    };
+  };
+  assert.equal(posted.threadContext.filePath, "/src/a.ts");
+  assert.equal(posted.threadContext.rightFileStart.line, 11);
+  assert.equal(posted.pullRequestThreadContext.changeTrackingId, 42);
+  assert.equal(posted.pullRequestThreadContext.iterationContext.firstComparingIteration, 4);
+  assert.equal(posted.pullRequestThreadContext.iterationContext.secondComparingIteration, 9);
+  assert.equal(JSON.stringify(posted).includes("evil.example"), false);
+});
+
 test("createAppServices still injects fake comment providers", async () => {
   const services = createAppServices(
     {

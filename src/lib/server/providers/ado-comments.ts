@@ -13,6 +13,7 @@ import {
   type PullRequestSource,
 } from "../../shared/contracts/provenance.ts";
 import type { CredentialIdentity, CredentialSource } from "../auth/ports.ts";
+import { createAdoRestAdapter } from "./ado-rest.ts";
 import { CommentError, type CommentProvider } from "./comments.ts";
 import { ProviderError, type ProviderErrorCode } from "./errors.ts";
 
@@ -50,6 +51,21 @@ export function createAdoCommentAdapter(options: {
     return { parsed, token: cred.token };
   }
 
+  async function readHostCommentContext(source: PullRequestSource): Promise<AzureDevOpsProviderContext> {
+    const reader = createAdoRestAdapter({ credentials: options.credentials, fetch: fetchFn });
+    if (!reader.getCommentContext) throw fail("unavailable", source.host || "dev.azure.com");
+    return reader.getCommentContext({
+      provider: "azure-devops",
+      host: source.host,
+      repository: {
+        id: source.repository.id,
+        owner: source.repository.owner,
+        name: source.repository.name,
+      },
+      number: source.number,
+    });
+  }
+
   return {
     async list(input) {
       const { parsed, token } = await session(input.provenance);
@@ -69,14 +85,17 @@ export function createAdoCommentAdapter(options: {
 
     async createThread(input) {
       const { parsed, token } = await session(input.provenance);
-      const body = createPayload(input.anchor, input.body, parsed.context);
+      const context = needsHostCommentContext(parsed.context, input.anchor)
+        ? await readHostCommentContext(input.provenance)
+        : parsed.context;
+      const body = createPayload(input.anchor, input.body, context);
       const payload = await adoRequest(fetchFn, threadsUrl(parsed), parsed.parsed.host, token, {
         method: "POST",
         body,
         notFound: "not-found",
         invalidAnchor: true,
       });
-      const thread = normalizeThread(payload, parsed.context, input.identity, parsed.parsed.host);
+      const thread = normalizeThread(payload, context, input.identity, parsed.parsed.host);
       if (!thread) throw fail("malformed-response", parsed.parsed.host);
       return thread;
     },
@@ -249,6 +268,16 @@ function commentItemUrl(source: ParsedSource, threadId: number, commentId: numbe
     source.parsed,
     `repositories/${encodeURIComponent(source.repoId)}/pullrequests/${source.number}/threads/${threadId}/comments/${commentId}`,
   );
+}
+
+function needsHostCommentContext(
+  context: AzureDevOpsProviderContext,
+  anchor: CreateCommentAnchor,
+): boolean {
+  if (anchor.kind === "pr") return false;
+  if (context.firstComparingIteration <= 0 || context.secondComparingIteration <= 0) return true;
+  const tracking = context.changes[anchor.path]?.changeTrackingId;
+  return typeof tracking !== "number";
 }
 
 function createPayload(

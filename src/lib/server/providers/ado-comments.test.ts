@@ -487,6 +487,7 @@ test("create line and range threads send stored iteration and change-tracking id
   assert.equal(posted.pullRequestThreadContext.iterationContext.firstComparingIteration, 1);
   assert.equal(posted.pullRequestThreadContext.iterationContext.secondComparingIteration, 2);
   assert.equal(posted.clientOperationId, undefined);
+  assert.equal(calls.length, 1);
   assert.equal(calls[0]?.url.includes("evil.example"), false);
 
   const rangeFetch = recordingFetch(() =>
@@ -561,15 +562,71 @@ test("create line and range threads send stored iteration and change-tracking id
   };
   assert.equal(prPosted.threadContext, undefined);
   assert.equal(prPosted.pullRequestThreadContext, undefined);
+});
 
-  const missing = recordingFetch(() => jsonResponse(threadRow(25), 201));
-  const missingAdapter = createAdoCommentAdapter({
-    credentials: connectedCredentials(),
-    fetch: missing.fetch,
+test("stored iteration 0 is read from the host and never sent", async () => {
+  const { fetch, calls } = recordingFetch((url, request) => {
+    if (request.method === "GET" && url.pathname.includes("/changes")) {
+      return jsonResponse({
+        changeEntries: [{ changeTrackingId: 42, change: { item: { path: "/src/a.ts" } } }],
+      });
+    }
+    if (request.method === "GET" && url.pathname.endsWith("/iterations")) {
+      return jsonResponse({ value: [{ id: 4 }, { id: 9 }] });
+    }
+    if (request.method === "POST" && isThreadList(url)) {
+      return jsonResponse(threadRow(21, { comments: [commentRow(1, "please rename")] }), 201);
+    }
+    return jsonResponse({ message: `unexpected ${request.method} ${url.pathname}` }, 500);
   });
+  const adapter = createAdoCommentAdapter({ credentials: connectedCredentials(), fetch });
+  await adapter.createThread({
+    provenance: adoSource({
+      webUrl: EVIL_WEB,
+      providerContext: {
+        kind: "azure-devops",
+        project: PROJECT,
+        firstComparingIteration: 0,
+        secondComparingIteration: 1,
+        changes: { "src/a.ts": { changeTrackingId: 7 } },
+      },
+    }),
+    identity: identity(),
+    anchor: { kind: "line", path: "src/a.ts", side: "current", line: 11 },
+    body: "please rename",
+    clientOperationId: COP,
+  });
+  assert.equal(calls.some((call) => call.url.includes("/iterations/0") || call.url.includes("evil.example")), false);
+  const post = calls.find((call) => call.method === "POST");
+  assert.equal(post === undefined, false);
+  const posted = JSON.parse(post!.body) as {
+    pullRequestThreadContext: {
+      changeTrackingId: number;
+      iterationContext: { firstComparingIteration: number; secondComparingIteration: number };
+    };
+  };
+  assert.equal(posted.pullRequestThreadContext.changeTrackingId, 42);
+  assert.equal(posted.pullRequestThreadContext.iterationContext.firstComparingIteration, 4);
+  assert.equal(posted.pullRequestThreadContext.iterationContext.secondComparingIteration, 9);
+});
+
+test("a path missing from the host changes fails with invalid-anchor and posts nothing", async () => {
+  const { fetch, calls } = recordingFetch((url, request) => {
+    if (request.method === "POST") return jsonResponse(threadRow(25), 201);
+    if (request.method === "GET" && url.pathname.includes("/changes")) {
+      return jsonResponse({
+        changeEntries: [{ changeTrackingId: 7, change: { item: { path: "/src/a.ts" } } }],
+      });
+    }
+    if (request.method === "GET" && url.pathname.endsWith("/iterations")) {
+      return jsonResponse({ value: [{ id: 1 }, { id: 2 }] });
+    }
+    return jsonResponse({ message: `unexpected ${request.method} ${url.pathname}` }, 500);
+  });
+  const adapter = createAdoCommentAdapter({ credentials: connectedCredentials(), fetch });
   await assert.rejects(
     () =>
-      missingAdapter.createThread({
+      adapter.createThread({
         provenance: adoSource(),
         identity: identity(),
         anchor: { kind: "line", path: "src/missing.ts", side: "current", line: 1 },
@@ -581,7 +638,8 @@ test("create line and range threads send stored iteration and change-tracking id
       return true;
     },
   );
-  assert.equal(missing.calls.length, 0);
+  assert.equal(calls.some((call) => call.method === "GET" && call.url.includes("/changes")), true);
+  assert.equal(calls.some((call) => call.method === "POST"), false);
 });
 
 test("reply, update, and delete validate ids inside one pull request", async () => {
