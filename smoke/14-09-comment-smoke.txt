@@ -1,6 +1,7 @@
+SMOKE-INSERT above the move line
 SMOKE-KEEP-1
 SMOKE-MOVE this line only moves
-SMOKE-CHANGE this line will change
+SMOKE-CHANGE this line was edited
 SMOKE-RANGE-A
 SMOKE-RANGE-B
 SMOKE-FILE-BODY
