@@ -173,7 +173,7 @@ test("duplicate paths and hunks receive a thread once at the first matching file
   assert.equal(threadsAfter(projected, 1, 0, 1, "unified").length, 0);
 });
 
-test("Discussion lists PR-wide and stale threads once and leaves line and file threads inline", () => {
+test("Discussion keeps every thread while line and file threads stay inline", () => {
   const files = [file("src/a.ts")];
   const threads = [
     thread("line-11", { kind: "line", path: "src/a.ts", side: "current", line: 11 }),
@@ -190,7 +190,7 @@ test("Discussion lists PR-wide and stale threads once and leaves line and file t
   const discussion = projectDiscussionThreads(threads);
   assert.deepEqual(
     discussion.map((row) => row.id),
-    ["pr-gh", "pr-ado", "stale-gone", "stale-deleted", "stale-old"],
+    ["line-11", "file-a", "pr-gh", "pr-ado", "stale-gone", "stale-deleted", "stale-old"],
   );
 
   const inline = projectInlineThreads(threads, files, {

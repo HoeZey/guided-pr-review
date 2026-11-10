@@ -33,7 +33,7 @@ a production build run at 09.
 - [x] [01 Turn comments back on and show loading](01-turn-comments-on.md) — done
 - [x] [02 Show progress and the new thread when a comment posts](02-show-post-progress.md) — done
 - [x] [03 Show progress when editing and deleting](03-show-edit-delete-progress.md) — done
-- [ ] [04 List every thread in Discussion with a jump to Diff](04-discussion-every-thread.md) — todo
+- [x] [04 List every thread in Discussion with a jump to Diff](04-discussion-every-thread.md) — done
 - [x] [05 Post Azure DevOps line comments on reviews saved without change tracking](05-ado-missing-tracking.md) — done
 - [x] [06 Mark a thread Outdated only when its line changed](06-outdated-when-line-changed.md) — done
 - [ ] [07 Load new commits on open and offer Refresh while reading](07-load-new-commits.md) — todo

@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 blocked_by:
   - 01-turn-comments-on
 blocks:
@@ -38,13 +38,13 @@ state, styles, tests
 
 **Acceptance criteria:**
 
-- [ ] Discussion shows line, range, file, PR-wide, and outdated threads,
+- [x] Discussion shows line, range, file, PR-wide, and outdated threads,
   oldest first.
-- [ ] The tab count equals the number of threads.
-- [ ] Clicking a code thread's location selects Diff and scrolls to that
+- [x] The tab count equals the number of threads.
+- [x] Clicking a code thread's location selects Diff and scrolls to that
   thread, expanding a collapsed file.
-- [ ] PR-wide and outdated threads render no location link.
-- [ ] The Discussion composer creates a PR-wide thread only.
+- [x] PR-wide and outdated threads render no location link.
+- [x] The Discussion composer creates a PR-wide thread only.
 
 **Blocked by:** 01
 

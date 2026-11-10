@@ -1,11 +1,14 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import type { CommentMessage, CommentThread } from "$lib/shared/contracts/comments";
   import {
     allowsNestedReply,
+    discussionCodeLocation,
     discussionPlacementLabel,
     discussionProviderLabel,
   } from "$lib/shared/domain/comment-slots";
   import { composerSession, openReplyComposer, threadHighlight } from "$lib/client/state/composer.svelte";
+  import { session, setTab, toggleCollapsed } from "$lib/client/state/review.svelte";
   import {
     deleteOwnedComment,
     threadSession,
@@ -46,6 +49,25 @@
   function startReply(threadId: string): void {
     if (!threadSession.reviewId) return;
     openReplyComposer(threadSession.reviewId, threadId);
+  }
+
+  function visibleThread(id: string): HTMLElement | null {
+    for (const main of document.querySelectorAll("main")) {
+      if (main.hasAttribute("hidden")) continue;
+      for (const card of main.querySelectorAll("[data-thread]")) {
+        if (card.getAttribute("data-thread") === id) return card as HTMLElement;
+      }
+    }
+    return null;
+  }
+
+  async function openOnDiff(thread: CommentThread): Promise<void> {
+    const location = discussionCodeLocation(thread);
+    if (!location) return;
+    setTab("diff");
+    if (session.collapsed.has(location.path)) toggleCollapsed(location.path);
+    await tick();
+    visibleThread(thread.id)?.scrollIntoView?.({ behavior: "auto", block: "start" });
   }
 
   function canMutate(message: CommentMessage): boolean {
@@ -131,6 +153,7 @@
     {#each threads as thread (thread.id)}
       {@const root = thread.messages[0]}
       {@const placement = discussion ? discussionPlacementLabel(thread) : null}
+      {@const location = discussion ? discussionCodeLocation(thread) : null}
       {#if root}
         <article
           class="comment-thread"
@@ -152,6 +175,17 @@
             {#if discussion}
               <span class="thread-flag">{discussionProviderLabel(thread.provider)}</span>
               {#if placement}<span class="thread-flag">{placement}</span>{/if}
+              {#if location}
+                <a
+                  class="thread-location"
+                  href="#diff"
+                  data-discussion-location={thread.id}
+                  onclick={(event) => {
+                    event.preventDefault();
+                    void openOnDiff(thread);
+                  }}
+                >{location.label}</a>
+              {/if}
             {/if}
           </div>
           <div class="thread-body">

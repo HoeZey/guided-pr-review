@@ -2041,6 +2041,13 @@ main {
   color: var(--muted);
 }
 
+.thread-location {
+  margin-left: 8px;
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
 .thread-copy {
   margin: 8px 0 0;
   white-space: pre-wrap;

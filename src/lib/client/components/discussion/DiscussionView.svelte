@@ -20,14 +20,14 @@
 
 <main data-tab-panel="discussion">
   <div class="main-inner discussion-list">
+    <CommentStack {threads} {showComposer} discussion />
+    {#if !threads.length && !showComposer}
+      <p class="hint">No pull-request discussion yet.</p>
+    {/if}
     {#if threadSession.hosted && threadSession.reviewId && !showComposer}
       <div class="composer-actions">
         <button type="button" class="ghost" data-discussion-new onclick={startCreate}>New comment</button>
       </div>
-    {/if}
-    <CommentStack {threads} {showComposer} discussion />
-    {#if !threads.length && !showComposer}
-      <p class="hint">No pull-request discussion yet.</p>
     {/if}
   </div>
 </main>

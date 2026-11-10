@@ -2,6 +2,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { mount, tick, unmount } from "svelte";
 import type { CommentThread } from "$lib/shared/contracts/comments";
 import type { ReviewPageData } from "$lib/shared/page-data";
+import { viewedKey } from "$lib/client/browser/preferences";
 import { resetReviewSession } from "$lib/client/state/review.svelte";
 import { resetPreferences } from "$lib/client/state/preferences.svelte";
 import AppShell from "../AppShell.svelte";
@@ -120,7 +121,109 @@ function renderShell(tab: ReviewPageData["tab"] = "guide") {
   return host;
 }
 
-test("Discussion lists PR-wide and stale threads with a shared count and never above Diff", async () => {
+function message(id: string, createdAt: string, body: string) {
+  return {
+    id: `${id}-m0`,
+    author: { login: "ada" },
+    body,
+    createdAt,
+    updatedAt: createdAt,
+    ownedByCurrentUser: true,
+  };
+}
+
+test("Discussion lists every thread oldest first and counts them all", async () => {
+  stubComments([
+    thread(
+      "newest-line",
+      { kind: "line", path: "src/maps.py", side: "current", line: 3 },
+      { messages: [message("newest-line", "2026-09-16T10:05:00.000Z", "line body")] },
+    ),
+    thread(
+      "range-mid",
+      { kind: "range", path: "src/maps.py", side: "current", startLine: 3, endLine: 4 },
+      { messages: [message("range-mid", "2026-09-16T10:03:00.000Z", "range body")] },
+    ),
+    thread(
+      "oldest-file",
+      { kind: "file", path: "src/maps.py" },
+      { messages: [message("oldest-file", "2026-09-16T10:01:00.000Z", "file body")] },
+    ),
+    thread(
+      "pr-late",
+      { kind: "pr" },
+      { messages: [message("pr-late", "2026-09-16T10:04:00.000Z", "pr body")] },
+    ),
+    thread(
+      "old-stale",
+      { kind: "stale", reason: "outdated", path: "src/gone.ts", line: 40 },
+      {
+        outdated: true,
+        messages: [message("old-stale", "2026-09-16T10:02:00.000Z", "stale body")],
+      },
+    ),
+  ]);
+  const root = renderShell("discussion");
+  await vi.waitFor(() => {
+    expect(root.querySelector('[data-tab-panel="discussion"] [data-thread="oldest-file"]')).toBeTruthy();
+  });
+  const panel = root.querySelector('[data-tab-panel="discussion"]');
+  const ids = [...(panel?.querySelectorAll("[data-thread]") ?? [])].map((el) => el.getAttribute("data-thread"));
+  expect(ids).toEqual(["oldest-file", "old-stale", "range-mid", "pr-late", "newest-line"]);
+  expect(root.querySelector('[role="tab"][data-tab="discussion"]')?.textContent).toContain("(5)");
+  const markup = panel?.innerHTML ?? "";
+  expect(markup.lastIndexOf("data-discussion-new")).toBeGreaterThan(markup.lastIndexOf('data-thread="newest-line"'));
+});
+
+test("a code thread location opens Diff, expands the file, and scrolls to the thread", async () => {
+  localStorage.setItem(viewedKey("hosted-1"), JSON.stringify(["src/maps.py"]));
+  stubComments([
+    thread("line-3", { kind: "line", path: "src/maps.py", side: "current", line: 3 }),
+    thread("range-3", { kind: "range", path: "src/maps.py", side: "current", startLine: 3, endLine: 4 }),
+    thread("file-maps", { kind: "file", path: "src/maps.py" }),
+    thread("pr-wide", { kind: "pr" }),
+    thread(
+      "stale-old",
+      { kind: "stale", reason: "outdated", path: "src/gone.ts", line: 40 },
+      { outdated: true },
+    ),
+  ]);
+  const scrolled: Element[] = [];
+  const original = HTMLElement.prototype.scrollIntoView;
+  HTMLElement.prototype.scrollIntoView = function scrollIntoView(this: HTMLElement) {
+    scrolled.push(this);
+  };
+  try {
+    const root = renderShell("discussion");
+    await vi.waitFor(() => {
+      expect(root.querySelector('[data-tab-panel="discussion"] [data-thread="line-3"]')).toBeTruthy();
+    });
+    const panel = root.querySelector('[data-tab-panel="discussion"]');
+    expect(panel?.querySelector('[data-thread="line-3"] a')?.textContent).toBe("src/maps.py:3");
+    expect(panel?.querySelector('[data-thread="range-3"] a')?.textContent).toBe("src/maps.py:3-4");
+    expect(panel?.querySelector('[data-thread="file-maps"] a')?.textContent).toBe("src/maps.py");
+    expect(panel?.querySelector('[data-thread="pr-wide"] a')).toBeNull();
+    expect(panel?.querySelector('[data-thread="stale-old"] a')).toBeNull();
+    const diffFile = root.querySelector('[id^="diff-file-"][data-path="src/maps.py"]');
+    expect(diffFile?.getAttribute("data-collapsed")).toBe("true");
+
+    (panel?.querySelector('[data-thread="line-3"] a') as HTMLAnchorElement).click();
+    await vi.waitFor(() => {
+      expect(scrolled.some((el) => el.getAttribute("data-thread") === "line-3")).toBe(true);
+    });
+    expect(root.querySelector("#app")?.getAttribute("data-tab")).toBe("diff");
+    expect(root.querySelector('main:not([hidden]) [data-path="src/maps.py"]')?.getAttribute("data-collapsed")).toBe(
+      "false",
+    );
+    const hit = scrolled.find((el) => el.getAttribute("data-thread") === "line-3");
+    expect(hit?.closest("main")?.hasAttribute("hidden")).toBe(false);
+    expect(root.querySelector('[data-tab-panel="discussion"]')).toBeNull();
+  } finally {
+    HTMLElement.prototype.scrollIntoView = original;
+  }
+});
+
+test("Discussion shows host labels and replies and keeps pull-request threads off Diff", async () => {
   stubComments(LISTED);
   const root = renderShell("diff");
   await vi.waitFor(() => {
@@ -135,7 +238,7 @@ test("Discussion lists PR-wide and stale threads with a shared count and never a
   const discussionTab = root.querySelector('[role="tab"][data-tab="discussion"]') as HTMLButtonElement;
   expect(discussionTab.getAttribute("role")).toBe("tab");
   expect(discussionTab.textContent).toContain("Discussion");
-  expect(discussionTab.textContent).toContain("(3)");
+  expect(discussionTab.textContent).toContain("(5)");
   discussionTab.click();
   await tick();
   expect(root.querySelector("#app")?.getAttribute("data-tab")).toBe("discussion");
@@ -149,8 +252,6 @@ test("Discussion lists PR-wide and stale threads with a shared count and never a
   expect(panel?.querySelector('[data-thread="review:99"]')?.textContent).toContain("Unmappable");
   expect(panel?.querySelector('[data-thread="review:99"]')?.textContent).toContain("src/gone.ts");
   expect(panel?.textContent).not.toMatch(/\{"kind":/);
-  expect(panel?.querySelector('[data-thread="review:10"]')).toBeNull();
-  expect(panel?.querySelector('[data-thread="review:20"]')).toBeNull();
   expect(panel?.querySelector('[data-comment-reply="issue:1"]')).toBeNull();
   expect(panel?.querySelector('[data-comment-reply="ado_thr_pr"]')).toBeTruthy();
   expect(panel?.querySelector('[data-comment-reply="review:99"]')).toBeTruthy();
@@ -277,7 +378,7 @@ test("Outdated threads render once in Discussion with the old path and line as t
   (root.querySelector('[role="tab"][data-tab="discussion"]') as HTMLButtonElement).click();
   await tick();
   const panel = root.querySelector('[data-tab-panel="discussion"]');
-  expect(panel?.querySelector('[data-thread="ado-placed"]')).toBeNull();
+  expect(panel?.querySelector('[data-thread="ado-placed"]')).toBeTruthy();
 
   const ado = panel?.querySelector('[data-thread="ado-unplaced"]');
   expect(ado?.textContent).toContain("src/moved.ts");

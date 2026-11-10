@@ -214,8 +214,13 @@ export function projectInlineThreads(
   return { header, after };
 }
 
+function discussionTime(thread: CommentThread): number {
+  const ms = Date.parse(thread.messages[0]?.createdAt ?? "");
+  return Number.isFinite(ms) ? ms : Number.POSITIVE_INFINITY;
+}
+
 export function projectDiscussionThreads(threads: CommentThread[]): CommentThread[] {
-  return threads.filter((thread) => thread.anchor.kind === "pr" || thread.anchor.kind === "stale");
+  return [...threads].sort((a, b) => discussionTime(a) - discussionTime(b));
 }
 
 export function discussionProviderLabel(provider: CommentProviderKind): string {
@@ -242,6 +247,16 @@ export function discussionPlacementLabel(thread: CommentThread): string | null {
   const reason = STALE_REASON_LABEL[anchor.reason];
   const location = staleLocation(anchor);
   return location ? `${reason} · ${location}` : reason;
+}
+
+export function discussionCodeLocation(thread: CommentThread): { path: string; label: string } | null {
+  const { anchor } = thread;
+  if (anchor.kind === "line") return { path: anchor.path, label: `${anchor.path}:${anchor.line}` };
+  if (anchor.kind === "range") {
+    return { path: anchor.path, label: `${anchor.path}:${anchor.startLine}-${anchor.endLine}` };
+  }
+  if (anchor.kind === "file") return { path: anchor.path, label: anchor.path };
+  return null;
 }
 
 export function allowsNestedReply(thread: CommentThread): boolean {
