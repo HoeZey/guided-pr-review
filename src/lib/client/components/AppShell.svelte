@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { HOME_PATH, reviewLandingTab } from "$lib/shared/domain/overview";
   import { projectDiscussionThreads } from "$lib/shared/domain/comment-slots";
-  import { commentsEnabled, type HomePageData, type ReviewPageData, type ReviewTab } from "$lib/shared/page-data";
+  import type { HomePageData, ReviewPageData, ReviewTab } from "$lib/shared/page-data";
   import { fetchJson } from "$lib/client/browser/fetch";
   import {
     bindReviewChrome,
@@ -42,10 +42,9 @@
   const review = $derived(data.kind === "review" ? currentReviewPage(data) : null);
   const title = $derived(data.kind === "home" ? "Home" : review?.title ?? data.title);
   const landingTab = $derived(review?.guide ? reviewLandingTab(review.guide) : "guide");
-  const rawTab = $derived(
+  const tab = $derived(
     review && session.reviewId === review.reviewId ? session.tab : (review?.tab ?? landingTab),
   );
-  const tab = $derived(!commentsEnabled() && rawTab === "discussion" ? landingTab : rawTab);
   const layout = $derived(currentDiffLayout());
   const nextTheme = $derived(prefs.theme === "dark" ? "light" : "dark");
   const themeLabel = $derived(nextTheme === "dark" ? "Dark" : "Light");
@@ -61,7 +60,7 @@
   });
 
   $effect(() => {
-    if (typeof window === "undefined" || !commentsEnabled()) return;
+    if (typeof window === "undefined") return;
     if (data.kind !== "review" || data.status !== "ok") {
       openedCommentsFor = null;
       return;
@@ -82,7 +81,6 @@
     if (data.activeId != null && data.activeId !== data.reviewId) {
       void fetchJson(`/api/reviews/${data.reviewId}/active`, { method: "POST" }).catch(() => undefined);
     }
-    if (!commentsEnabled()) return;
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
       const page = session.page;
@@ -122,8 +120,8 @@
   const tabs: { id: ReviewTab; label: string }[] = [
     { id: "diff", label: "Diff" },
     { id: "guide", label: "Guide" },
+    { id: "discussion", label: "Discussion" },
   ];
-  if (commentsEnabled()) tabs.push({ id: "discussion", label: "Discussion" });
   const discussionCount = $derived(projectDiscussionThreads(threadSession.threads).length);
 </script>
 
@@ -236,16 +234,17 @@
             {item.label}{item.id === "discussion" && discussionCount ? ` (${discussionCount})` : ""}
           </button>
         {/each}
-        {#if commentsEnabled() && threadSession.loading && threadSession.threads.length === 0 && !threadSession.error}
+        {#if threadSession.loading}
           <p class="tab-loading" role="status">
-            Loading comments<span class="tab-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>
+            <span class="composer-spinner" aria-hidden="true"></span>
+            Loading comments
           </p>
         {/if}
       </div>
       {#if review?.outdatedWarning}
         <div class="review-banner" role="status">{review.outdatedWarning}</div>
       {/if}
-      {#if commentsEnabled() && threadSession.error}
+      {#if threadSession.error}
         <div class="review-banner" role="alert">
           {threadSession.error}
           <button type="button" class="ghost" data-retry-comments onclick={() => void retryReviewThreads()}>Retry</button>
@@ -290,7 +289,7 @@
           {/if}
         </div>
       </main>
-    {:else if commentsEnabled() && tab === "discussion"}
+    {:else if tab === "discussion"}
       <DiscussionView />
     {:else if !review.guide && tab === "guide"}
       <main>

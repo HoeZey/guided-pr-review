@@ -30,7 +30,7 @@ a production build run at 09.
 
 ## Status
 
-- [ ] [01 Turn comments back on and show loading](01-turn-comments-on.md) — todo
+- [x] [01 Turn comments back on and show loading](01-turn-comments-on.md) — done
 - [ ] [02 Show progress and the new thread when a comment posts](02-show-post-progress.md) — todo
 - [ ] [03 Show progress when editing and deleting](03-show-edit-delete-progress.md) — todo
 - [ ] [04 List every thread in Discussion with a jump to Diff](04-discussion-every-thread.md) — todo

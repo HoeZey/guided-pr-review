@@ -28,8 +28,8 @@ test("review shell SSR matches landing tab defaults", () => {
   expect(chaptered).toContain("<h1>Fake review</h1>");
   expect(chaptered).toContain('aria-selected="true"');
   expect(chaptered).toContain("Guide");
-  expect(chaptered).not.toContain('data-tab="discussion"');
-  expect(chaptered).not.toContain("Discussion");
+  expect(chaptered).toContain('data-tab="discussion"');
+  expect(chaptered).toContain("Discussion");
 
   const unchaptered = render(AppShell, { props: { data: FAKE_UNCHAPTERED_REVIEW } }).body;
   expect(unchaptered).toContain('data-tab="diff"');

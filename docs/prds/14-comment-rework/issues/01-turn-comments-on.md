@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 blocked_by: []
 blocks:
   - 02-show-post-progress
@@ -41,13 +41,13 @@ loading, loaded, or failed.
 
 **Acceptance criteria:**
 
-- [ ] A hosted review has a Discussion tab and requests threads on open.
-- [ ] A stored discussion tab reopens Discussion.
-- [ ] Loading comments shows on the tab row until the list succeeds or fails.
-- [ ] A failed list shows Retry, and Retry lists again.
-- [ ] Threads already on screen stay during a reload.
-- [ ] Focus plus visibility on return starts one list, not two.
-- [ ] A local review with no host pull request requests no threads.
+- [x] A hosted review has a Discussion tab and requests threads on open.
+- [x] A stored discussion tab reopens Discussion.
+- [x] Loading comments shows on the tab row until the list succeeds or fails.
+- [x] A failed list shows Retry, and Retry lists again.
+- [x] Threads already on screen stay during a reload.
+- [x] Focus plus visibility on return starts one list, not two.
+- [x] A local review with no host pull request requests no threads.
 
 **Blocked by:** none
 

@@ -75,6 +75,7 @@ export async function loadReviewThreads(opts: {
   ) {
     return;
   }
+  if (threadSession.loading && threadSession.reviewId === opts.reviewId) return;
   threadSession.reviewId = opts.reviewId;
   threadSession.hosted = true;
   threadSession.loading = true;

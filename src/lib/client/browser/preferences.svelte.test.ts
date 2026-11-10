@@ -62,8 +62,8 @@ test("SSR-safe parsers fall back to product defaults", () => {
   expect(parseTheme("sepia")).toBe("dark");
   expect(parseTheme("light")).toBe("light");
   expect(parseTab(null)).toBe("guide");
-  expect(parseTab("comments")).toBe("guide");
-  expect(parseTab("discussion")).toBe("guide");
+  expect(parseTab("comments")).toBe("discussion");
+  expect(parseTab("discussion")).toBe("discussion");
   expect(parseTab("review")).toBe("guide");
   expect(parseDiffLayout(null, PREF_DEFAULTS.diffLayout)).toBe("split");
   expect(parseDiffLayout("unified", PREF_DEFAULTS.guideLayout)).toBe("unified");
@@ -116,9 +116,9 @@ test("tab cookie name matches the existing localStorage tab key", () => {
   expect(parseStoredTab("review")).toBe("guide");
   expect(parseStoredTab("diff")).toBe("diff");
   expect(parseStoredTab("guide")).toBe("guide");
-  expect(parseStoredTab("discussion")).toBeNull();
+  expect(parseStoredTab("discussion")).toBe("discussion");
   expect(parseStoredTab(null)).toBeNull();
-  expect(parseStoredTab("comments")).toBeNull();
+  expect(parseStoredTab("comments")).toBe("discussion");
 });
 
 test("every named preference setter writes its existing localStorage key", () => {
