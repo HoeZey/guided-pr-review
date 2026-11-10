@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 blocked_by:
   - 01-turn-comments-on
 blocks:
@@ -35,11 +35,11 @@ than the Diff.
 
 **Acceptance criteria:**
 
-- [ ] A Guide behind the diff opens no composer on line click or file
+- [x] A Guide behind the diff opens no composer on line click or file
   Comment.
-- [ ] The note shows on that Guide.
-- [ ] Reply works on a thread shown on that Guide.
-- [ ] A Guide at the diff commit opens composers as before.
+- [x] The note shows on that Guide.
+- [x] Reply works on a thread shown on that Guide.
+- [x] A Guide at the diff commit opens composers as before.
 
 **Blocked by:** 01
 

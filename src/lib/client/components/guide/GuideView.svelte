@@ -22,9 +22,11 @@
 
   let {
     guide,
+    diffCommit,
     hidden = false,
   }: {
     guide: GuideV1;
+    diffCommit?: string;
     hidden?: boolean;
   } = $props();
 
@@ -32,6 +34,11 @@
   let mainEl: HTMLElement | undefined;
 
   const walkthrough = $derived(guidePresentsWalkthrough(guide));
+  const behindDiff = $derived.by(() => {
+    if (!diffCommit) return false;
+    const guideCommit = guide.source?.sourceCommit ?? guide.head;
+    return guideCommit.toLowerCase() !== diffCommit.toLowerCase();
+  });
   const chapters = $derived(chaptersForNav(guide));
   const walkFiles = $derived(chapters.flatMap((chapter) => (chapter._omitted ? [] : chapter.files)));
   const chapterOffsets = $derived.by(() => {
@@ -51,7 +58,7 @@
     }),
   );
   const composerSlot = $derived(
-    threadSession.hosted && composerSession.target?.kind === "create"
+    threadSession.hosted && !behindDiff && composerSession.target?.kind === "create"
       ? projectComposerAnchor(composerSession.target.anchor, walkFiles, {
           layout: prefs.guideLayout,
           hideUnchanged: prefs.hideUnchanged,
@@ -250,6 +257,11 @@
 
 <main hidden={hidden} use:spyScroll={hidden}>
   <div class="main-inner is-guide">
+    {#if behindDiff}
+      <p class="review-banner" role="status">
+        The Guide is from an older commit; comment on Diff or generate the Guide again.
+      </p>
+    {/if}
     {#if walkthrough}
       <div class="guide-doc">
         {#each chapters as chapter, i (chapter.id)}
@@ -266,6 +278,7 @@
             fileOffset={chapterOffsets[i] ?? 0}
             {slots}
             {composerSlot}
+            commentable={threadSession.hosted && !behindDiff}
             onjumpFile={jumpFile}
             ontoggleToc={() => {
               session.tocOpen = !session.tocOpen;

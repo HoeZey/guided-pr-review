@@ -277,6 +277,7 @@
     {#if review.guide}
       <GuideView
         guide={review.guide}
+        diffCommit={review.diff?.sourceCommit}
         hidden={tab !== "guide"}
       />
       <DiffView guide={review.guide} files={review.diff?.files} visible={tab === "diff"} />

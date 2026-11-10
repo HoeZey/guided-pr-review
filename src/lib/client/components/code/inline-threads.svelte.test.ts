@@ -17,6 +17,7 @@ import { DIFF_GUIDE } from "../diff/fixture";
 const WHEN = "2026-09-16T10:00:00.000Z";
 const SHA_A = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const SHA_B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const SHA_C = "cccccccccccccccccccccccccccccccccccccccc";
 
 let mounted: ReturnType<typeof mount> | null = null;
 let host: HTMLDivElement | null = null;
@@ -99,6 +100,21 @@ function hostedPage(guide = { ...GUIDE_CHAPTERED, source: SOURCE }, tab: ReviewP
     agentConnected: false,
     tab,
   };
+}
+
+function storedDiffPage(guideCommit: string, head: string, diffCommit = SHA_B): ReviewPageData {
+  const guide = { ...GUIDE_CHAPTERED, head, source: { ...SOURCE, sourceCommit: guideCommit } };
+  const files = guide.chapters.flatMap((chapter) => chapter.files);
+  return {
+    ...hostedPage(guide),
+    diff: { sourceCommit: diffCommit, targetCommit: SHA_A, files },
+  };
+}
+
+function visiblePanel(): HTMLElement {
+  const panel = host?.querySelector("main:not([hidden])");
+  if (!(panel instanceof HTMLElement)) throw new Error("visible review panel missing");
+  return panel;
 }
 
 test("CodeFile renders file threads under the header and line threads after unified and split rows", async () => {
@@ -577,4 +593,127 @@ test("Guide and Diff edit and delete only owned messages and roll back a failed 
   expect(host.querySelector('[data-thread="ado_thr_line"]')?.textContent).toContain("Deleted");
   const commentUrls = fetchSpy.mock.calls.map(([url]) => String(url)).filter((url) => url.includes("/comments"));
   expect(commentUrls.join(" ")).not.toMatch(/github\.com|dev\.azure\.com/);
+});
+
+test("a Guide behind the diff opens no line, range, or file composer", async () => {
+  echoHighlighter();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      statusText: "OK",
+      json: async () => ({ threads: [] }),
+    })),
+  );
+  host = document.createElement("div");
+  document.body.appendChild(host);
+  mounted = mount(AppShell, { target: host, props: { data: storedDiffPage(SHA_C, SHA_B) } });
+  await vi.waitFor(() => {
+    expect(visiblePanel().querySelector("[data-comment-new='3']")).toBeTruthy();
+  });
+  const line = visiblePanel().querySelector("[data-comment-new='3']") as HTMLElement;
+  line.click();
+  line.dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true }));
+  await tick();
+  expect(visiblePanel().querySelector("[data-comment-composer]")).toBeNull();
+  expect(visiblePanel().querySelector("[data-comment-file]")).toBeNull();
+  expect(visiblePanel().textContent).toContain(
+    "The Guide is from an older commit; comment on Diff or generate the Guide again.",
+  );
+
+  (host.querySelector('[role="tab"][data-tab="diff"]') as HTMLButtonElement).click();
+  await tick();
+  (visiblePanel().querySelector("[data-comment-new='3']") as HTMLElement).click();
+  await tick();
+  expect(visiblePanel().querySelector("[data-comment-composer]")).toBeTruthy();
+  expect(visiblePanel().querySelector("[data-comment-file]")).toBeTruthy();
+  expect(visiblePanel().textContent).not.toContain("older commit");
+
+  (host.querySelector('[role="tab"][data-tab="guide"]') as HTMLButtonElement).click();
+  await tick();
+  expect(visiblePanel().querySelector("[data-comment-composer]")).toBeNull();
+  expect(visiblePanel().querySelector("[data-comment-file]")).toBeNull();
+});
+
+test("reply still posts on a thread shown on a Guide behind the diff", async () => {
+  echoHighlighter();
+  const line = thread("review:90", {
+    kind: "line",
+    path: "src/maps.py",
+    side: "current",
+    line: 3,
+  });
+  const fetchSpy = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const method = (init?.method ?? "GET").toUpperCase();
+    if (url === "/api/reviews/hosted-1/comments" && method === "GET") {
+      return { ok: true, statusText: "OK", json: async () => ({ threads: [line] }) };
+    }
+    if (url === "/api/reviews/hosted-1/comments/review%3A90/replies" && method === "POST") {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { body?: string };
+      expect(body.body).toBe("still here");
+      return {
+        ok: true,
+        statusText: "Created",
+        json: async () => ({
+          id: "review:91",
+          author: { login: "ada" },
+          body: "still here",
+          createdAt: WHEN,
+          updatedAt: WHEN,
+          ownedByCurrentUser: true,
+        }),
+      };
+    }
+    return { ok: true, statusText: "OK", json: async () => ({}) };
+  });
+  vi.stubGlobal("fetch", fetchSpy);
+  host = document.createElement("div");
+  document.body.appendChild(host);
+  mounted = mount(AppShell, { target: host, props: { data: storedDiffPage(SHA_C, SHA_B) } });
+  await vi.waitFor(() => {
+    expect(visiblePanel().querySelector('[data-thread="review:90"]')?.textContent).toContain("review:90 body");
+  });
+  const card = () => visiblePanel().querySelector('[data-thread="review:90"]');
+  expect(card()?.querySelector('[data-comment-edit="review:90-m0"]')).toBeTruthy();
+  expect(card()?.querySelector('[data-comment-delete="review:90-m0"]')).toBeTruthy();
+  expect(visiblePanel().querySelector("[data-comment-file]")).toBeNull();
+  (card()?.querySelector('[data-comment-reply="review:90"]') as HTMLButtonElement).click();
+  await tick();
+  const draft = visiblePanel().querySelector("[data-comment-draft]") as HTMLTextAreaElement;
+  expect(draft).toBeTruthy();
+  draft.value = "still here";
+  draft.dispatchEvent(new Event("input", { bubbles: true }));
+  await tick();
+  (visiblePanel().querySelector("[data-comment-send]") as HTMLButtonElement).click();
+  await vi.waitFor(() => {
+    expect(visiblePanel().textContent).toContain("still here");
+  });
+  expect(fetchSpy.mock.calls.some(([, init]) => (init?.method ?? "GET").toUpperCase() === "POST")).toBe(true);
+});
+
+test("a Guide at the diff commit opens line and file composers", async () => {
+  echoHighlighter();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      statusText: "OK",
+      json: async () => ({ threads: [] }),
+    })),
+  );
+  host = document.createElement("div");
+  document.body.appendChild(host);
+  mounted = mount(AppShell, { target: host, props: { data: storedDiffPage(SHA_B, SHA_C, SHA_B.toUpperCase()) } });
+  await vi.waitFor(() => {
+    expect(visiblePanel().querySelector("[data-comment-new='3']")).toBeTruthy();
+  });
+  expect(visiblePanel().textContent).not.toContain("older commit");
+  (visiblePanel().querySelector("[data-comment-new='3']") as HTMLElement).click();
+  await tick();
+  expect(visiblePanel().querySelector(".file-body [data-comment-composer]")).toBeTruthy();
+  (visiblePanel().querySelector("[data-comment-file]") as HTMLButtonElement).click();
+  await tick();
+  expect(visiblePanel().querySelector(".file-body [data-comment-composer]")).toBeNull();
+  expect(visiblePanel().querySelector("[data-comment-composer]")).toBeTruthy();
 });

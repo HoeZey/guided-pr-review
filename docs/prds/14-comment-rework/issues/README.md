@@ -37,5 +37,5 @@ a production build run at 09.
 - [x] [05 Post Azure DevOps line comments on reviews saved without change tracking](05-ado-missing-tracking.md) — done
 - [x] [06 Mark a thread Outdated only when its line changed](06-outdated-when-line-changed.md) — done
 - [x] [07 Load new commits on open and offer Refresh while reading](07-load-new-commits.md) — done
-- [ ] [08 Block Guide line comments while the Guide is behind the Diff](08-block-guide-behind-diff.md) — todo
+- [x] [08 Block Guide line comments while the Guide is behind the Diff](08-block-guide-behind-diff.md) — done
 - [ ] [09 Integrate and verify comments on live pull requests](09-integrate-and-verify.md) — todo
