@@ -46,6 +46,7 @@ function fakeServices(overrides: {
       updateDiff: unused("updateDiff"),
       openPullRequest: unused("openPullRequest"),
       addLocalReview: unused("addLocalReview"),
+      readHead: unused("readHead"),
     },
     catalog: { replace: unused("replace") },
     catalogRefresh: { refresh: overrides.refresh ?? unused("catalogRefresh") },

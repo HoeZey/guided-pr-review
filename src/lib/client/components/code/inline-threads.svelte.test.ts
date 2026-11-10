@@ -218,20 +218,27 @@ test("Guide and Diff share one fetch; tab switch does not refetch; stale focus a
 
   vi.setSystemTime(Date.now() + THREAD_LIST_STALE_MS);
   document.dispatchEvent(new Event("visibilitychange"));
-  await tick();
-  expect(fetchSpy.mock.calls.filter(([url]) => String(url).includes("/comments"))).toHaveLength(2);
+  await vi.waitFor(() => {
+    expect(fetchSpy.mock.calls.filter(([url]) => String(url).includes("/comments"))).toHaveLength(2);
+  });
 });
 
 test("comment list failure leaves Guide and Diff readable and Retry lists again", async () => {
   echoHighlighter();
-  const fetchSpy = vi
-    .fn()
-    .mockResolvedValueOnce({
-      ok: false,
-      statusText: "Bad Gateway",
-      json: async () => ({ error: "git host is unavailable" }),
-    })
-    .mockResolvedValueOnce({
+  let lists = 0;
+  const fetchSpy = vi.fn(async (input: RequestInfo | URL) => {
+    if (String(input).endsWith("/head")) {
+      return { ok: true, statusText: "OK", json: async () => ({ moved: false }) };
+    }
+    lists += 1;
+    if (lists === 1) {
+      return {
+        ok: false,
+        statusText: "Bad Gateway",
+        json: async () => ({ error: "git host is unavailable" }),
+      };
+    }
+    return {
       ok: true,
       statusText: "OK",
       json: async () => ({
@@ -239,7 +246,8 @@ test("comment list failure leaves Guide and Diff readable and Retry lists again"
           thread("line-3", { kind: "line", path: "src/maps.py", side: "current", line: 3 }),
         ],
       }),
-    });
+    };
+  });
   vi.stubGlobal("fetch", fetchSpy);
   host = document.createElement("div");
   document.body.appendChild(host);
@@ -367,7 +375,7 @@ test("Guide and Diff create a line comment and reply through one composer withou
   document.body.appendChild(host);
   mounted = mount(AppShell, { target: host, props: { data: hostedPage() } });
   await vi.waitFor(() => {
-    expect(host?.querySelector("[data-comment-new='3']")).toBeTruthy();
+    expect(host?.querySelector("[data-comment-new='3'][data-comment-type]")).toBeTruthy();
   });
   (host.querySelector("[data-comment-new='3']") as HTMLElement).click();
   await tick();

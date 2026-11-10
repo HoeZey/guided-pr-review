@@ -102,6 +102,7 @@ export type ReviewService = {
   updateDiff: (target: OpenActionTarget) => Promise<DiffSyncResult>;
   openPullRequest: (url: string) => Promise<OpenPullRequestResult>;
   addLocalReview: (input: AddLocalReviewInput) => Promise<{ id: string }>;
+  readHead: (id: string) => Promise<{ moved: boolean }>;
 };
 
 function stripHeads(ref: string): string {
@@ -576,6 +577,28 @@ export function createReviewService(
     return repos.addReview({ guide, diff });
   }
 
+  async function readHead(id: string): Promise<{ moved: boolean }> {
+    const review = await repos.getReview(id);
+    const source = review.guide.source;
+    if (!source || source.kind !== "pull-request") return { moved: false };
+    const stored = review.diff?.sourceCommit ?? source.sourceCommit;
+    if (!options) {
+      throw Object.assign(new Error("diff sync is not configured"), { status: 500 });
+    }
+    const reader = source.provider === "github" ? options.readers.github : options.readers.ado;
+    const meta = await reader.getPullRequest({
+      provider: source.provider,
+      host: source.host,
+      repository: {
+        id: source.repository.id,
+        owner: source.repository.owner,
+        name: source.repository.name,
+      },
+      number: source.number,
+    });
+    return { moved: meta.sourceCommit.toLowerCase() !== stored.toLowerCase() };
+  }
+
   return {
     list: () => repos.listReviews(),
     get: (id) => repos.getReview(id),
@@ -591,5 +614,6 @@ export function createReviewService(
     updateDiff: (target) => runDiff(target),
     openPullRequest,
     addLocalReview,
+    readHead,
   };
 }

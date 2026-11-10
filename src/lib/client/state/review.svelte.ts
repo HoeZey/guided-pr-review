@@ -9,6 +9,9 @@ import {
   unmarkViewed,
 } from "$lib/shared/domain/guide-view";
 import { reviewLandingTab } from "$lib/shared/domain/overview";
+import type { OpenActionTarget } from "$lib/shared/contracts/catalog";
+import type { FileChange, GuideV1 } from "$lib/shared/contracts/guide";
+import type { ReviewDiff } from "$lib/shared/contracts/persistence";
 import { parseStoredTab, type ReviewPageData, type ReviewTab } from "$lib/shared/page-data";
 import { chaptersForNav, fileId, sectionId } from "../components/guide/project";
 import {
@@ -19,8 +22,9 @@ import {
   writePref,
   writeTabCookie,
 } from "../browser/preferences";
-import { resetComposerSession } from "./composer.svelte";
-import { resetThreadSession } from "./threads.svelte";
+import { fetchJson } from "../browser/fetch";
+import { composerSession, resetComposerSession } from "./composer.svelte";
+import { loadReviewThreads, resetThreadSession } from "./threads.svelte";
 
 export type UiOp = {
   id: string;
@@ -66,9 +70,36 @@ function emptySession(): ReviewSession {
 
 export const session = $state<ReviewSession>(emptySession());
 
+export const HEAD_CHECK_STALE_MS = 60_000;
+
+type ReviewSync = {
+  updating: boolean;
+  stale: boolean;
+  error: string | null;
+  checkedAt: number | null;
+};
+
+function emptySync(): ReviewSync {
+  return { updating: false, stale: false, error: null, checkedAt: null };
+}
+
+export const reviewSync = $state<ReviewSync>(emptySync());
+
+let headInflight: Promise<void> | null = null;
+
+function resetReviewSync(): void {
+  const next = emptySync();
+  reviewSync.updating = next.updating;
+  reviewSync.stale = next.stale;
+  reviewSync.error = next.error;
+  reviewSync.checkedAt = next.checkedAt;
+  headInflight = null;
+}
+
 export function resetReviewSession(): void {
   resetComposerSession();
   resetThreadSession();
+  resetReviewSync();
   const next = emptySession();
   session.reviewId = next.reviewId;
   session.tab = next.tab;
@@ -204,6 +235,154 @@ export function toggleCollapsedDir(path: string): void {
   if (next.has(path)) next.delete(path);
   else next.add(path);
   session.collapsedDirs = next;
+}
+
+type LoadedReview = {
+  guide: GuideV1;
+  outcomes: ReviewPageData["outcomes"];
+  diff?: ReviewDiff;
+};
+
+function messageOf(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function openTarget(page: ReviewPageData): OpenActionTarget | null {
+  const source = page.guide?.source;
+  if (!source || source.kind !== "pull-request") return null;
+  return {
+    provider: source.provider,
+    host: source.host,
+    repository: {
+      id: source.repository.id,
+      owner: source.repository.owner,
+      name: source.repository.name,
+      webUrl: source.repository.webUrl,
+    },
+    number: source.number,
+  };
+}
+
+function diffHasLine(files: readonly FileChange[], path: string, line: number): boolean {
+  return files.some(
+    (file) =>
+      file.path === path &&
+      file.hunks?.some((hunk) => hunk.lines?.some((row) => row.newLine === line)),
+  );
+}
+
+function clearMissingLine(files: readonly FileChange[]): void {
+  const target = composerSession.target;
+  if (target?.kind !== "create") return;
+  const anchor = target.anchor;
+  if (anchor.kind !== "line" && anchor.kind !== "range") return;
+  const start = anchor.kind === "line" ? anchor.line : anchor.startLine;
+  const end = anchor.kind === "line" ? anchor.line : anchor.endLine;
+  for (let line = start; line <= end; line += 1) {
+    if (!diffHasLine(files, anchor.path, line)) {
+      composerSession.target = null;
+      return;
+    }
+  }
+}
+
+export function applyLoadedReview(reviewId: string, loaded: LoadedReview): void {
+  if (!session.page || session.page.reviewId !== reviewId) return;
+  session.page = {
+    ...session.page,
+    title: loaded.guide.title,
+    guide: loaded.guide,
+    outcomes: loaded.outcomes,
+    diff: loaded.diff,
+  };
+  clearMissingLine(loaded.diff?.files ?? []);
+}
+
+async function headMoved(reviewId: string, now = Date.now()): Promise<boolean> {
+  reviewSync.checkedAt = now;
+  const body = await fetchJson<{ moved?: boolean }>(`/api/reviews/${reviewId}/head`);
+  return body.moved === true;
+}
+
+async function pullUpdatedDiff(page: ReviewPageData): Promise<void> {
+  const target = openTarget(page);
+  if (!target) return;
+  await fetchJson("/api/reviews/update-diff", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ target }),
+  });
+  if (session.page?.reviewId !== page.reviewId) return;
+  const loaded = await fetchJson<LoadedReview>(`/api/reviews/${page.reviewId}`);
+  if (session.page?.reviewId !== page.reviewId) return;
+  applyLoadedReview(page.reviewId, loaded);
+}
+
+export async function syncReviewOnOpen(): Promise<void> {
+  const page = session.page;
+  if (!page) return;
+  const hosted = Boolean(page.guide?.source);
+  if (!hosted) {
+    await loadReviewThreads({ reviewId: page.reviewId, hosted: false, reason: "open" });
+    return;
+  }
+  reviewSync.error = null;
+  try {
+    if (await headMoved(page.reviewId)) {
+      reviewSync.updating = true;
+      await pullUpdatedDiff(page);
+      reviewSync.stale = false;
+    }
+  } catch (err) {
+    reviewSync.error = messageOf(err);
+  } finally {
+    reviewSync.updating = false;
+  }
+  if (session.page?.reviewId !== page.reviewId) return;
+  await loadReviewThreads({ reviewId: page.reviewId, hosted: true, reason: "open" });
+}
+
+export async function syncReviewOnFocus(now = Date.now()): Promise<void> {
+  const page = session.page;
+  if (!page) return;
+  const hosted = Boolean(page.guide?.source);
+  if (!hosted) {
+    await loadReviewThreads({ reviewId: page.reviewId, hosted: false, reason: "focus", now });
+    return;
+  }
+  const fresh = reviewSync.checkedAt != null && now - reviewSync.checkedAt < HEAD_CHECK_STALE_MS;
+  if (!fresh) {
+    if (!headInflight) {
+      const run = headMoved(page.reviewId, now)
+        .then((moved) => {
+          if (session.page?.reviewId === page.reviewId) reviewSync.stale = moved;
+        })
+        .catch(() => undefined);
+      headInflight = run.finally(() => {
+        headInflight = null;
+      });
+    }
+    await headInflight;
+  }
+  if (session.page?.reviewId !== page.reviewId) return;
+  await loadReviewThreads({ reviewId: page.reviewId, hosted: true, reason: "focus", now });
+}
+
+export async function refreshReviewDiff(): Promise<void> {
+  const page = session.page;
+  if (!page?.guide?.source) return;
+  reviewSync.error = null;
+  reviewSync.updating = true;
+  try {
+    await pullUpdatedDiff(page);
+    if (session.page?.reviewId === page.reviewId) reviewSync.stale = false;
+  } catch (err) {
+    if (session.page?.reviewId === page.reviewId) reviewSync.error = messageOf(err);
+  } finally {
+    reviewSync.updating = false;
+  }
+  if (session.page?.reviewId !== page.reviewId) return;
+  await loadReviewThreads({ reviewId: page.reviewId, hosted: true, reason: "retry" });
 }
 
 export function setPathViewed(

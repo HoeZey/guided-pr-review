@@ -3,9 +3,11 @@ import { mount, tick, unmount } from "svelte";
 import { FAKE_REVIEW_OK } from "$lib/shared/shell-fakes";
 import { HOME_PATH } from "$lib/shared/domain/overview";
 import { TAB_KEY } from "$lib/client/browser/preferences";
-import { resetReviewSession } from "$lib/client/state/review.svelte";
+import { composerSession } from "$lib/client/state/composer.svelte";
+import { HEAD_CHECK_STALE_MS, resetReviewSession } from "$lib/client/state/review.svelte";
 import { THREAD_LIST_STALE_MS } from "$lib/client/state/threads.svelte";
 import type { CommentThread } from "$lib/shared/contracts/comments";
+import type { FileChange } from "$lib/shared/contracts/guide";
 import type { ReviewPageData } from "$lib/shared/page-data";
 import ReviewPage from "./+page.svelte";
 
@@ -60,7 +62,18 @@ function renderPage(data: ReviewPageData) {
   return host;
 }
 
-function hostedReview(tab?: ReviewPageData["tab"]): ReviewPageData {
+const STORED_LINE = "stored commit line";
+const LATEST_LINE = "latest commit line";
+
+function lineFile(content: string, line = 3): FileChange {
+  return {
+    path: "src/open.ts",
+    language: "typescript",
+    hunks: [{ lines: [{ type: "added", content, newLine: line }] }],
+  };
+}
+
+function hostedReview(tab?: ReviewPageData["tab"], line = STORED_LINE): ReviewPageData {
   return {
     ...FAKE_REVIEW_OK,
     ...(tab ? { tab } : {}),
@@ -84,6 +97,11 @@ function hostedReview(tab?: ReviewPageData["tab"]): ReviewPageData {
         targetCommit: "a".repeat(40),
         providerContext: { kind: "github" },
       },
+    },
+    diff: {
+      sourceCommit: "b".repeat(40),
+      targetCommit: "a".repeat(40),
+      files: [lineFile(line)],
     },
   };
 }
@@ -153,7 +171,10 @@ test("Loading comments shows on the tab row until the list succeeds", async () =
   const pending = deferred<{ threads: never[] }>();
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => {
+    vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/head")) {
+        return { ok: true, statusText: "OK", json: async () => ({ moved: false }) };
+      }
       const body = await pending.promise;
       return { ok: true, statusText: "OK", json: async () => body };
     }),
@@ -171,18 +192,21 @@ test("Loading comments shows on the tab row until the list succeeds", async () =
 });
 
 test("a failed list shows Retry and Retry lists again", async () => {
-  const fetchSpy = vi
-    .fn()
-    .mockResolvedValueOnce({
-      ok: false,
-      statusText: "Bad Gateway",
-      json: async () => ({ error: "git host is unavailable" }),
-    })
-    .mockResolvedValueOnce({
-      ok: true,
-      statusText: "OK",
-      json: async () => ({ threads: [] }),
-    });
+  let lists = 0;
+  const fetchSpy = vi.fn(async (input: RequestInfo | URL) => {
+    if (String(input).endsWith("/head")) {
+      return { ok: true, statusText: "OK", json: async () => ({ moved: false }) };
+    }
+    lists += 1;
+    if (lists === 1) {
+      return {
+        ok: false,
+        statusText: "Bad Gateway",
+        json: async () => ({ error: "git host is unavailable" }),
+      };
+    }
+    return { ok: true, statusText: "OK", json: async () => ({ threads: [] }) };
+  });
   vi.stubGlobal("fetch", fetchSpy);
   const root = renderPage(hostedReview());
   await vi.waitFor(() => {
@@ -213,12 +237,15 @@ test("threads already on screen stay during a reload", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-09-16T12:00:00.000Z"));
   const pending = deferred<CommentThread[]>();
-  let calls = 0;
+  let lists = 0;
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => {
-      calls += 1;
-      const threads = calls === 1 ? [prThread("pr-old", "kept")] : await pending.promise;
+    vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/head")) {
+        return { ok: true, statusText: "OK", json: async () => ({ moved: false }) };
+      }
+      lists += 1;
+      const threads = lists === 1 ? [prThread("pr-old", "kept")] : await pending.promise;
       return { ok: true, statusText: "OK", json: async () => ({ threads }) };
     }),
   );
@@ -228,9 +255,10 @@ test("threads already on screen stay during a reload", async () => {
   });
   vi.setSystemTime(Date.now() + THREAD_LIST_STALE_MS);
   document.dispatchEvent(new Event("visibilitychange"));
-  await tick();
+  await vi.waitFor(() => {
+    expect(root.querySelector(".view-tabs .tab-loading")?.textContent).toContain("Loading comments");
+  });
   expect(root.querySelector('[data-thread="pr-old"]')?.textContent).toContain("kept");
-  expect(root.querySelector(".view-tabs .tab-loading")?.textContent).toContain("Loading comments");
   pending.resolve([prThread("pr-new", "replaced")]);
   await vi.waitFor(() => {
     expect(root.querySelector('[data-thread="pr-new"]')?.textContent).toContain("replaced");
@@ -431,12 +459,15 @@ test("focus and visibility on return start one list", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-09-16T12:00:00.000Z"));
   const pending = deferred<void>();
-  let calls = 0;
+  let lists = 0;
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => {
-      calls += 1;
-      if (calls > 1) await pending.promise;
+    vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/head")) {
+        return { ok: true, statusText: "OK", json: async () => ({ moved: false }) };
+      }
+      lists += 1;
+      if (lists > 1) await pending.promise;
       return {
         ok: true,
         statusText: "OK",
@@ -446,12 +477,328 @@ test("focus and visibility on return start one list", async () => {
   );
   renderPage(hostedReview());
   await vi.waitFor(() => {
-    expect(calls).toBe(1);
+    expect(lists).toBe(1);
   });
   vi.setSystemTime(Date.now() + THREAD_LIST_STALE_MS);
   window.dispatchEvent(new Event("focus"));
   document.dispatchEvent(new Event("visibilitychange"));
   await tick();
-  expect(calls).toBe(2);
+  expect(lists).toBe(2);
   pending.resolve();
+});
+
+test("opening a review whose head moved runs Update Diff before listing threads", async () => {
+  const order: string[] = [];
+  const pendingUpdate = deferred<void>();
+  const page = hostedReview("diff");
+  const latest = {
+    guide: page.guide,
+    outcomes: [],
+    diff: {
+      sourceCommit: "c".repeat(40),
+      targetCommit: "a".repeat(40),
+      files: [lineFile(LATEST_LINE)],
+    },
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (url === "/api/reviews/fake-review/head") {
+        order.push("head");
+        return { ok: true, statusText: "OK", json: async () => ({ moved: true }) };
+      }
+      if (url === "/api/reviews/update-diff" && method === "POST") {
+        order.push("update");
+        await pendingUpdate.promise;
+        return {
+          ok: true,
+          statusText: "OK",
+          json: async () => ({ reviewId: "fake-review", skipped: false }),
+        };
+      }
+      if (url === "/api/reviews/fake-review" && method === "GET") {
+        order.push("review");
+        return { ok: true, statusText: "OK", json: async () => latest };
+      }
+      if (url === "/api/reviews/fake-review/comments") {
+        order.push("comments");
+        return { ok: true, statusText: "OK", json: async () => ({ threads: [] }) };
+      }
+      throw new Error(`unexpected ${method} ${url}`);
+    }),
+  );
+  const root = renderPage(page);
+  await vi.waitFor(() => {
+    expect(root.querySelector(".view-tabs .tab-loading")?.textContent).toContain("Updating diff");
+  });
+  expect(order).toEqual(["head", "update"]);
+  expect(root.textContent).toContain(STORED_LINE);
+  pendingUpdate.resolve();
+  await vi.waitFor(() => {
+    expect(order).toContain("comments");
+  });
+  expect(order.indexOf("update")).toBeLessThan(order.indexOf("comments"));
+  expect(root.textContent).toContain(LATEST_LINE);
+  expect(root.textContent).not.toContain(STORED_LINE);
+  expect(root.querySelector(".view-tabs .tab-loading")).toBeNull();
+});
+
+test("a focus with a moved head shows Refresh and does not change the diff", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-09-16T12:00:00.000Z"));
+  let heads = 0;
+  let updates = 0;
+  let reads = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      reads += 1;
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (url.endsWith("/head")) {
+        heads += 1;
+        return { ok: true, statusText: "OK", json: async () => ({ moved: heads > 1 }) };
+      }
+      if (url === "/api/reviews/update-diff" && method === "POST") {
+        updates += 1;
+        return {
+          ok: true,
+          statusText: "OK",
+          json: async () => ({ reviewId: "fake-review", skipped: false }),
+        };
+      }
+      if (url.endsWith("/comments")) {
+        return { ok: true, statusText: "OK", json: async () => ({ threads: [] }) };
+      }
+      throw new Error(`unexpected ${method} ${url}`);
+    }),
+  );
+  const root = renderPage(hostedReview("diff"));
+  await vi.waitFor(() => {
+    expect(heads).toBe(1);
+  });
+  expect(root.querySelector("[data-refresh-diff]")).toBeNull();
+  expect(root.textContent).toContain(STORED_LINE);
+  vi.setSystemTime(Date.now() + HEAD_CHECK_STALE_MS);
+  window.dispatchEvent(new Event("focus"));
+  await vi.waitFor(() => {
+    expect(root.querySelector("[data-refresh-diff]")?.textContent).toBe("Refresh");
+  });
+  expect(root.querySelector(".review-banner")?.textContent).toContain("new commits");
+  expect(updates).toBe(0);
+  expect(root.textContent).toContain(STORED_LINE);
+  const readsAfterFocus = reads;
+  window.dispatchEvent(new Event("focus"));
+  await tick();
+  expect(reads).toBe(readsAfterFocus);
+});
+
+test("Refresh updates the diff, then lists threads", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-09-16T12:00:00.000Z"));
+  let heads = 0;
+  const order: string[] = [];
+  const pendingUpdate = deferred<void>();
+  const page = hostedReview("diff");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (url.endsWith("/head")) {
+        heads += 1;
+        order.push("head");
+        return { ok: true, statusText: "OK", json: async () => ({ moved: heads > 1 }) };
+      }
+      if (url === "/api/reviews/update-diff" && method === "POST") {
+        order.push("update");
+        await pendingUpdate.promise;
+        return {
+          ok: true,
+          statusText: "OK",
+          json: async () => ({ reviewId: "fake-review", skipped: false }),
+        };
+      }
+      if (url === "/api/reviews/fake-review" && method === "GET") {
+        order.push("review");
+        return {
+          ok: true,
+          statusText: "OK",
+          json: async () => ({
+            guide: page.guide,
+            outcomes: [],
+            diff: {
+              sourceCommit: "c".repeat(40),
+              targetCommit: "a".repeat(40),
+              files: [lineFile(LATEST_LINE)],
+            },
+          }),
+        };
+      }
+      if (url.endsWith("/comments")) {
+        order.push("comments");
+        return { ok: true, statusText: "OK", json: async () => ({ threads: [] }) };
+      }
+      throw new Error(`unexpected ${method} ${url}`);
+    }),
+  );
+  const root = renderPage(page);
+  await vi.waitFor(() => {
+    expect(heads).toBe(1);
+  });
+  vi.setSystemTime(Date.now() + HEAD_CHECK_STALE_MS);
+  window.dispatchEvent(new Event("focus"));
+  await vi.waitFor(() => {
+    expect(root.querySelector("[data-refresh-diff]")).toBeTruthy();
+  });
+  const before = order.length;
+  (root.querySelector("[data-refresh-diff]") as HTMLButtonElement).click();
+  await vi.waitFor(() => {
+    expect(root.querySelector(".view-tabs .tab-loading")?.textContent).toContain("Updating diff");
+  });
+  expect(order.slice(before)).toEqual(["update"]);
+  expect(root.textContent).toContain(STORED_LINE);
+  pendingUpdate.resolve();
+  await vi.waitFor(() => {
+    expect(root.textContent).toContain(LATEST_LINE);
+  });
+  expect(root.textContent).not.toContain(STORED_LINE);
+  const followed = order.slice(before);
+  expect(followed.indexOf("update")).toBeLessThan(followed.indexOf("comments"));
+  expect(root.querySelector("[data-refresh-diff]")).toBeNull();
+});
+
+test("a draft keeps its text after Refresh and a removed line selection clears", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-09-16T12:00:00.000Z"));
+  let heads = 0;
+  const page = hostedReview("diff");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (url.endsWith("/head")) {
+        heads += 1;
+        return { ok: true, statusText: "OK", json: async () => ({ moved: heads > 1 }) };
+      }
+      if (url === "/api/reviews/update-diff" && method === "POST") {
+        return {
+          ok: true,
+          statusText: "OK",
+          json: async () => ({ reviewId: "fake-review", skipped: false }),
+        };
+      }
+      if (url === "/api/reviews/fake-review" && method === "GET") {
+        return {
+          ok: true,
+          statusText: "OK",
+          json: async () => ({
+            guide: page.guide,
+            outcomes: [],
+            diff: {
+              sourceCommit: "c".repeat(40),
+              targetCommit: "a".repeat(40),
+              files: [lineFile("kept beside", 1)],
+            },
+          }),
+        };
+      }
+      if (url.endsWith("/comments")) {
+        return { ok: true, statusText: "OK", json: async () => ({ threads: [] }) };
+      }
+      throw new Error(`unexpected ${method} ${url}`);
+    }),
+  );
+  const root = renderPage(page);
+  await vi.waitFor(() => {
+    expect(root.querySelector("[data-comment-new='3'][data-comment-type]")).toBeTruthy();
+  });
+  (root.querySelector("[data-comment-new='3']") as HTMLElement).click();
+  await tick();
+  const draft = root.querySelector("[data-comment-draft]") as HTMLTextAreaElement;
+  draft.value = "keep this";
+  draft.dispatchEvent(new Event("input", { bubbles: true }));
+  await tick();
+  expect(draft.value).toBe("keep this");
+  vi.setSystemTime(Date.now() + HEAD_CHECK_STALE_MS);
+  window.dispatchEvent(new Event("focus"));
+  await vi.waitFor(() => {
+    expect(root.querySelector("[data-refresh-diff]")).toBeTruthy();
+  });
+  (root.querySelector("[data-refresh-diff]") as HTMLButtonElement).click();
+  await vi.waitFor(() => {
+    expect(root.querySelector("[data-comment-new='1']")).toBeTruthy();
+  });
+  expect(root.querySelector(".comment-selected")).toBeNull();
+  expect(composerSession.target).toBeNull();
+  expect(composerSession.delivery.content).toBe("keep this");
+  (root.querySelector("[data-comment-new='1']") as HTMLElement).click();
+  await tick();
+  expect((root.querySelector("[data-comment-draft]") as HTMLTextAreaElement).value).toBe("keep this");
+});
+
+test("a failed update keeps the old diff and offers Retry", async () => {
+  let updates = 0;
+  const page = hostedReview("diff");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (url.endsWith("/head")) {
+        return { ok: true, statusText: "OK", json: async () => ({ moved: true }) };
+      }
+      if (url === "/api/reviews/update-diff" && method === "POST") {
+        updates += 1;
+        if (updates === 1) {
+          return {
+            ok: false,
+            statusText: "Bad Gateway",
+            json: async () => ({ error: "diff update failed" }),
+          };
+        }
+        return {
+          ok: true,
+          statusText: "OK",
+          json: async () => ({ reviewId: "fake-review", skipped: false }),
+        };
+      }
+      if (url === "/api/reviews/fake-review" && method === "GET") {
+        return {
+          ok: true,
+          statusText: "OK",
+          json: async () => ({
+            guide: page.guide,
+            outcomes: [],
+            diff: {
+              sourceCommit: "c".repeat(40),
+              targetCommit: "a".repeat(40),
+              files: [lineFile(LATEST_LINE)],
+            },
+          }),
+        };
+      }
+      if (url.endsWith("/comments")) {
+        return { ok: true, statusText: "OK", json: async () => ({ threads: [] }) };
+      }
+      throw new Error(`unexpected ${method} ${url}`);
+    }),
+  );
+  const root = renderPage(page);
+  await vi.waitFor(() => {
+    expect(root.querySelector("[data-retry-diff]")?.textContent).toBe("Retry");
+  });
+  expect(root.textContent).toContain("diff update failed");
+  expect(root.textContent).toContain(STORED_LINE);
+  expect(root.textContent).not.toContain(LATEST_LINE);
+  (root.querySelector("[data-retry-diff]") as HTMLButtonElement).click();
+  await vi.waitFor(() => {
+    expect(root.textContent).toContain(LATEST_LINE);
+  });
+  expect(updates).toBe(2);
+  expect(root.textContent).not.toContain(STORED_LINE);
+  expect(root.querySelector("[data-retry-diff]")).toBeNull();
 });

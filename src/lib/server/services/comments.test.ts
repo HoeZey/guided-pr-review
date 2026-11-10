@@ -450,6 +450,7 @@ function appWithComments(comments: AppServices["comments"]): AppServices {
       updateDiff: unused("updateDiff"),
       openPullRequest: unused("openPullRequest"),
       addLocalReview: unused("addLocalReview"),
+      readHead: unused("readHead"),
     },
     catalog: { replace: unused("replace") },
     catalogRefresh: { refresh: unused("catalogRefresh") },

@@ -26,6 +26,8 @@ import type {
 import type { AppRepositories, ConfiguredRepositoryRecord } from "../repositories/ports.ts";
 import type { CredentialResult, CredentialSource } from "../auth/ports.ts";
 import { createAdoRestAdapter } from "../providers/ado-rest.ts";
+import { createFakeCommentProvider } from "../providers/fake-comments.ts";
+import { createHttpHandlers } from "../http.ts";
 import { createAppServices } from "./app.ts";
 import { createReviewService } from "./reviews.ts";
 
@@ -1146,5 +1148,122 @@ test("openPullRequest rejects unsupported hosts and malformed URLs", async () =>
     () => reviews.openPullRequest("not a url"),
     (err: Error & { status?: number }) => err.status === 400,
   );
+});
+
+test("head check reads the pull request through createAppServices and keeps the stored diff commit", async () => {
+  const storedGuide = GuideV1.parse({
+    version: 1,
+    title: "Saved",
+    base: TARGET,
+    head: SOURCE,
+    chapters: [
+      {
+        id: "core",
+        kind: "core",
+        title: "Core",
+        why: "Why",
+        files: FILES,
+      },
+    ],
+    source: {
+      kind: "pull-request",
+      provider: "github",
+      host: "github.com",
+      repository: {
+        id: GITHUB_REPO.id,
+        owner: GITHUB_REPO.owner,
+        name: GITHUB_REPO.name,
+        webUrl: GITHUB_REPO.webUrl,
+      },
+      number: 42,
+      webUrl: `${GITHUB_REPO.webUrl}/pull/42`,
+      sourceRef: "refs/heads/feature/review-me",
+      targetRef: "refs/heads/develop",
+      sourceCommit: SOURCE,
+      targetCommit: TARGET,
+      providerContext: { kind: "github" },
+    },
+  });
+  const currentGuide = GuideV1.parse({
+    ...storedGuide,
+    head: SOURCE_B,
+    source: { ...storedGuide.source!, sourceCommit: SOURCE_B },
+  });
+  const storedDiff: ReviewDiff = { sourceCommit: SOURCE, targetCommit: TARGET, files: FILES };
+  const currentDiff: ReviewDiff = { sourceCommit: SOURCE_B, targetCommit: TARGET, files: FILES };
+  let reads = 0;
+  let upserts = 0;
+  const readers = fakeReaders([metaOf(GITHUB_REPO, 42, { sourceCommit: SOURCE_B })]);
+  const github = {
+    ...readers.github,
+    async getPullRequest(input: Parameters<ProviderPullRequestReader["getPullRequest"]>[0]) {
+      reads += 1;
+      return readers.github.getPullRequest(input);
+    },
+  };
+  const git = recordingGit();
+  let postedCommit: string | undefined;
+  const githubComments = createFakeCommentProvider({ provider: "github", threads: [] });
+  const recordingComments = {
+    ...githubComments,
+    async createThread(input: Parameters<typeof githubComments.createThread>[0]) {
+      postedCommit = input.provenance.sourceCommit;
+      return githubComments.createThread(input);
+    },
+  };
+  const credentials: CredentialSource = {
+    async getAccessToken(input) {
+      return {
+        status: "connected",
+        identity: { provider: input.provider, host: input.host, login: "octocat" },
+        token: "gho_fixture",
+      };
+    },
+  };
+  const services = createAppServices(
+    repos({
+      getReview: async (id) => {
+        if (id === "saved-current") return { guide: currentGuide, outcomes: [], diff: currentDiff };
+        if (id === "saved-moved") return { guide: storedGuide, outcomes: [], diff: storedDiff };
+        throw new Error(`unexpected review ${id}`);
+      },
+      upsertReview: async () => {
+        upserts += 1;
+        return { id: "nope" };
+      },
+    }),
+    {
+      credentials,
+      readers: { ado: readers.ado, github },
+      git,
+      commentProviders: {
+        ado: createFakeCommentProvider({ provider: "azure-devops", threads: [] }),
+        github: recordingComments,
+      },
+    },
+  );
+  const http = createHttpHandlers(services);
+  const moved = await http.head.GET({
+    request: new Request("http://localhost/api/reviews/saved-moved/head"),
+    params: { id: "saved-moved" },
+  });
+  assert.equal(moved.status, 200);
+  assert.deepEqual(await moved.json(), { moved: true });
+  const current = await http.head.GET({
+    request: new Request("http://localhost/api/reviews/saved-current/head"),
+    params: { id: "saved-current" },
+  });
+  assert.equal(current.status, 200);
+  assert.deepEqual(await current.json(), { moved: false });
+  assert.equal(reads, 2);
+  assert.equal(upserts, 0);
+  assert.equal(git.fetches, 0);
+  await services.comments.createThread("saved-moved", {
+    anchor: { kind: "file", path: "src/open.ts" },
+    body: "on the stored diff",
+    clientOperationId: "cop_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  });
+  assert.equal(postedCommit, SOURCE);
+  assert.equal(reads, 2);
 });
 

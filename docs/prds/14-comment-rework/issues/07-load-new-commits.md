@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 blocked_by:
   - 01-turn-comments-on
 blocks:
@@ -43,14 +43,14 @@ shell, review state, banner, tests
 
 **Acceptance criteria:**
 
-- [ ] Opening a review whose head moved runs Update Diff before listing
+- [x] Opening a review whose head moved runs Update Diff before listing
   threads, with Updating diff on the tab row.
-- [ ] A focus with a moved head shows Refresh and does not change the diff.
-- [ ] A second focus within a minute makes no host read.
-- [ ] Refresh updates the diff, then lists threads.
-- [ ] A draft keeps its text after Refresh; a selection on a removed line
+- [x] A focus with a moved head shows Refresh and does not change the diff.
+- [x] A second focus within a minute makes no host read.
+- [x] Refresh updates the diff, then lists threads.
+- [x] A draft keeps its text after Refresh; a selection on a removed line
   clears.
-- [ ] A failed update keeps the old diff and offers Retry.
+- [x] A failed update keeps the old diff and offers Retry.
 
 **Blocked by:** 01
 

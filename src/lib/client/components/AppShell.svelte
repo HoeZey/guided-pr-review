@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
-import { HOME_PATH, reviewLandingTab } from "$lib/shared/domain/overview";
-import type { HomePageData, ReviewPageData, ReviewTab } from "$lib/shared/page-data";
+  import { HOME_PATH, OUTDATED_WARNING, reviewLandingTab } from "$lib/shared/domain/overview";
+  import type { HomePageData, ReviewPageData, ReviewTab } from "$lib/shared/page-data";
   import { fetchJson } from "$lib/client/browser/fetch";
   import {
     bindReviewChrome,
@@ -15,11 +15,14 @@ import type { HomePageData, ReviewPageData, ReviewTab } from "$lib/shared/page-d
     adoptReviewPage,
     bindReview,
     currentReviewPage,
+    refreshReviewDiff,
+    reviewSync,
     session,
     setTab,
+    syncReviewOnFocus,
+    syncReviewOnOpen,
   } from "$lib/client/state/review.svelte";
   import {
-    loadReviewThreads,
     retryReviewThreads,
     threadSession,
     visibleDiscussionThreads,
@@ -68,11 +71,7 @@ import type { HomePageData, ReviewPageData, ReviewTab } from "$lib/shared/page-d
     const id = data.reviewId;
     if (openedCommentsFor === id) return;
     openedCommentsFor = id;
-    void loadReviewThreads({
-      reviewId: id,
-      hosted: Boolean(data.guide?.source),
-      reason: "open",
-    });
+    void syncReviewOnOpen();
   });
 
   onMount(() => {
@@ -85,11 +84,7 @@ import type { HomePageData, ReviewPageData, ReviewTab } from "$lib/shared/page-d
       if (document.visibilityState !== "visible") return;
       const page = session.page;
       if (!page || page.kind !== "review") return;
-      void loadReviewThreads({
-        reviewId: page.reviewId,
-        hosted: Boolean(page.guide?.source),
-        reason: "focus",
-      });
+      void syncReviewOnFocus();
     };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);
@@ -234,7 +229,12 @@ import type { HomePageData, ReviewPageData, ReviewTab } from "$lib/shared/page-d
             {item.label}{item.id === "discussion" && discussionCount ? ` (${discussionCount})` : ""}
           </button>
         {/each}
-        {#if threadSession.loading}
+        {#if reviewSync.updating}
+          <p class="tab-loading" role="status">
+            <span class="composer-spinner" aria-hidden="true"></span>
+            Updating diff
+          </p>
+        {:else if threadSession.loading}
           <p class="tab-loading" role="status">
             <span class="composer-spinner" aria-hidden="true"></span>
             Loading comments
@@ -243,6 +243,21 @@ import type { HomePageData, ReviewPageData, ReviewTab } from "$lib/shared/page-d
       </div>
       {#if review?.outdatedWarning}
         <div class="review-banner" role="status">{review.outdatedWarning}</div>
+      {/if}
+      {#if reviewSync.error}
+        <div class="review-banner" role="alert">
+          {reviewSync.error}
+          <button type="button" class="ghost" data-retry-diff onclick={() => void refreshReviewDiff()}>
+            Retry
+          </button>
+        </div>
+      {:else if reviewSync.stale}
+        <div class="review-banner" role="status">
+          {OUTDATED_WARNING}
+          <button type="button" class="ghost" data-refresh-diff onclick={() => void refreshReviewDiff()}>
+            Refresh
+          </button>
+        </div>
       {/if}
       {#if threadSession.error}
         <div class="review-banner" role="alert">

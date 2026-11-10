@@ -214,6 +214,18 @@ export function createHttpHandlers(
         }
       },
     },
+    head: {
+      GET: async ({ params }: HttpEvent) => {
+        await seed();
+        const id = params.id;
+        if (!id) return Response.json({ error: "missing id" }, { status: 400 });
+        try {
+          return Response.json(await services.reviews.readHead(id));
+        } catch (err) {
+          return jsonError(err, 500);
+        }
+      },
+    },
     updateDiff: {
       POST: async ({ request }: HttpEvent) => {
         await seed();
