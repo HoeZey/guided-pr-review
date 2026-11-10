@@ -24,7 +24,7 @@ import {
 } from "../browser/preferences";
 import { fetchJson } from "../browser/fetch";
 import { composerSession, resetComposerSession } from "./composer.svelte";
-import { loadReviewThreads, resetThreadSession } from "./threads.svelte";
+import { loadReviewThreads, resetThreadSession, threadSession } from "./threads.svelte";
 
 export type UiOp = {
   id: string;
@@ -326,6 +326,8 @@ export async function syncReviewOnOpen(): Promise<void> {
     await loadReviewThreads({ reviewId: page.reviewId, hosted: false, reason: "open" });
     return;
   }
+  threadSession.reviewId = page.reviewId;
+  threadSession.hosted = true;
   reviewSync.error = null;
   try {
     if (await headMoved(page.reviewId)) {
