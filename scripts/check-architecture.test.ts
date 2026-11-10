@@ -33,8 +33,8 @@ test("cutover leaves SvelteKit as the only product runtime", () => {
   assert.match(pkg.scripts.dev, /vite dev/);
   assert.match(pkg.scripts.dev, /8765/);
   assert.doesNotMatch(pkg.scripts.dev, /astro/);
-  assert.match(pkg.scripts.build, /vite build/);
-  assert.doesNotMatch(pkg.scripts.build, /astro/);
+  assert.match(pkg.scripts["build:app"], /vite build/);
+  assert.doesNotMatch(pkg.scripts["build:app"], /astro/);
   assert.match(pkg.scripts.start, /node build/);
   assert.doesNotMatch(pkg.scripts.start, /astro|dist\/server\/entry/);
   assert.equal(pkg.dependencies?.astro, undefined);

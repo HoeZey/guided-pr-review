@@ -143,7 +143,7 @@
     let node: HTMLElement | null = anchor;
     while (node && node !== scroller) {
       top += node.offsetTop;
-      const parent = node.offsetParent;
+      const parent: Element | null = node.offsetParent;
       if (!(parent instanceof HTMLElement)) return null;
       node = parent;
     }
