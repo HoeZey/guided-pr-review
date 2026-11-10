@@ -1,0 +1,6 @@
+SMOKE-KEEP-1
+SMOKE-MOVE this line only moves
+SMOKE-CHANGE this line will change
+SMOKE-RANGE-A
+SMOKE-RANGE-B
+SMOKE-FILE-BODY
