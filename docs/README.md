@@ -20,6 +20,7 @@ PRD moves under done/.
 - [09 Demo home polish](prds/09-demo-home-polish/) — implemented
 - [10 Guide quality](prds/10-guide-quality/) — signed
 - [11 Demo prep](prds/11-demo-prep/) — signed
+- [14 Comment rework](prds/14-comment-rework/) — signed
 
 ## Status
 
