@@ -151,7 +151,7 @@ test("owned edit and delete share one thread collection; failure restores the or
   expect(threadSession.threads[0]?.messages[0]?.body).toBe("renamed");
 
   const deleteGithub = vi.fn(async () => {
-    expect(threadSession.threads[1]?.messages.map((row) => row.id)).toEqual(["gh_thr-other"]);
+    expect(threadSession.threads[1]?.messages.map((row) => row.id)).toEqual(["gh_thr-m", "gh_thr-other"]);
     return { ok: true as const };
   });
   await deleteOwnedComment("gh_thr", "gh_thr-m", { delete: deleteGithub });
@@ -159,7 +159,7 @@ test("owned edit and delete share one thread collection; failure restores the or
   expect(threadSession.threads[1]?.messages.map((row) => row.id)).toEqual(["gh_thr-other"]);
 
   const failDelete = vi.fn(async () => {
-    expect(threadSession.threads[0]?.messages[0]?.deleted).toBe(true);
+    expect(threadSession.threads[0]?.messages[0]?.deleted).toBeUndefined();
     throw denied;
   });
   await expect(deleteOwnedComment("ado_thr", "ado_thr-m", { delete: failDelete })).rejects.toMatchObject({

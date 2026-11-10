@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 blocked_by:
   - 01-turn-comments-on
 blocks:
@@ -33,11 +33,11 @@ and a failure never loses the typed text or the comment.
 
 **Acceptance criteria:**
 
-- [ ] Save shows a spinner until the fake resolves.
-- [ ] A failed save keeps the editor open with the typed text.
-- [ ] Delete shows a spinner until the fake resolves.
-- [ ] A failed delete leaves the message on screen with the error.
-- [ ] Another author's message has no Edit or Delete.
+- [x] Save shows a spinner until the fake resolves.
+- [x] A failed save keeps the editor open with the typed text.
+- [x] Delete shows a spinner until the fake resolves.
+- [x] A failed delete leaves the message on screen with the error.
+- [x] Another author's message has no Edit or Delete.
 
 **Blocked by:** 01
 

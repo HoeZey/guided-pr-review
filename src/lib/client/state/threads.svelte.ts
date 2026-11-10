@@ -215,17 +215,13 @@ export async function deleteOwnedComment(
   const reviewId = threadSession.reviewId;
   const thread = threadSession.threads.find((row) => row.id === threadId);
   if (!reviewId || !thread || !ownedMessage(threadId, commentId)) return;
-  const snapshot = cloneThreads();
-  if (thread.provider === "github") {
+  const provider = thread.provider;
+  const remove = opts.delete ?? commentsApi.delete;
+  await remove(reviewId, threadId, commentId);
+  if (!ownedMessage(threadId, commentId)) return;
+  if (provider === "github") {
     mapMessage(threadId, commentId, () => null);
   } else {
     mapMessage(threadId, commentId, (message) => ({ ...message, deleted: true }));
-  }
-  try {
-    const remove = opts.delete ?? commentsApi.delete;
-    await remove(reviewId, threadId, commentId);
-  } catch (err) {
-    replaceThreads(snapshot);
-    throw err;
   }
 }

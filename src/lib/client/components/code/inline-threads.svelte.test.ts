@@ -517,9 +517,13 @@ test("Guide and Diff edit and delete only owned messages and roll back a failed 
   await tick();
   (card()?.querySelector("[data-comment-save]") as HTMLButtonElement).click();
   await vi.waitFor(() => {
-    expect(card()?.textContent).toContain("line note");
-    expect(card()?.textContent).not.toContain("renamed");
+    expect(card()?.querySelector(".composer-error")?.textContent).toContain("GitHub permission was denied");
   });
+  expect((card()?.querySelector("[data-comment-edit-draft]") as HTMLTextAreaElement).value).toBe("renamed");
+  (card()?.querySelector("[data-comment-edit-cancel]") as HTMLButtonElement).click();
+  await tick();
+  expect(card()?.textContent).toContain("line note");
+  expect(card()?.querySelector("[data-comment-edit-draft]")).toBeNull();
   (host.querySelector('[role="tab"][data-tab="diff"]') as HTMLButtonElement).click();
   await tick();
   expect(host.querySelector('[data-thread="review:10"]')?.textContent).toContain("line note");

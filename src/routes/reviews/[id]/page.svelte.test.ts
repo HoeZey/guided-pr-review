@@ -239,6 +239,194 @@ test("threads already on screen stay during a reload", async () => {
   expect(root.querySelector(".view-tabs .tab-loading")).toBeNull();
 });
 
+test("Save shows a spinner until the fake resolves", async () => {
+  const pending = deferred<CommentThread["messages"][number]>();
+  const saved = {
+    id: "pr-1-m",
+    author: { login: "ada" },
+    body: "renamed",
+    createdAt: WHEN,
+    updatedAt: "2026-09-16T12:00:00.000Z",
+    ownedByCurrentUser: true,
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (url === "/api/reviews/fake-review/comments" && method === "GET") {
+        return { ok: true, statusText: "OK", json: async () => ({ threads: [prThread("pr-1", "note")] }) };
+      }
+      if (url === "/api/reviews/fake-review/comments/pr-1/pr-1-m" && method === "PATCH") {
+        expect(JSON.parse(String(init?.body ?? "{}"))).toEqual({ body: "renamed" });
+        const message = await pending.promise;
+        return { ok: true, statusText: "OK", json: async () => message };
+      }
+      return { ok: true, statusText: "OK", json: async () => ({}) };
+    }),
+  );
+  const root = renderPage(hostedReview("discussion"));
+  await vi.waitFor(() => {
+    expect(root.querySelector('[data-comment-edit="pr-1-m"]')).toBeTruthy();
+  });
+  expect(root.querySelector(".composer-spinner")).toBeNull();
+  (root.querySelector('[data-comment-edit="pr-1-m"]') as HTMLButtonElement).click();
+  await tick();
+  const draft = root.querySelector("[data-comment-edit-draft]") as HTMLTextAreaElement;
+  draft.value = "renamed";
+  draft.dispatchEvent(new Event("input", { bubbles: true }));
+  await tick();
+  (root.querySelector("[data-comment-save]") as HTMLButtonElement).click();
+  await vi.waitFor(() => {
+    expect(root.querySelector('[data-thread="pr-1"] .composer-spinner')).toBeTruthy();
+  });
+  expect((root.querySelector("[data-comment-edit-draft]") as HTMLTextAreaElement).value).toBe("renamed");
+  expect((root.querySelector("[data-comment-save]") as HTMLButtonElement).disabled).toBe(true);
+  pending.resolve(saved);
+  await vi.waitFor(() => {
+    expect(root.querySelector(".composer-spinner")).toBeNull();
+  });
+  expect(root.querySelector("[data-comment-edit-draft]")).toBeNull();
+  expect(root.querySelector('[data-thread="pr-1"]')?.textContent).toContain("renamed");
+});
+
+test("a failed save keeps the editor open with the typed text", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (url === "/api/reviews/fake-review/comments" && method === "GET") {
+        return { ok: true, statusText: "OK", json: async () => ({ threads: [prThread("pr-1", "note")] }) };
+      }
+      if (url === "/api/reviews/fake-review/comments/pr-1/pr-1-m" && method === "PATCH") {
+        return {
+          ok: false,
+          statusText: "Forbidden",
+          json: async () => ({ error: "could not save", code: "denied" }),
+        };
+      }
+      return { ok: true, statusText: "OK", json: async () => ({}) };
+    }),
+  );
+  const root = renderPage(hostedReview("discussion"));
+  await vi.waitFor(() => {
+    expect(root.querySelector('[data-comment-edit="pr-1-m"]')).toBeTruthy();
+  });
+  (root.querySelector('[data-comment-edit="pr-1-m"]') as HTMLButtonElement).click();
+  await tick();
+  const draft = root.querySelector("[data-comment-edit-draft]") as HTMLTextAreaElement;
+  draft.value = "kept draft";
+  draft.dispatchEvent(new Event("input", { bubbles: true }));
+  await tick();
+  (root.querySelector("[data-comment-save]") as HTMLButtonElement).click();
+  await vi.waitFor(() => {
+    expect(root.querySelector('[data-thread="pr-1"] .composer-error')?.textContent).toContain("could not save");
+  });
+  const kept = root.querySelector("[data-comment-edit-draft]") as HTMLTextAreaElement;
+  expect(kept).toBeTruthy();
+  expect(kept.value).toBe("kept draft");
+  expect(root.querySelector(".composer-spinner")).toBeNull();
+});
+
+test("Delete shows a spinner until the fake resolves", async () => {
+  const pending = deferred<{ ok: true }>();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (url === "/api/reviews/fake-review/comments" && method === "GET") {
+        return { ok: true, statusText: "OK", json: async () => ({ threads: [prThread("pr-1", "note")] }) };
+      }
+      if (url === "/api/reviews/fake-review/comments/pr-1/pr-1-m" && method === "DELETE") {
+        await pending.promise;
+        return { ok: true, statusText: "OK", json: async () => ({ ok: true }) };
+      }
+      return { ok: true, statusText: "OK", json: async () => ({}) };
+    }),
+  );
+  const root = renderPage(hostedReview("discussion"));
+  await vi.waitFor(() => {
+    expect(root.querySelector('[data-comment-delete="pr-1-m"]')).toBeTruthy();
+  });
+  expect(root.querySelector(".composer-spinner")).toBeNull();
+  (root.querySelector('[data-comment-delete="pr-1-m"]') as HTMLButtonElement).click();
+  await tick();
+  (root.querySelector("[data-comment-delete-confirm]") as HTMLButtonElement).click();
+  await vi.waitFor(() => {
+    expect(root.querySelector('[data-thread="pr-1"] .composer-spinner')).toBeTruthy();
+  });
+  expect(root.querySelector('[data-thread="pr-1"]')?.textContent).toContain("note");
+  expect((root.querySelector("[data-comment-delete-confirm]") as HTMLButtonElement).disabled).toBe(true);
+  pending.resolve({ ok: true });
+  await vi.waitFor(() => {
+    expect(root.querySelector('[data-thread="pr-1"]')).toBeNull();
+  });
+  expect(root.querySelector(".composer-spinner")).toBeNull();
+});
+
+test("a failed delete leaves the message on screen with the error", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (url === "/api/reviews/fake-review/comments" && method === "GET") {
+        return { ok: true, statusText: "OK", json: async () => ({ threads: [prThread("pr-1", "note")] }) };
+      }
+      if (url === "/api/reviews/fake-review/comments/pr-1/pr-1-m" && method === "DELETE") {
+        return {
+          ok: false,
+          statusText: "Forbidden",
+          json: async () => ({ error: "could not delete", code: "denied" }),
+        };
+      }
+      return { ok: true, statusText: "OK", json: async () => ({}) };
+    }),
+  );
+  const root = renderPage(hostedReview("discussion"));
+  await vi.waitFor(() => {
+    expect(root.querySelector('[data-comment-delete="pr-1-m"]')).toBeTruthy();
+  });
+  (root.querySelector('[data-comment-delete="pr-1-m"]') as HTMLButtonElement).click();
+  await tick();
+  (root.querySelector("[data-comment-delete-confirm]") as HTMLButtonElement).click();
+  await vi.waitFor(() => {
+    expect(root.querySelector('[data-thread="pr-1"] .composer-error')?.textContent).toContain("could not delete");
+  });
+  expect(root.querySelector('[data-thread="pr-1"] .thread-copy')?.textContent).toBe("note");
+  expect(root.querySelector(".composer-spinner")).toBeNull();
+});
+
+test("another author's message has no Edit or Delete", async () => {
+  const thread = prThread("pr-1", "mine");
+  thread.messages.push({
+    id: "pr-1-other",
+    author: { login: "other-reviewer" },
+    body: "theirs",
+    createdAt: WHEN,
+    updatedAt: WHEN,
+    ownedByCurrentUser: false,
+  });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      statusText: "OK",
+      json: async () => ({ threads: [thread] }),
+    })),
+  );
+  const root = renderPage(hostedReview("discussion"));
+  await vi.waitFor(() => {
+    expect(root.querySelector('[data-thread="pr-1"]')?.textContent).toContain("theirs");
+  });
+  expect(root.querySelector('[data-comment-edit="pr-1-m"]')).toBeTruthy();
+  expect(root.querySelector('[data-comment-delete="pr-1-m"]')).toBeTruthy();
+  expect(root.querySelector('[data-comment-edit="pr-1-other"]')).toBeNull();
+  expect(root.querySelector('[data-comment-delete="pr-1-other"]')).toBeNull();
+});
+
 test("focus and visibility on return start one list", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-09-16T12:00:00.000Z"));

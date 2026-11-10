@@ -99,8 +99,6 @@
       editingId = null;
       draft = "";
     } catch (err) {
-      editingId = null;
-      draft = "";
       errorId = commentId;
       error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -204,6 +202,13 @@
         value={draft}
         oninput={(event) => (draft = event.currentTarget.value)}
       ></textarea>
+      {#if busy}
+        <p class="composer-status" role="status" aria-live="polite">
+          <span class="composer-spinner" aria-hidden="true"></span>
+          Saving
+        </p>
+      {/if}
+      {#if error && errorId === message.id}<p class="composer-error">{error}</p>{/if}
       <div class="composer-actions">
         <button type="button" class="ghost" data-comment-edit-cancel onclick={() => cancelEdit()}>Cancel</button>
         <button type="button" class="ghost" data-comment-save disabled={busy} onclick={() => void save()}>
@@ -215,6 +220,12 @@
     <p class="thread-copy">{message.body}</p>
     {#if error && errorId === message.id}<p class="composer-error">{error}</p>{/if}
     {#if canMutate(message)}
+      {#if confirmingId === message.id && busy}
+        <p class="composer-status" role="status" aria-live="polite">
+          <span class="composer-spinner" aria-hidden="true"></span>
+          Deleting
+        </p>
+      {/if}
       <div class="composer-actions">
         {#if confirmingId === message.id}
           <button type="button" class="ghost" data-comment-delete-cancel onclick={() => cancelDelete()}>
