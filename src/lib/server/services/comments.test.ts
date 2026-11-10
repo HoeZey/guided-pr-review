@@ -818,3 +818,57 @@ test("createAppServices still injects fake comment providers", async () => {
   assert.equal(listed.threads.every((thread) => thread.provider === "github"), true);
   assert.equal(listed.threads.some((thread) => thread.anchor.kind === "stale"), true);
 });
+
+test("createAppServices keeps the host old line on an outdated GitHub thread", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (url.includes("/pulls/42/comments")) {
+      return new Response(
+        JSON.stringify([
+          {
+            id: 50,
+            user: { login: "octocat" },
+            body: "outdated line",
+            created_at: "2011-04-14T16:00:49Z",
+            updated_at: "2011-04-14T16:00:49Z",
+            path: "src/gone.ts",
+            side: "RIGHT",
+            line: null,
+            original_line: 40,
+            subject_type: "line",
+          },
+        ]),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
+    if (url.includes("/issues/42/comments")) {
+      return new Response("[]", { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response("unexpected", { status: 500 });
+  }) as typeof fetch;
+  try {
+    const services = createAppServices(
+      {
+        ...repos({ r1: guide(prSource("github")) }),
+        replaceCatalog: unused("replaceCatalog"),
+        queueAction: unused("queueAction"),
+        waitForAction: unused("waitForAction"),
+        completeAction: unused("completeAction"),
+        publishReviewOutcome: unused("publishReviewOutcome"),
+      },
+      { credentials: credentials("octocat", "github") },
+    );
+    const listed = await services.comments.list("r1");
+    assert.equal(listed.threads.length, 1);
+    assert.equal(listed.threads[0]?.outdated, true);
+    assert.deepEqual(listed.threads[0]?.anchor, {
+      kind: "stale",
+      reason: "outdated",
+      path: "src/gone.ts",
+      line: 40,
+    });
+  } finally {
+    globalThis.fetch = original;
+  }
+});

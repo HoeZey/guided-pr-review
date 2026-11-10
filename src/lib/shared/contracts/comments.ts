@@ -46,6 +46,7 @@ export const StaleAnchor = z
     kind: z.literal("stale"),
     reason: StaleAnchorReason,
     path: z.string().min(1).optional(),
+    line: z.number().int().positive().optional(),
   })
   .strict();
 

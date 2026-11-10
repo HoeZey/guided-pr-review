@@ -397,9 +397,15 @@ function reviewAnchor(row: {
   if (line && path) {
     return { anchor: { kind: "line", path, side: "current", line }, outdated: false };
   }
-  if (positiveInt(row.original_line) || row.original_position != null) {
+  const originalLine = positiveInt(row.original_line);
+  if (originalLine || row.original_position != null) {
     return {
-      anchor: path ? { kind: "stale", reason: "outdated", path } : { kind: "stale", reason: "outdated" },
+      anchor: {
+        kind: "stale",
+        reason: "outdated",
+        ...(path ? { path } : {}),
+        ...(originalLine ? { line: originalLine } : {}),
+      },
       outdated: true,
     };
   }

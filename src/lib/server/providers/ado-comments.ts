@@ -77,7 +77,7 @@ export function createAdoCommentAdapter(options: {
       const rows = asArray(payload, parsed.parsed.host);
       const threads: CommentThreadValue[] = [];
       for (const row of rows) {
-        const thread = normalizeThread(row, parsed.context, input.identity, parsed.parsed.host);
+        const thread = normalizeThread(row, input.identity, parsed.parsed.host);
         if (thread) threads.push(thread);
       }
       return threads;
@@ -95,7 +95,7 @@ export function createAdoCommentAdapter(options: {
         notFound: "not-found",
         invalidAnchor: true,
       });
-      const thread = normalizeThread(payload, context, input.identity, parsed.parsed.host);
+      const thread = normalizeThread(payload, input.identity, parsed.parsed.host);
       if (!thread) throw fail("malformed-response", parsed.parsed.host);
       return thread;
     },
@@ -350,7 +350,6 @@ function commentExists(thread: Record<string, unknown>, commentId: number): bool
 
 function normalizeThread(
   payload: unknown,
-  stored: AzureDevOpsProviderContext,
   identity: CredentialIdentity,
   host: string,
 ): CommentThreadValue | undefined {
@@ -364,14 +363,13 @@ function normalizeThread(
     if (message) messages.push(message);
   }
   if (messages.length === 0) return undefined;
-  const outdated = iterationOutdated(row, stored);
   const anchor = normalizeAnchor(row.threadContext);
   try {
     return CommentThread.parse({
       id: String(id),
       provider: "azure-devops",
       status: threadStatus(row.status),
-      outdated: outdated || anchor.kind === "stale",
+      outdated: anchor.kind === "stale",
       anchor,
       messages,
     });
@@ -450,13 +448,6 @@ function normalizeAnchor(threadContext: unknown): CommentAnchor {
 
   if (!path) return { kind: "pr" };
   return { kind: "file", path };
-}
-
-function iterationOutdated(thread: Record<string, unknown>, stored: AzureDevOpsProviderContext): boolean {
-  const ctx = asRecord(thread.pullRequestThreadContext);
-  const iteration = ctx ? asRecord(ctx.iterationContext) : undefined;
-  const second = iteration?.secondComparingIteration;
-  return typeof second === "number" && second !== stored.secondComparingIteration;
 }
 
 function threadStatus(value: unknown): CommentThreadStatus {

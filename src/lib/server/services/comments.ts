@@ -296,11 +296,7 @@ function fileExists(guide: GuideV1, path: string): boolean {
 
 function normalizeAnchor(anchor: CommentAnchor, guide: GuideV1): CommentAnchor {
   if (anchor.kind === "pr") return anchor;
-  if (anchor.kind === "stale") {
-    return anchor.path
-      ? { kind: "stale", reason: anchor.reason, path: anchor.path }
-      : { kind: "stale", reason: anchor.reason };
-  }
+  if (anchor.kind === "stale") return anchor;
   if (anchor.kind === "file") {
     return fileExists(guide, anchor.path)
       ? anchor

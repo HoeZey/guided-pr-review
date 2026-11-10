@@ -311,14 +311,17 @@ test("list maps review and issue comments into shared thread anchors", async () 
   assert.equal("line" in (deleted?.anchor ?? {}), false);
 
   const outdated = byId.get("review:50");
-  assert.deepEqual(outdated?.anchor, { kind: "stale", reason: "outdated", path: "src/gone.ts" });
+  assert.deepEqual(outdated?.anchor, {
+    kind: "stale",
+    reason: "outdated",
+    path: "src/gone.ts",
+    line: 40,
+  });
   assert.equal(outdated?.outdated, true);
-  assert.equal("line" in (outdated?.anchor ?? {}), false);
 
   const unmapped = byId.get("review:60");
   assert.deepEqual(unmapped?.anchor, { kind: "stale", reason: "unmappable", path: "src/a.ts" });
   assert.equal(JSON.stringify(unmapped).includes("\"line\":7"), false);
-  assert.equal(JSON.stringify(listed).includes("\"line\":40"), false);
 
   const pr = byId.get("issue:1");
   assert.deepEqual(pr?.anchor, { kind: "pr" });

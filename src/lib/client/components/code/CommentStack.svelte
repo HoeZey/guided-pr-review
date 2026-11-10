@@ -143,7 +143,9 @@
             {#if thread.status !== "active"}
               <span class="thread-flag" class:is-resolved={thread.status === "closed"}>{thread.status}</span>
             {/if}
-            {#if thread.outdated}<span class="thread-flag is-outdated">Outdated</span>{/if}
+            {#if thread.outdated && !(discussion && thread.anchor.kind === "stale" && thread.anchor.reason === "outdated")}
+              <span class="thread-flag is-outdated">Outdated</span>
+            {/if}
             {#if discussion}
               <span class="thread-flag">{discussionProviderLabel(thread.provider)}</span>
               {#if placement}<span class="thread-flag">{placement}</span>{/if}

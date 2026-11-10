@@ -45,6 +45,12 @@ test("parses line, range, file, PR-wide, and stale anchors and rejects provider 
     reason: "unmappable",
     path: "src/gone.ts",
   });
+  const staleLine = CommentAnchor.parse({
+    kind: "stale",
+    reason: "outdated",
+    path: "src/gone.ts",
+    line: 40,
+  });
 
   assert.equal(line.kind, "line");
   assert.equal(range.kind, "range");
@@ -52,6 +58,7 @@ test("parses line, range, file, PR-wide, and stale anchors and rejects provider 
   assert.equal(pr.kind, "pr");
   assert.equal(stale.kind, "stale");
   if (stale.kind === "stale") assert.equal("line" in stale, false);
+  assert.deepEqual(staleLine, { kind: "stale", reason: "outdated", path: "src/gone.ts", line: 40 });
 
   assert.throws(() =>
     CommentAnchor.parse({
@@ -72,9 +79,7 @@ test("parses line, range, file, PR-wide, and stale anchors and rejects provider 
     }),
   );
   assert.throws(() => CommentAnchor.parse({ kind: "line", path: "src/a.ts", side: "left", line: 1 }));
-  assert.throws(() =>
-    CommentAnchor.parse({ kind: "stale", reason: "unmappable", path: "src/a.ts", line: 4 }),
-  );
+  assert.throws(() => CommentAnchor.parse({ kind: "stale", reason: "outdated", path: "src/a.ts", line: 0 }));
   assert.throws(() => CommentAnchor.parse({ kind: "pr", webUrl: "https://github.com/octocat/Hello-World/pull/1" }));
 });
 

@@ -1,5 +1,5 @@
 ---
-status: todo
+status: done
 blocked_by: []
 blocks:
   - 09-integrate-and-verify
@@ -40,13 +40,13 @@ projection, comment stack, fixtures, tests
 
 **Acceptance criteria:**
 
-- [ ] An Azure DevOps thread from an older iteration that the host places on
+- [x] An Azure DevOps thread from an older iteration that the host places on
   a current line renders inline without Outdated.
-- [ ] An Azure DevOps thread with no current right-side position renders in
+- [x] An Azure DevOps thread with no current right-side position renders in
   Discussion as Outdated.
-- [ ] A GitHub thread with a null line and an original line renders in
+- [x] A GitHub thread with a null line and an original line renders in
   Discussion as Outdated with its old path and line.
-- [ ] Outdated threads have no location link and show Outdated once.
+- [x] Outdated threads have no location link and show Outdated once.
 
 **Blocked by:** none
 

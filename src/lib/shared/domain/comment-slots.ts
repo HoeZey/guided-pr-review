@@ -228,12 +228,20 @@ const STALE_REASON_LABEL = {
   outdated: "Outdated",
 } as const;
 
+function staleLocation(anchor: { path?: string; line?: number }): string {
+  if (anchor.path && anchor.line) return `${anchor.path}:${anchor.line}`;
+  if (anchor.path) return anchor.path;
+  if (anchor.line) return String(anchor.line);
+  return "";
+}
+
 export function discussionPlacementLabel(thread: CommentThread): string | null {
   const { anchor } = thread;
   if (anchor.kind === "pr") return "Pull request";
   if (anchor.kind !== "stale") return null;
   const reason = STALE_REASON_LABEL[anchor.reason];
-  return anchor.path ? `${reason} · ${anchor.path}` : reason;
+  const location = staleLocation(anchor);
+  return location ? `${reason} · ${location}` : reason;
 }
 
 export function allowsNestedReply(thread: CommentThread): boolean {

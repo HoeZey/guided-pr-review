@@ -413,13 +413,25 @@ test("list normalizes line, range, file, PR-wide, status, authors, ownership, an
   assert.deepEqual(byId["13"]?.anchor, { kind: "file", path: "src/a.ts" });
   assert.deepEqual(byId["14"]?.anchor, { kind: "pr" });
   assert.equal(byId["14"]?.status, "closed");
-  assert.equal(byId["17"]?.outdated, true);
   assert.deepEqual(byId["17"]?.anchor, { kind: "line", path: "src/a.ts", side: "current", line: 11 });
 
   assert.equal(dumpPublic(listed).includes("changeTrackingId"), false);
   assert.equal(dumpPublic(listed).includes("rightFileStart"), false);
   assert.equal(dumpPublic(listed).includes("uniqueName"), false);
   assert.equal(dumpPublic(listed).includes("pullRequestThreadContext"), false);
+});
+
+test("Azure DevOps marks a thread Outdated only when it has no current right-side line", async () => {
+  const { fetch } = recordingFetch(() => jsonResponse({ value: fixtureThreads(), count: 7 }));
+  const adapter = createAdoCommentAdapter({ credentials: connectedCredentials(), fetch });
+  const listed = await adapter.list(listInput(adoSource()));
+  const byId = Object.fromEntries(listed.map((thread) => [thread.id, thread]));
+
+  assert.equal(byId["17"]?.outdated, false);
+  assert.equal(byId["15"]?.outdated, true);
+  assert.equal(byId["16"]?.outdated, true);
+  assert.equal(byId["13"]?.outdated, false);
+  assert.equal(byId["14"]?.outdated, false);
 });
 
 test("deleted and unmappable anchors downgrade without a fabricated current line", async () => {
@@ -435,7 +447,6 @@ test("deleted and unmappable anchors downgrade without a fabricated current line
     assert.equal(gone.anchor.path, "src/gone.ts");
   }
   assert.equal("line" in (gone?.anchor ?? {}), false);
-  assert.equal(gone?.outdated, true);
 
   assert.equal(deleted?.anchor.kind, "stale");
   if (deleted?.anchor.kind === "stale") {

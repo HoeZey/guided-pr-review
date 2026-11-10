@@ -248,3 +248,44 @@ test("Discussion replies on ADO PR-wide threads and hides nested GitHub issue re
   });
   expect(fetchSpy.mock.calls.map(([url]) => String(url)).join(" ")).not.toMatch(/github\.com|dev\.azure\.com/);
 });
+
+test("Outdated threads render once in Discussion with the old path and line as text", async () => {
+  const placed = thread(
+    "ado-placed",
+    { kind: "line", path: "src/maps.py", side: "current", line: 3 },
+    { provider: "azure-devops" },
+  );
+  const unplaced = thread(
+    "ado-unplaced",
+    { kind: "stale", reason: "unmappable", path: "src/moved.ts" },
+    { provider: "azure-devops", outdated: true },
+  );
+  const githubOld = thread(
+    "review:50",
+    { kind: "stale", reason: "outdated", path: "src/gone.ts", line: 40 },
+    { provider: "github", outdated: true },
+  );
+  stubComments([placed, unplaced, githubOld]);
+  const root = renderShell("diff");
+  await vi.waitFor(() => {
+    expect(root.querySelector('[data-thread="ado-placed"]')).toBeTruthy();
+  });
+  expect(root.querySelector('[data-thread="ado-placed"]')?.textContent).not.toMatch(/Outdated/);
+  expect(root.querySelector('[data-thread="ado-unplaced"]')).toBeNull();
+  expect(root.querySelector('[data-thread="review:50"]')).toBeNull();
+
+  (root.querySelector('[role="tab"][data-tab="discussion"]') as HTMLButtonElement).click();
+  await tick();
+  const panel = root.querySelector('[data-tab-panel="discussion"]');
+  expect(panel?.querySelector('[data-thread="ado-placed"]')).toBeNull();
+
+  const ado = panel?.querySelector('[data-thread="ado-unplaced"]');
+  expect(ado?.textContent).toContain("src/moved.ts");
+  expect(ado?.textContent?.match(/Outdated/g)).toEqual(["Outdated"]);
+  expect(ado?.querySelector("a")).toBeNull();
+
+  const github = panel?.querySelector('[data-thread="review:50"]');
+  expect(github?.textContent).toContain("src/gone.ts:40");
+  expect(github?.textContent?.match(/Outdated/g)).toEqual(["Outdated"]);
+  expect(github?.querySelector("a")).toBeNull();
+});
